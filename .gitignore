@@ -1,0 +1,44 @@
+# Node
+node_modules/
+dist/
+
+# Tauri / Rust
+src-tauri/target/
+src-tauri/gen/schemas/
+
+# IDE
+.vscode/
+.idea/
+*.iml
+
+# OS
+Thumbs.db
+.DS_Store
+
+# Local env
+.env
+.env.local
+*.log
+
+# Build artifacts
+*.exe
+*.msi
+*.ico.tmp
+
+# Speakly local state
+SPIKE_RESULTS.md
+
+# Large local archive files
+vite.config.zip
+
+# Claude Code local settings (developer-specific)
+.claude/
+
+# OMC local state (developer-specific)
+.omc/
+
+# Internal project documents (not for public repo)
+1.txt
+
+# Internal documentation (historical specs, not for public repo)
+docs/

@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+  <meta charset="UTF-8" />
+  <title>Timluli — ברוך הבא</title>
+  <link rel="stylesheet" href="./styles/onboarding.css" />
+</head>
+<body>
+  <div class="wizard">
+    <div class="steps-bar">
+      <div class="step-dot active" id="dot1"></div>
+      <div class="step-line"></div>
+      <div class="step-dot" id="dot2"></div>
+      <div class="step-line"></div>
+      <div class="step-dot" id="dot3"></div>
+    </div>
+
+    <section id="step1" class="step active">
+      <div class="step-icon">🎨</div>
+      <h1 class="title">ברוך הבא ל-Timluli</h1>
+      <p class="subtitle">בחר ערכת צבע למיקרופון המרחף</p>
+      <div class="theme-grid" id="themeGrid"></div>
+    </section>
+
+    <section id="step2" class="step">
+      <div class="step-icon">⌨️</div>
+      <h1 class="title">קיצור מקלדת</h1>
+      <p class="subtitle">הקש כדי לשנות את קיצור הדרך להפעלה</p>
+      <button class="shortcut-btn" id="shortcutBtn" type="button">Ctrl+Win+Space</button>
+      <p class="hint">לחץ על הכפתור ← הקש קיצור ← Enter</p>
+      <p class="hint dim" id="shortcutStatus"></p>
+    </section>
+
+    <section id="step3" class="step">
+      <div class="step-icon">🎙️</div>
+      <h1 class="title">מוכן לתמלל!</h1>
+      <div class="tips">
+        <div class="tip">
+          <span class="tip-num">1</span>
+          <span>לחץ על קיצור המקלדת שהגדרת כדי להתחיל הקלטה</span>
+        </div>
+        <div class="tip">
+          <span class="tip-num">2</span>
+          <span>לחץ-ימני על כדור המיקרופון לאפשרויות — השתקה, הגדרות, הסתרה</span>
+        </div>
+        <div class="tip">
+          <span class="tip-num">3</span>
+          <span>ניתן לגשת להגדרות המלאות בכל עת דרך תפריט מגש המערכת</span>
+        </div>
+      </div>
+      <button class="start-btn" id="startBtn" type="button">התחל שימוש</button>
+    </section>
+
+    <div class="nav-row">
+      <button class="btn-secondary" id="prevBtn" style="visibility:hidden">הקודם</button>
+      <button class="btn-primary" id="nextBtn">הבא →</button>
+    </div>
+  </div>
+  <script type="module" src="./scripts/onboarding.js"></script>
+</body>
+</html>

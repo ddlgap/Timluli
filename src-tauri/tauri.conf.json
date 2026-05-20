@@ -1,0 +1,101 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Timluli",
+  "version": "1.0.0",
+  "identifier": "studio.oliel.timluli",
+  "build": {
+    "frontendDist": "../dist",
+    "devUrl": "http://localhost:1420",
+    "beforeDevCommand": "npm run dev",
+    "beforeBuildCommand": "npm run build"
+  },
+  "app": {
+    "withGlobalTauri": true,
+    "windows": [
+      {
+        "label": "speech",
+        "url": "speech.html",
+        "title": "Timluli Engine",
+        "visible": false,
+        "skipTaskbar": true,
+        "decorations": false,
+        "resizable": false,
+        "width": 240,
+        "height": 240,
+        "minWidth": 240,
+        "minHeight": 240
+      },
+      {
+        "label": "mic",
+        "url": "mic.html",
+        "title": "Timluli",
+        "decorations": false,
+        "transparent": true,
+        "alwaysOnTop": true,
+        "skipTaskbar": true,
+        "resizable": false,
+        "shadow": false,
+        "focus": false,
+        "visible": true,
+        "width": 160,
+        "height": 160,
+        "minWidth": 160,
+        "minHeight": 160,
+        "maxWidth": 240,
+        "maxHeight": 240
+      },
+      {
+        "label": "settings",
+        "url": "settings.html",
+        "title": "Timluli — הגדרות",
+        "width": 540,
+        "height": 620,
+        "minWidth": 480,
+        "minHeight": 540,
+        "visible": false,
+        "center": true,
+        "resizable": true,
+        "skipTaskbar": false
+      },
+      {
+        "label": "onboarding",
+        "url": "onboarding.html",
+        "title": "Timluli — ברוך הבא",
+        "width": 520,
+        "height": 640,
+        "minWidth": 520,
+        "minHeight": 640,
+        "resizable": false,
+        "center": true,
+        "visible": false,
+        "skipTaskbar": false,
+        "decorations": false,
+        "transparent": false,
+        "alwaysOnTop": true
+      }
+    ],
+    "security": {
+      "csp": "default-src 'self' ipc: http://ipc.localhost; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: asset: http://asset.localhost; connect-src 'self' ipc: http://ipc.localhost https://www.google.com https://www.googleapis.com wss://*.google.com; media-src 'self' mediastream: blob:;"
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": ["msi", "nsis"],
+    "resources": ["resources/*"],
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.ico"
+    ],
+    "publisher": "Oliel Studio",
+    "shortDescription": "תמלול קולי בעברית system-wide לווינדוס",
+    "longDescription": "Timluli — כלי תמלול עברית מערכתי לווינדוס באמצעות Google Web Speech API",
+    "category": "Productivity",
+    "windows": {
+      "webviewInstallMode": {
+        "type": "embedBootstrapper"
+      }
+    }
+  }
+}

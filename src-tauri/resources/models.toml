@@ -1,0 +1,26 @@
+schema_version = 1
+
+# IMPORTANT: Before shipping, download each file, compute SHA-256, and replace
+# the TBD_* placeholders. Never release with placeholder hashes.
+# Verified filename: https://huggingface.co/ivrit-ai/whisper-large-v3-turbo-ggml/tree/main
+
+[[models]]
+id = "ivrit-turbo-fp16"
+display_name = "ivrit.ai Turbo FP16 (עברית, מומלץ)"
+language = "he"
+quality = "high"
+size_bytes = 1_620_000_000
+license = "Apache-2.0"
+source = "huggingface"
+hf_repo_id = "ivrit-ai/whisper-large-v3-turbo-ggml"
+hf_filename = "ggml-model.bin"
+# SHA-256 placeholder: intentionally left as TBD until the model file is
+# downloaded from the upstream source above and its hash is computed and
+# verified locally. This MUST be filled in before any production/public
+# release; do not ship binaries that point at this manifest while the
+# placeholder is still present.
+sha256 = "TBD_FILL_AFTER_VERIFICATION"
+
+[models.engine]
+kind = "whisper-cpp"
+expected_format = "ggml"

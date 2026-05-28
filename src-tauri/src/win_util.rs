@@ -1,12 +1,14 @@
 #![cfg(target_os = "windows")]
 
 use tauri::WebviewWindow;
-use windows::Win32::Foundation::HWND;
+use windows::Win32::Foundation::{BOOL, HWND, LPARAM};
 use windows::Win32::System::Threading::{AttachThreadInput, GetCurrentThreadId};
 use windows::Win32::UI::WindowsAndMessaging::{
-    GetForegroundWindow, GetWindowLongW, GetWindowThreadProcessId, IsWindow, SetForegroundWindow,
-    SetWindowLongW, SetWindowPos, GWL_EXSTYLE, HWND_TOPMOST, SWP_NOACTIVATE, SWP_NOMOVE,
-    SWP_NOSIZE, WS_EX_LAYERED, WS_EX_NOACTIVATE, WS_EX_TOOLWINDOW, WS_EX_TOPMOST,
+    EnumWindows, GetForegroundWindow, GetWindowLongW, GetWindowTextLengthW, GetWindowTextW,
+    GetWindowThreadProcessId, IsWindow, SetForegroundWindow, SetWindowLongW, SetWindowPos,
+    ShowWindow, GWL_EXSTYLE, HWND_BOTTOM, HWND_TOPMOST, SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE,
+    SW_HIDE, SW_SHOWNOACTIVATE, WS_EX_APPWINDOW, WS_EX_LAYERED, WS_EX_NOACTIVATE, WS_EX_TOOLWINDOW,
+    WS_EX_TOPMOST,
 };
 
 pub fn is_window(hwnd_raw: isize) -> bool {
@@ -62,6 +64,55 @@ pub fn focus_hwnd(hwnd_raw: isize) -> bool {
         }
         true
     }
+}
+
+struct FindByTitle {
+    needle: String,
+    found: isize,
+}
+
+unsafe extern "system" fn enum_find_title(hwnd: HWND, lparam: LPARAM) -> BOOL {
+    let ctx = &mut *(lparam.0 as *mut FindByTitle);
+    let len = GetWindowTextLengthW(hwnd);
+    if len > 0 {
+        let mut buf = vec![0u16; (len + 1) as usize];
+        let n = GetWindowTextW(hwnd, &mut buf);
+        if n > 0 {
+            let title = String::from_utf16_lossy(&buf[..n as usize]);
+            if title.contains(&ctx.needle) {
+                ctx.found = hwnd.0 as isize;
+                return BOOL(0); // stop enumeration
+            }
+        }
+    }
+    BOOL(1)
+}
+
+/// Find a top-level window whose title contains `needle`, strip it from the
+/// taskbar (tool window, no app-window), and shove it off-screen. Best-effort:
+/// returns `true` once the window was found and adjusted.
+pub fn hide_offscreen_by_title(needle: &str) -> bool {
+    let mut ctx = FindByTitle {
+        needle: needle.to_string(),
+        found: 0,
+    };
+    unsafe {
+        let _ = EnumWindows(Some(enum_find_title), LPARAM(&mut ctx as *mut _ as isize));
+    }
+    if ctx.found == 0 {
+        return false;
+    }
+    let hwnd = HWND(ctx.found as *mut _);
+    unsafe {
+        let _ = ShowWindow(hwnd, SW_HIDE);
+        let ex = GetWindowLongW(hwnd, GWL_EXSTYLE);
+        let new = (ex | WS_EX_TOOLWINDOW.0 as i32 | WS_EX_NOACTIVATE.0 as i32)
+            & !(WS_EX_APPWINDOW.0 as i32);
+        SetWindowLongW(hwnd, GWL_EXSTYLE, new);
+        let _ = ShowWindow(hwnd, SW_SHOWNOACTIVATE);
+        let _ = SetWindowPos(hwnd, HWND_BOTTOM, -32000, -32000, 1, 1, SWP_NOACTIVATE);
+    }
+    true
 }
 
 pub fn make_topmost_noactivate(window: &WebviewWindow) {

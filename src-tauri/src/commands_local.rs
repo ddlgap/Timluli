@@ -51,12 +51,21 @@ pub fn list_engines(state: State<'_, AppState>) -> Vec<EngineInfo> {
 #[tauri::command]
 pub fn set_active_engine(
     app: AppHandle,
-    _state: State<'_, AppState>,
+    state: State<'_, AppState>,
     engine_id: String,
 ) -> Result<(), String> {
     let mut stg = crate::settings::load_or_init(&app).map_err(|e| e.to_string())?;
     stg.engine_id = engine_id.clone();
     crate::settings::save(&app, &stg).map_err(|e| e.to_string())?;
+
+    // Online engine uses a hidden Chrome sidecar — launch it eagerly so the first
+    // dictation is instant; tear it down when switching to the offline engine.
+    if engine_id == "web-speech" {
+        let _ = crate::chrome_sidecar::ensure_chrome(&app, &state.sidecar);
+    } else {
+        crate::chrome_sidecar::shutdown(&app);
+    }
+
     let payload = serde_json::json!({ "engineId": engine_id });
     let _ = app.emit_to("mic", "speakly://engine-changed", &payload);
     let _ = app.emit_to("speech", "speakly://engine-changed", &payload);

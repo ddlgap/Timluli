@@ -38,20 +38,43 @@ pub async fn start_listening(app: AppHandle, state: State<'_, AppState>) -> Resu
 
     *state.is_listening.lock() = true;
 
-    app.emit_to("speech", "speakly://start-listening", ())
-        .map_err(|e| e.to_string())?;
-    app.emit_to("mic", "speakly://state-changed", "listening")
-        .map_err(|e| e.to_string())?;
+    let stg = settings::load_or_init(&app).unwrap_or_else(|_| Settings::default());
+
+    if stg.engine_id == "web-speech" {
+        // Online engine: drive the hidden Chrome sidecar instead of the WebView2
+        // speech window (Google blocks Web Speech for embedded WebView2).
+        crate::chrome_sidecar::request_start(
+            &state.sidecar,
+            stg.language.clone(),
+            stg.silence_timeout_ms,
+        );
+        if let Err(e) = crate::chrome_sidecar::ensure_chrome(&app, &state.sidecar) {
+            *state.is_listening.lock() = false;
+            crate::chrome_sidecar::request_stop(&state.sidecar);
+            let _ = app.emit_to("mic", "speakly://state-changed", "error");
+            let _ = app.emit_to("settings", "speakly://error", &e);
+            return Err(e);
+        }
+        let _ = app.emit_to("mic", "speakly://state-changed", "listening");
+    } else {
+        app.emit_to("speech", "speakly://start-listening", ())
+            .map_err(|e| e.to_string())?;
+        app.emit_to("mic", "speakly://state-changed", "listening")
+            .map_err(|e| e.to_string())?;
+    }
     Ok(())
 }
 
 #[tauri::command]
 pub async fn stop_listening(app: AppHandle, state: State<'_, AppState>) -> Result<(), String> {
     *state.is_listening.lock() = false;
-    app.emit_to("speech", "speakly://stop-listening", ())
-        .map_err(|e| e.to_string())?;
-    app.emit_to("mic", "speakly://state-changed", "idle")
-        .map_err(|e| e.to_string())?;
+    let stg = settings::load_or_init(&app).unwrap_or_else(|_| Settings::default());
+    if stg.engine_id == "web-speech" {
+        crate::chrome_sidecar::request_stop(&state.sidecar);
+    } else {
+        let _ = app.emit_to("speech", "speakly://stop-listening", ());
+    }
+    let _ = app.emit_to("mic", "speakly://state-changed", "idle");
     Ok(())
 }
 

@@ -3,6 +3,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use tauri::Manager;
 
+mod chrome_sidecar;
 mod commands;
 mod commands_local;
 mod models;
@@ -25,6 +26,10 @@ pub struct AppState {
     pub local_engine: Mutex<Option<Arc<whisper_local::LocalEngineHandle>>>,
     /// Active download cancellation tokens, keyed by model id.
     pub active_downloads: Mutex<HashMap<String, tokio_util::sync::CancellationToken>>,
+    /// Shared state driving the hidden Chrome speech sidecar (online engine).
+    pub sidecar: Arc<chrome_sidecar::SidecarShared>,
+    /// The hidden Chrome process running the online recognizer, if launched.
+    pub chrome_child: Mutex<Option<std::process::Child>>,
 }
 
 impl AppState {
@@ -35,6 +40,8 @@ impl AppState {
             muted: Mutex::new(false),
             local_engine: Mutex::new(None),
             active_downloads: Mutex::new(HashMap::new()),
+            sidecar: Arc::new(chrome_sidecar::SidecarShared::new()),
+            chrome_child: Mutex::new(None),
         }
     }
 }
@@ -88,6 +95,20 @@ pub fn run() {
             let stg = settings::load_or_init(app.handle())
                 .unwrap_or_else(|_| settings::Settings::default());
 
+            // Start the Chrome-sidecar local server (online speech engine), and
+            // pre-launch the hidden Chrome when the online engine is active so the
+            // first dictation has no startup latency.
+            {
+                let shared = app.state::<AppState>().sidecar.clone();
+                chrome_sidecar::start_server(app.handle().clone(), shared);
+                if stg.engine_id == "web-speech" {
+                    let _ = chrome_sidecar::ensure_chrome(
+                        app.handle(),
+                        &app.state::<AppState>().sidecar,
+                    );
+                }
+            }
+
             // Auto-load the whisper model that was active in the previous session.
             if stg.engine_id == "whisper-local" {
                 if let Some(model_id) = stg.local_model_id.clone() {
@@ -139,6 +160,11 @@ pub fn run() {
                 }
             }
         })
-        .run(tauri::generate_context!())
-        .expect("error while running Timluli");
+        .build(tauri::generate_context!())
+        .expect("error while building Timluli")
+        .run(|app_handle, event| {
+            if let tauri::RunEvent::Exit = event {
+                chrome_sidecar::shutdown(app_handle);
+            }
+        });
 }

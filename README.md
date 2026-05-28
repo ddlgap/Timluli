@@ -10,7 +10,7 @@
 - **Web Speech (מקוון)** — Google Web Speech API דרך WebView2, ללא התקנה נוספת
 - **Whisper Local (אופליין)** — מנוע Whisper.cpp מקומי עם מודל עברית של [ivrit-ai](https://huggingface.co/ivrit-ai), ללא שליחת אודיו לשרת
 
-בנוסף, Timluli כולל **תרגום מסמכים** — גרור קובץ כתוביות או טקסט על אייקון המיקרופון, והעותק המתורגם יישמר באותה תיקייה. התרגום מתבצע דרך Groq/Cerebras (מנועי ענן תואמי-OpenAI) עם שרשרת fallback אוטומטית.
+בנוסף, Timluli כולל **תרגום מסמכים** — גרור קובץ כתוביות, טקסט או מסמך (DOCX/DOC/PDF) על אייקון המיקרופון, והעותק המתורגם יישמר באותה תיקייה. התרגום מתבצע דרך Groq/Cerebras (מנועי ענן תואמי-OpenAI) עם שרשרת fallback אוטומטית ופלט RTL לעברית.
 
 ---
 
@@ -51,7 +51,7 @@ Timluli משתמש ב-Web Speech API המובנה ב-WebView2 (מנוע Chromium
 
 ### תרגום מסמכים
 
-- **תוכן הקובץ נשלח לספק שבחרת** — Groq או Cerebras (endpoints תואמי-OpenAI). רק הטקסט מתורגם; מבנה הכתוביות (מספרים, חותמות זמן) נשלח לא.
+- **תוכן הקובץ נשלח לספק שבחרת** — Groq או Cerebras (endpoints תואמי-OpenAI). רק הטקסט לתרגום נשלח; מבנה הקובץ (מספרי כתוביות, חותמות זמן, פריסת פסקאות וטבלאות) מעובד מקומית ולא נשלח.
 - **המפתחות נשמרים מוצפנים** ב-`secrets.json` (Windows DPAPI, קשור למשתמש Windows) — לעולם לא בטקסט גלוי, ולא נשלחים לאף שרת מלבד הספק.
 - הקריאות יוצאות מצד ה-Rust (לא מה-webview), ולכן אינן כפופות ל-CSP של האפליקציה.
 
@@ -78,7 +78,7 @@ Timluli משתמש ב-Web Speech API המובנה ב-WebView2 (מנוע Chromium
    - **Cerebras** (גיבוי) — [cloud.cerebras.ai](https://cloud.cerebras.ai/)
 3. שמור. המפתחות נשמרים מוצפנים (DPAPI) ומופיע "מפתח שמור ✓".
 
-**Fallback אוטומטי:** המנוע עובר בין מספר מודלים של Groq ואז Cerebras; כשמכסה מסתיימת (402/429) הוא ממשיך אוטומטית למודל הבא, כך שתרגום ארוך לא נעצר.
+**Fallback ועמידות ל-rate-limit:** המנוע עובר בין מספר מודלים של Groq ואז Cerebras. כשמכסה קבועה מסתיימת (402) הוא ממשיך אוטומטית למודל הבא; כשנתקל ב-rate-limit זמני (429) הוא ממתין לפי `Retry-After` ומנסה שוב את אותו מודל. גודל הבקשה מותאם כדי להישאר מתחת למגבלות ה-TPM של ה-tier החינמי, כך שתרגום ארוך לא נעצר.
 
 ---
 
@@ -113,7 +113,7 @@ Timluli בנוי כתהליך Tauri יחיד (Rust) עם ארבעה חלונות
 
 - **`mic`** — מיקרופון מרחף, frameless, transparent, תמיד מעל (NOACTIVATE — לא גונב פוקוס)
 - **`speech`** — חלון נסתר המריץ את `webkitSpeechRecognition` (מנוע Google) ברקע
-- **`settings`** — חלון הגדרות עם 5 טאבים, נפתח לפי דרישה
+- **`settings`** — חלון הגדרות עם 6 טאבים, נפתח לפי דרישה
 - **`onboarding`** — אשף הגדרה ראשוני, מוצג בהפעלה הראשונה
 
 תקשורת פנימית: ~35 Tauri commands ו-10 events בין ה-frontend (JS) ל-backend (Rust). שכבת Win32 משתמשת ב-`SendInput`, `AttachThreadInput`, `SetForegroundWindow`, ו-`WS_EX_NOACTIVATE` לניהול פוקוס והזרקת טקסט, וב-DPAPI (`CryptProtectData`) לאחסון מוצפן של מפתחות התרגום. מנוע התרגום (`translation/`) מבצע את הקריאות ל-Groq/Cerebras דרך `reqwest`.

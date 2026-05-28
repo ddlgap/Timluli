@@ -36,6 +36,8 @@ tiny_http = "0.12"
 num_cpus = "1"
 rubato = "0.15"
 whisper-rs = "0.16"
+pdf-extract = "0.10.0"
+docx-rust = "0.1.11"
 
 [target.'cfg(windows)'.dependencies]
 windows = { version = "0.58", features = [

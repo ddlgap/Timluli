@@ -63,7 +63,7 @@ await listen('speakly://settings-changed', (e) => {
 });
 
 // --- Document translation via drag-drop onto the mic ---
-const TRANSLATE_EXTS = ['srt', 'vtt', 'sbv', 'txt', 'md', 'markdown'];
+const TRANSLATE_EXTS = ['srt', 'vtt', 'sbv', 'txt', 'md', 'markdown', 'docx', 'doc', 'pdf'];
 const isTranslatable = (p) => {
   const m = /\.([^.\\/]+)$/.exec(p);
   return !!m && TRANSLATE_EXTS.includes(m[1].toLowerCase());

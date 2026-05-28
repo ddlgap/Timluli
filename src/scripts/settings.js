@@ -19,6 +19,20 @@ tabs.forEach((tab) => {
 if (location.hash === '#about') document.querySelector('[data-tab="about"]').click();
 if (location.hash === '#shortcut') document.querySelector('[data-tab="shortcut"]').click();
 if (location.hash === '#engine') document.querySelector('[data-tab="engine"]').click();
+if (location.hash === '#translation') document.querySelector('[data-tab="translation"]').click();
+
+// External links open in the system browser (the webview swallows target="_blank").
+document.addEventListener('click', (e) => {
+  const a = e.target.closest('a[href]');
+  if (!a) return;
+  const href = a.getAttribute('href');
+  if (href && /^https?:\/\//i.test(href)) {
+    e.preventDefault();
+    invoke('open_external', { url: href }).catch((err) =>
+      console.warn('open_external failed:', err)
+    );
+  }
+});
 
 // ---- Shortcut recorder ----
 const shortcutInput = $('shortcut-key');
@@ -142,7 +156,25 @@ async function loadSettings() {
   // Theme swatches
   setSelectedTheme(stg.mic_theme || 'graphite');
 
+  // Translation tab
+  $('translate_target_language').value = stg.translate_target_language || 'Hebrew';
+  await refreshKeyStatus();
+
   return stg;
+}
+
+async function refreshKeyStatus() {
+  try {
+    const status = await invoke('get_translation_keys_status');
+    const g = $('groq_saved');
+    const c = $('cerebras_saved');
+    if (g) g.style.display = status.groq_set ? 'inline' : 'none';
+    if (c) c.style.display = status.cerebras_set ? 'inline' : 'none';
+    if (status.groq_set) $('groq_api_key').placeholder = '•••••••••• (מפתח שמור)';
+    if (status.cerebras_set) $('cerebras_api_key').placeholder = '•••••••••• (מפתח שמור)';
+  } catch (e) {
+    /* ignore */
+  }
 }
 
 function setSelectedTheme(theme) {
@@ -187,6 +219,7 @@ async function saveSettings() {
     mute_during_fullscreen: getToggle('mute_during_fullscreen'),
     mute_during_calls: getToggle('mute_during_calls'),
     silence_timeout_ms: Number(silence.value),
+    translate_target_language: $('translate_target_language').value,
     // engine_id is saved immediately on radio change, not on Save button
   };
 
@@ -198,6 +231,19 @@ async function saveSettings() {
       await invoke('set_autostart_enabled', { enabled: newSettings.start_with_windows });
     }
     await invoke('save_settings', { newSettings });
+
+    // Persist API keys only when the user typed something new (blank = unchanged).
+    const groqVal = $('groq_api_key').value.trim();
+    const cerebrasVal = $('cerebras_api_key').value.trim();
+    if (groqVal || cerebrasVal) {
+      await invoke('save_translation_keys', {
+        groq: groqVal || null,
+        cerebras: cerebrasVal || null,
+      });
+      $('groq_api_key').value = '';
+      $('cerebras_api_key').value = '';
+      await refreshKeyStatus();
+    }
 
     saveBtn.textContent = '✓ נשמר';
     saveBtn.classList.add('saved');

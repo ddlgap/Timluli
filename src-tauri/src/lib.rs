@@ -7,8 +7,10 @@ mod chrome_sidecar;
 mod commands;
 mod commands_local;
 mod models;
+mod secrets;
 mod settings;
 mod shortcut;
+mod translation;
 mod tray;
 mod whisper_local;
 
@@ -78,6 +80,11 @@ pub fn run() {
             commands::set_mic_visible,
             commands::quit_app,
             commands::store_mic_position,
+            // ── document translation commands ──
+            commands::translate_file,
+            commands::save_translation_keys,
+            commands::get_translation_keys_status,
+            commands::open_external,
             // ── new local-engine commands (appended) ──
             commands_local::list_engines,
             commands_local::set_active_engine,

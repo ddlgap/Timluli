@@ -10,6 +10,8 @@
 - **Web Speech (מקוון)** — Google Web Speech API דרך WebView2, ללא התקנה נוספת
 - **Whisper Local (אופליין)** — מנוע Whisper.cpp מקומי עם מודל עברית של [ivrit-ai](https://huggingface.co/ivrit-ai), ללא שליחת אודיו לשרת
 
+בנוסף, Timluli כולל **תרגום מסמכים** — גרור קובץ כתוביות או טקסט על אייקון המיקרופון, והעותק המתורגם יישמר באותה תיקייה. התרגום מתבצע דרך Groq/Cerebras (מנועי ענן תואמי-OpenAI) עם שרשרת fallback אוטומטית.
+
 ---
 
 ## תכונות
@@ -22,8 +24,10 @@
 - 🌐 מנוע מקוון: Google Web Speech API (ללא התקנה)
 - 💾 מנוע אופליין: Whisper Local — הורדה חד-פעמית (~1.5 GB), עובד ללא אינטרנט
 - 🎨 ערכות עיצוב למיקרופון (graphite, כחול, אדום, ירוק, שקיעה, אוקיינוס, סגול, פלזמה, זוהר הצפון)
+- 📄 תרגום מסמכים בגרירה — כתוביות (SRT, VTT, SBV) וטקסט (TXT, MD) דרך Groq/Cerebras, עם שמירת חותמות זמן ומבנה
+- 🔑 אחסון מאובטח של מפתחות API — מוצפנים at-rest ב-Windows DPAPI
 - 🪟 System tray עם תפריט קליק ימני
-- ⚙️ חלון הגדרות עם 5 טאבים (כללי, קיצור מקלדת, תצוגה, התנהגות, מנוע תמלול)
+- ⚙️ חלון הגדרות עם 6 טאבים (כללי, קיצור מקלדת, תצוגה, התנהגות, מנוע תמלול, תרגום מסמכים)
 - 🚀 אפשרות להפעלה אוטומטית עם Windows
 - 🧙 אשף Onboarding בהפעלה ראשונה
 
@@ -45,12 +49,36 @@ Timluli משתמש ב-Web Speech API המובנה ב-WebView2 (מנוע Chromium
 - **האודיו לא נשלח לשום שרת** — כל העיבוד מתבצע על המחשב המקומי.
 - נדרשת הורדה חד-פעמית של המודל (~1.5 GB) בחיבור אינטרנט.
 
+### תרגום מסמכים
+
+- **תוכן הקובץ נשלח לספק שבחרת** — Groq או Cerebras (endpoints תואמי-OpenAI). רק הטקסט מתורגם; מבנה הכתוביות (מספרים, חותמות זמן) נשלח לא.
+- **המפתחות נשמרים מוצפנים** ב-`secrets.json` (Windows DPAPI, קשור למשתמש Windows) — לעולם לא בטקסט גלוי, ולא נשלחים לאף שרת מלבד הספק.
+- הקריאות יוצאות מצד ה-Rust (לא מה-webview), ולכן אינן כפופות ל-CSP של האפליקציה.
+
 ### סיכום
 
 | מנוע | אודיו לשרת | שמירה מקומית | דורש אינטרנט |
 |------|-----------|-------------|--------------|
 | Web Speech (Google) | כן | לא | כן |
 | Whisper Local | לא | לא | לא (לאחר הורדה) |
+| תרגום מסמכים (Groq/Cerebras) | טקסט בלבד | קובץ פלט מקומי | כן |
+
+---
+
+## תרגום מסמכים
+
+גרור קובץ נתמך על אייקון המיקרופון המרחף. Timluli מתרגם אותו ושומר עותק חדש באותה תיקייה, ליד המקור, עם שפת היעד כסיומת — לדוגמה `movie.srt` → `movie.hebrew.srt`. המקור לא משתנה.
+
+**פורמטים נתמכים:** SRT, VTT, SBV (כתוביות) · TXT, MD (טקסט). בכתוביות נשמרים המספרים וחותמות הזמן במדויק; ב-Markdown בלוקי קוד (```` ``` ````) לא מתורגמים.
+
+**הגדרה (טאב "תרגום מסמכים"):**
+1. בחר שפת יעד (ברירת מחדל: עברית).
+2. הזן מפתח API — לפחות אחד מהשניים:
+   - **Groq** (מומלץ, מהיר וחינמי) — [console.groq.com/keys](https://console.groq.com/keys)
+   - **Cerebras** (גיבוי) — [cloud.cerebras.ai](https://cloud.cerebras.ai/)
+3. שמור. המפתחות נשמרים מוצפנים (DPAPI) ומופיע "מפתח שמור ✓".
+
+**Fallback אוטומטי:** המנוע עובר בין מספר מודלים של Groq ואז Cerebras; כשמכסה מסתיימת (402/429) הוא ממשיך אוטומטית למודל הבא, כך שתרגום ארוך לא נעצר.
 
 ---
 
@@ -88,7 +116,7 @@ Timluli בנוי כתהליך Tauri יחיד (Rust) עם ארבעה חלונות
 - **`settings`** — חלון הגדרות עם 5 טאבים, נפתח לפי דרישה
 - **`onboarding`** — אשף הגדרה ראשוני, מוצג בהפעלה הראשונה
 
-תקשורת פנימית: ~31 Tauri commands ו-7 events בין ה-frontend (JS) ל-backend (Rust). שכבת Win32 משתמשת ב-`SendInput`, `AttachThreadInput`, `SetForegroundWindow`, ו-`WS_EX_NOACTIVATE` לניהול פוקוס והזרקת טקסט.
+תקשורת פנימית: ~35 Tauri commands ו-10 events בין ה-frontend (JS) ל-backend (Rust). שכבת Win32 משתמשת ב-`SendInput`, `AttachThreadInput`, `SetForegroundWindow`, ו-`WS_EX_NOACTIVATE` לניהול פוקוס והזרקת טקסט, וב-DPAPI (`CryptProtectData`) לאחסון מוצפן של מפתחות התרגום. מנוע התרגום (`translation/`) מבצע את הקריאות ל-Groq/Cerebras דרך `reqwest`.
 
 לתיעוד טכני מלא ראה [BLUEPRINT.md](./docs/BLUEPRINT.md).
 
@@ -156,6 +184,8 @@ npm run tauri:build   # בנייה ל-production
 ## Roadmap
 
 - ✅ **תמלול מקומי (offline)** — ממומש עם whisper.cpp + whisper-rs + מודל ivrit-ai
+- ✅ **תרגום מסמכים** — גרירת כתוביות/טקסט על המיקרופון, תרגום דרך Groq/Cerebras עם fallback
+- 🔲 **תרגום DOCX/PDF** — הרחבת התרגום לפורמטים של Office (קיים במימוש המקור ב-Python)
 - 🔲 **Voice Activity Detection (VAD)** — זיהוי דיבור מקומי (silero-vad) לשיפור חיסכון סוללה ודיוק
 - 🔲 **Push-to-Talk** — מימוש מצב "לחץ-והחזק"
 - 🔲 **גיבוי ושחזור לוח הגזרים** — שמירה ושחזור תוכן ה-Clipboard סביב פעולות הזרקה
@@ -176,6 +206,7 @@ npm run tauri:build   # בנייה ל-production
 - [whisper.cpp](https://github.com/ggerganov/whisper.cpp) — מנוע inference מקומי
 - [whisper-rs](https://github.com/tazz4843/whisper-rs) — ממשק Rust ל-whisper.cpp
 - [WebView2](https://developer.microsoft.com/microsoft-edge/webview2/) — Google Web Speech API
+- [Groq](https://groq.com) · [Cerebras](https://cerebras.ai) — מנועי תרגום מסמכים (endpoints תואמי-OpenAI)
 
 ---
 

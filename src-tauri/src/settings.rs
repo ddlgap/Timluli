@@ -46,6 +46,8 @@ pub struct Settings {
     pub mic_theme: String,
     #[serde(default)]
     pub onboarding_done: bool,
+    #[serde(default = "default_translate_target_language")]
+    pub translate_target_language: String,
 }
 
 impl Default for Settings {
@@ -66,6 +68,7 @@ impl Default for Settings {
             local_model_id: None,
             mic_theme: default_mic_theme(),
             onboarding_done: false,
+            translate_target_language: default_translate_target_language(),
         }
     }
 }
@@ -73,8 +76,9 @@ impl Default for Settings {
 fn default_silence_timeout_ms() -> u32 { 1500 }
 fn default_engine_id() -> String { "web-speech".into() }
 fn default_mic_theme() -> String { "graphite".into() }
+fn default_translate_target_language() -> String { "Hebrew".into() }
 
-fn settings_dir(app: &AppHandle) -> PathBuf {
+pub fn settings_dir(app: &AppHandle) -> PathBuf {
     app.path()
         .app_config_dir()
         .or_else(|_| app.path().app_data_dir())

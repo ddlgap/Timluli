@@ -257,3 +257,54 @@ pub fn store_mic_position(app: AppHandle, x: i32, y: i32) -> Result<(), String> 
     settings::save(&app, &stg).map_err(|e| e.to_string())?;
     Ok(())
 }
+
+// ─── Document translation ──────────────────────────────────────────────────────
+
+#[tauri::command]
+pub async fn translate_file(app: AppHandle, path: String) -> Result<String, String> {
+    let result = crate::translation::translate_file(&app, &path).await;
+    match &result {
+        Ok(out) => {
+            let _ = app.emit_to("mic", "speakly://translate-done", out.clone());
+        }
+        Err(e) => {
+            let _ = app.emit_to("mic", "speakly://translate-error", e.clone());
+        }
+    }
+    result
+}
+
+#[tauri::command]
+pub fn save_translation_keys(
+    app: AppHandle,
+    groq: Option<String>,
+    cerebras: Option<String>,
+) -> Result<(), String> {
+    crate::secrets::save_keys(&app, groq, cerebras)
+}
+
+#[tauri::command]
+pub fn get_translation_keys_status(app: AppHandle) -> Result<crate::secrets::KeyStatus, String> {
+    Ok(crate::secrets::status(&app))
+}
+
+/// Opens an http(s) URL in the user's default browser. The webview intercepts
+/// `target="_blank"` navigation, so external links must round-trip through here.
+#[tauri::command]
+pub fn open_external(url: String) -> Result<(), String> {
+    if !(url.starts_with("https://") || url.starts_with("http://")) {
+        return Err("כתובת לא נתמכת".into());
+    }
+    #[cfg(target_os = "windows")]
+    {
+        std::process::Command::new("rundll32.exe")
+            .args(["url.dll,FileProtocolHandler", &url])
+            .spawn()
+            .map_err(|e| e.to_string())?;
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        let _ = url;
+    }
+    Ok(())
+}

@@ -375,6 +375,56 @@ button.saved {
 }
 .progress-label { font-size: 11px; color: var(--text-dim); white-space: nowrap; min-width: 140px; }
 
+/* ---- Translation tab ---- */
+.translate-intro {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--text-dim);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 12px 14px;
+}
+
+#translation input[type="password"] {
+  font-family: inherit;
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 8px 10px;
+  width: 100%;
+  letter-spacing: 1px;
+}
+#translation input[type="password"]:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+#translation label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.info-icon {
+  color: var(--text-dim);
+  cursor: help;
+  font-size: 13px;
+}
+.info-icon:hover { color: var(--accent-2); }
+
+.key-saved {
+  font-size: 11px;
+  color: var(--accent);
+  font-weight: 600;
+  margin-inline-start: auto;
+}
+
+#translation .link-btn { text-decoration: none; }
+#translation .link-btn:hover { text-decoration: underline; }
+
 /* ---- About tab ---- */
 .about-hero {
   text-align: center;

@@ -18,6 +18,7 @@
     <button data-tab="display">תצוגה</button>
     <button data-tab="behavior">התנהגות</button>
     <button data-tab="engine">מנוע תמלול</button>
+    <button data-tab="translation">תרגום מסמכים</button>
     <button data-tab="about">אודות</button>
   </nav>
 
@@ -165,6 +166,59 @@
           מודל טעון = גודלו בזיכרון RAM.
         </small>
       </div>
+    </section>
+
+    <!-- ── תרגום מסמכים ── -->
+    <section id="translation" class="section">
+      <p class="translate-intro">
+        גרור מסמך על אייקון המיקרופון כדי לתרגם אותו. הקובץ המתורגם יישמר באותה תיקייה,
+        ליד המקור. נתמכים: כתוביות (SRT, VTT, SBV) וטקסט (TXT, MD).
+      </p>
+
+      <div class="field">
+        <label for="translate_target_language">שפת יעד לתרגום</label>
+        <select id="translate_target_language">
+          <option value="Hebrew">עברית</option>
+          <option value="English">אנגלית</option>
+          <option value="Arabic">ערבית</option>
+          <option value="Russian">רוסית</option>
+          <option value="Spanish">ספרדית</option>
+          <option value="French">צרפתית</option>
+          <option value="German">גרמנית</option>
+          <option value="Portuguese">פורטוגזית</option>
+          <option value="Italian">איטלקית</option>
+          <option value="Chinese">סינית</option>
+          <option value="Japanese">יפנית</option>
+        </select>
+      </div>
+
+      <div class="field">
+        <label for="groq_api_key">
+          מפתח Groq API
+          <span class="info-icon" title="היכנס לקישור, צור חשבון חינמי, צור API key, העתק והדבק כאן">ⓘ</span>
+          <span class="key-saved" id="groq_saved" style="display:none">מפתח שמור ✓</span>
+        </label>
+        <input type="password" id="groq_api_key" placeholder="gsk_…" autocomplete="off" spellcheck="false" />
+        <small class="muted">
+          מנוע ענן מהיר וחינמי לתרגום.
+          <a class="link-btn" href="https://console.groq.com/keys" target="_blank" rel="noopener">קבל מפתח Groq חינם ↗</a>
+        </small>
+      </div>
+
+      <div class="field">
+        <label for="cerebras_api_key">
+          מפתח Cerebras API
+          <span class="info-icon" title="היכנס לקישור, צור חשבון חינמי, צור API key, העתק והדבק כאן">ⓘ</span>
+          <span class="key-saved" id="cerebras_saved" style="display:none">מפתח שמור ✓</span>
+        </label>
+        <input type="password" id="cerebras_api_key" placeholder="csk-…" autocomplete="off" spellcheck="false" />
+        <small class="muted">
+          גיבוי אוטומטי כאשר מכסת Groq מסתיימת.
+          <a class="link-btn" href="https://cloud.cerebras.ai/" target="_blank" rel="noopener">קבל מפתח Cerebras חינם ↗</a>
+        </small>
+      </div>
+
+      <small class="muted">המפתחות נשמרים מוצפנים על המחשב שלך (DPAPI) ולעולם לא נשלחים לאף שרת מלבד הספק שבחרת.</small>
     </section>
 
     <section id="about" class="section">

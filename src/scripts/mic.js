@@ -1,6 +1,7 @@
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { getCurrentWindow, PhysicalPosition } from '@tauri-apps/api/window';
+import { getCurrentWebview } from '@tauri-apps/api/webview';
 
 const mic = document.getElementById('mic');
 const bubble = document.getElementById('bubble');
@@ -59,6 +60,48 @@ await listen('speakly://interim', (e) => {
 
 await listen('speakly://settings-changed', (e) => {
   applySettings(e.payload);
+});
+
+// --- Document translation via drag-drop onto the mic ---
+const TRANSLATE_EXTS = ['srt', 'vtt', 'sbv', 'txt', 'md', 'markdown'];
+const isTranslatable = (p) => {
+  const m = /\.([^.\\/]+)$/.exec(p);
+  return !!m && TRANSLATE_EXTS.includes(m[1].toLowerCase());
+};
+
+await listen('speakly://translate-progress', (e) => {
+  const { batch, total } = e.payload || {};
+  if (batch && total) showBubble(`מתרגם… ${batch}/${total}`);
+});
+
+await getCurrentWebview().onDragDropEvent(async (event) => {
+  if (event.payload.type !== 'drop' || !event.payload.paths?.length) return;
+  const paths = event.payload.paths.filter(isTranslatable);
+  if (paths.length === 0) {
+    showBubble('פורמט לא נתמך');
+    return;
+  }
+  setState('listening');
+  showBubble('מתרגם…');
+  let ok = 0;
+  let fail = 0;
+  for (const p of paths) {
+    try {
+      await invoke('translate_file', { path: p });
+      ok++;
+    } catch (err) {
+      fail++;
+      console.warn('translate_file failed:', err);
+    }
+  }
+  if (fail === 0) {
+    setState('idle');
+    showBubble('✓ נשמר');
+  } else {
+    setState('error');
+    showBubble(ok > 0 ? `✓ ${ok} · ✗ ${fail}` : 'שגיאה בתרגום');
+    setTimeout(() => setState('idle'), 1500);
+  }
 });
 
 // On startup, fetch current settings to apply size/opacity.

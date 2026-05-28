@@ -206,6 +206,7 @@ pub(crate) async fn translate_units(
         let pairs: Vec<(usize, &str)> = batch.iter().map(|(id, t)| (*id, t.as_str())).collect();
 
         let mut attempt = current_idx;
+        let mut rate_retries = 0u32;
         let mut got: Option<HashMap<String, String>> = None;
         while attempt < FALLBACK_CHAIN.len() {
             let (provider_name, model) = FALLBACK_CHAIN[attempt];
@@ -240,6 +241,19 @@ pub(crate) async fn translate_units(
                     got = Some(m);
                     current_idx = attempt;
                     break;
+                }
+                Err(provider::TranslateError::RateLimit(msg, retry_after)) => {
+                    last_error = Some(msg);
+                    // Per-minute rate limit: wait and retry the SAME model a few
+                    // times before giving up on it (the window resets quickly).
+                    if rate_retries < 3 {
+                        rate_retries += 1;
+                        let wait = retry_after.unwrap_or(12).clamp(2, 30);
+                        tokio::time::sleep(Duration::from_secs(wait)).await;
+                    } else {
+                        exhausted.insert(label);
+                        attempt += 1;
+                    }
                 }
                 Err(provider::TranslateError::Quota(msg)) => {
                     last_error = Some(msg);

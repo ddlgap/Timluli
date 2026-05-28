@@ -18,26 +18,35 @@ pub fn base_url(provider: &str) -> &'static str {
 pub enum TranslateError {
     /// 402/429/quota/rate-limit — the model is exhausted; skip it permanently.
     Quota(String),
-    /// Bad JSON, network blip, other HTTP error — retry the batch on the next model.
+    /// 429 / per-minute rate limit — transient; wait and retry the SAME model.
+    /// Carries an optional Retry-After (seconds).
+    RateLimit(String, Option<u64>),
+    /// Bad JSON, request-too-large (413), network blip — retry on the next model.
     Transient(String),
 }
 
-fn is_quota(code: u16, msg: &str) -> bool {
-    if code == 402 || code == 429 {
-        return true;
+/// Classifies an unsuccessful HTTP response. Status code takes priority over
+/// message sniffing so that e.g. a 413 "request too large (TPM)" cascades to the
+/// next model instead of being mistaken for a permanent quota error.
+fn classify(code: u16, body: &str, retry_after: Option<u64>, msg: String) -> TranslateError {
+    match code {
+        429 => TranslateError::RateLimit(msg, retry_after),
+        402 => TranslateError::Quota(msg),
+        413 => TranslateError::Transient(msg),
+        _ => {
+            let m = body.to_lowercase();
+            if m.contains("payment") || m.contains("insufficient_quota") {
+                TranslateError::Quota(msg)
+            } else if m.contains("rate limit")
+                || m.contains("rate_limit")
+                || m.contains("tokens per minute")
+            {
+                TranslateError::RateLimit(msg, retry_after)
+            } else {
+                TranslateError::Transient(msg)
+            }
+        }
     }
-    let m = msg.to_lowercase();
-    [
-        "rate_limit",
-        "rate limit",
-        "payment_required",
-        "payment required",
-        "quota",
-        "tokens per minute",
-        "insufficient_quota",
-    ]
-    .iter()
-    .any(|p| m.contains(p))
 }
 
 fn strip_fences(text: &str) -> String {
@@ -83,7 +92,10 @@ pub async fn translate_batch(
         ],
         "temperature": 0.2,
         "top_p": 1,
-        "max_completion_tokens": 8192,
+        // Providers count this reservation against the per-minute token limit, so
+        // keep it modest: a single request must fit well under free-tier TPM caps
+        // (the smallest fallback models cap around 6000 TPM).
+        "max_completion_tokens": 4096,
     });
 
     let resp = client
@@ -96,12 +108,15 @@ pub async fn translate_batch(
 
     let status = resp.status();
     if !status.is_success() {
+        let retry_after = resp
+            .headers()
+            .get(reqwest::header::RETRY_AFTER)
+            .and_then(|v| v.to_str().ok())
+            .and_then(|s| s.trim().parse::<f64>().ok())
+            .map(|f| f.ceil() as u64);
         let text = resp.text().await.unwrap_or_default();
         let msg = format!("HTTP {}: {}", status.as_u16(), truncate(&text, 200));
-        if is_quota(status.as_u16(), &text) {
-            return Err(TranslateError::Quota(msg));
-        }
-        return Err(TranslateError::Transient(msg));
+        return Err(classify(status.as_u16(), &text, retry_after, msg));
     }
 
     let json: serde_json::Value = resp

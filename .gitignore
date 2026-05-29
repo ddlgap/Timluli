@@ -41,6 +41,7 @@ vite.config.zip
 
 # Claude Code local settings (developer-specific)
 .claude/
+CLAUDE.md
 
 # OMC local state (developer-specific)
 .omc/

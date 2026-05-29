@@ -25,6 +25,14 @@ Thumbs.db
 *.msi
 *.ico.tmp
 
+# PDF translation sidecar (PyInstaller build artifacts; exe is built locally/CI)
+src-tauri/sidecar/.build-venv/
+src-tauri/sidecar/build/
+src-tauri/sidecar/dist/
+src-tauri/sidecar/*.spec
+src-tauri/sidecar/__pycache__/
+src-tauri/resources/timluli-pdf.exe
+
 # Speakly local state
 SPIKE_RESULTS.md
 

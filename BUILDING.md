@@ -84,6 +84,26 @@ node --version    # v18.x or higher
 npm --version
 ```
 
+### 6. Python 3.12 (for the PDF translation sidecar)
+
+Hebrew PDF→PDF translation (layout-preserving) runs through a standalone
+`timluli-pdf.exe` sidecar compiled from `src-tauri/sidecar/timluli_pdf.py` with
+PyInstaller (PyMuPDF + python-bidi). The exe is **not** committed — build it once
+before `tauri:dev`/`tauri:build`, since Tauri copies `src-tauri/resources/` at
+compile time.
+
+Requires the `py -3.12` launcher in PATH. All Python deps install into a throwaway
+`.build-venv` — nothing touches your system Python.
+
+```powershell
+# From repo root:
+src-tauri\sidecar\build_sidecar.ps1
+# Produces src-tauri/resources/timluli-pdf.exe
+```
+
+If the exe is missing at runtime, Hebrew PDF translation returns a clear error
+("מנוע ה-PDF ... לא נמצא"); other formats are unaffected.
+
 ---
 
 ## Build Steps
@@ -91,6 +111,9 @@ npm --version
 ```powershell
 # Install npm dependencies
 npm install
+
+# Build the PDF translation sidecar (once, and after editing timluli_pdf.py)
+src-tauri\sidecar\build_sidecar.ps1
 
 # Development server (live reload)
 npm run tauri:dev

@@ -10,7 +10,7 @@
 - **Web Speech (מקוון)** — Google Web Speech API דרך WebView2, ללא התקנה נוספת
 - **Whisper Local (אופליין)** — מנוע Whisper.cpp מקומי עם מודל עברית של [ivrit-ai](https://huggingface.co/ivrit-ai), ללא שליחת אודיו לשרת
 
-בנוסף, Timluli כולל **תרגום מסמכים** — גרור קובץ כתוביות, טקסט או מסמך (DOCX/DOC/PDF) על אייקון המיקרופון, והעותק המתורגם יישמר באותה תיקייה. התרגום מתבצע דרך Groq/Cerebras (מנועי ענן תואמי-OpenAI) עם שרשרת fallback אוטומטית ופלט RTL לעברית.
+בנוסף, Timluli כולל **תרגום מסמכים** — גרור קובץ כתוביות, טקסט או מסמך (DOCX/DOC/PDF) על אייקון המיקרופון, והעותק המתורגם יישמר באותה תיקייה. התרגום מתבצע דרך Groq/Cerebras (מנועי ענן תואמי-OpenAI) עם שרשרת fallback אוטומטית ופלט RTL לעברית. **תרגום PDF לעברית שומר על הפריסה המקורית** — מיקום הטקסט, טבלאות, לוגואים ומשוואות — ומפיק PDF עברי שנראה כמו המקור.
 
 ---
 
@@ -25,6 +25,7 @@
 - 💾 מנוע אופליין: Whisper Local — הורדה חד-פעמית (~1.5 GB), עובד ללא אינטרנט
 - 🎨 ערכות עיצוב למיקרופון (graphite, כחול, אדום, ירוק, שקיעה, אוקיינוס, סגול, פלזמה, זוהר הצפון)
 - 📄 תרגום מסמכים בגרירה — כתוביות (SRT, VTT, SBV), טקסט (TXT, MD), ומסמכים (DOCX, DOC, PDF) דרך Groq/Cerebras, עם שמירת חותמות זמן ומבנה ופלט RTL לעברית
+- 🧩 תרגום PDF→PDF לעברית עם **שימור פריסה מלא** (טקסט, טבלאות, לוגואים, משוואות) — דרך מנוע PyMuPDF נלווה
 - 🔑 אחסון מאובטח של מפתחות API — מוצפנים at-rest ב-Windows DPAPI
 - 🪟 System tray עם תפריט קליק ימני
 - ⚙️ חלון הגדרות עם 6 טאבים (כללי, קיצור מקלדת, תצוגה, התנהגות, מנוע תמלול, תרגום מסמכים)
@@ -69,7 +70,13 @@ Timluli משתמש ב-Web Speech API המובנה ב-WebView2 (מנוע Chromium
 
 גרור קובץ נתמך על אייקון המיקרופון המרחף. Timluli מתרגם אותו ושומר עותק חדש באותה תיקייה, ליד המקור, עם שפת היעד כסיומת — לדוגמה `movie.srt` → `movie.hebrew.srt`. המקור לא משתנה.
 
-**פורמטים נתמכים:** SRT, VTT, SBV (כתוביות) · TXT, MD (טקסט) · DOCX, DOC, PDF (מסמכים). בכתוביות נשמרים המספרים וחותמות הזמן במדויק; ב-Markdown בלוקי קוד (```` ``` ````) לא מתורגמים. ב-DOCX נשמר מבנה המסמך (פסקאות, טבלאות) והפלט מסומן RTL לעברית. PDF ו-DOC מתורגמים לקובץ **DOCX** (שחזור פריסת PDF בעברית אינו אמין). תרגום DOC דורש LibreOffice מותקן.
+**פורמטים נתמכים:** SRT, VTT, SBV (כתוביות) · TXT, MD (טקסט) · DOCX, DOC, PDF (מסמכים). בכתוביות נשמרים המספרים וחותמות הזמן במדויק; ב-Markdown בלוקי קוד (```` ``` ````) לא מתורגמים. ב-DOCX נשמר מבנה המסמך (פסקאות, טבלאות) והפלט מסומן RTL לעברית.
+
+**תרגום PDF:**
+- **יעד עברית** → הפלט הוא **PDF עם שימור פריסה מלא**: הטקסט המקורי מוסר ומוחלף בעברית במקומו, תוך שמירה על טבלאות, לוגואים, איורים ומשוואות (משוואות נשארות כפי שהן). מתבצע דרך מנוע `timluli-pdf` נלווה (PyMuPDF + python-bidi) הנארז עם האפליקציה.
+- **יעד שאינו עברית** → הפלט הוא **DOCX** (שחזור פריסת PDF נכון רק לעברית RTL).
+
+תרגום DOC דורש LibreOffice מותקן.
 
 **הגדרה (טאב "תרגום מסמכים"):**
 1. בחר שפת יעד (ברירת מחדל: עברית).
@@ -101,7 +108,7 @@ Timluli עושה שימוש ב-Web Speech API של הדפדפן באמצעות W
 
 ## התקנה
 
-הורד את הגרסה האחרונה מעמוד [Releases ב-GitHub](<!-- TODO: קישור לעמוד Releases -->) (**NSIS installer** מומלץ).
+הורד את הגרסה האחרונה מעמוד [Releases ב-GitHub](https://github.com/ddlgap/Timluli/releases) (**NSIS installer** מומלץ).
 
 לאחר ההתקנה, Timluli מופעל עם ה-system tray. לחץ `Ctrl+Win+Space` כדי להתחיל תמלול.
 
@@ -154,16 +161,20 @@ webkitSpeechRecognition  whisper-rs (inference מקומי)
 | Visual Studio Build Tools | 2019/2022 | C++ workload |
 | CMake | 3.x | נדרש ל-whisper-rs |
 | LLVM/Clang | כל גרסה עדכנית | נדרש ל-bindgen |
+| Python | 3.12 | נדרש לבניית מנוע ה-PDF הנלווה (PyInstaller) |
 
 לפרטי התקנה מלאים ראה [BUILDING.md](BUILDING.md).
 
 ### שלבי בנייה
 
-```bash
+```powershell
 npm install
-npm run tauri:dev     # סביבת פיתוח עם hot-reload
-npm run tauri:build   # בנייה ל-production
+src-tauri\sidecar\build_sidecar.ps1   # בונה את מנוע ה-PDF הנלווה (פעם אחת, ולאחר עריכת timluli_pdf.py)
+npm run tauri:dev                      # סביבת פיתוח עם hot-reload
+npm run tauri:build                    # בנייה ל-production
 ```
+
+> מנוע ה-PDF (`timluli-pdf.exe`) חייב להיבנות **לפני** `tauri:dev`/`tauri:build`, כיוון ש-Tauri אורז את תיקיית `resources/` בזמן הקומפילציה.
 
 **פלט הבינארי:** `src-tauri/target/release/bundle/` — MSI ו-NSIS installer.
 
@@ -185,7 +196,7 @@ npm run tauri:build   # בנייה ל-production
 
 - ✅ **תמלול מקומי (offline)** — ממומש עם whisper.cpp + whisper-rs + מודל ivrit-ai
 - ✅ **תרגום מסמכים** — גרירת כתוביות/טקסט/DOCX/DOC/PDF על המיקרופון, תרגום דרך Groq/Cerebras עם fallback ופלט RTL לעברית
-- 🔲 **שימור פריסת PDF** — שמירת פריסת PDF מורכבת (אופציה לתרגום דרך API ייעודי כמו DeepL/Azure)
+- ✅ **שימור פריסת PDF** — תרגום PDF→PDF לעברית עם שימור פריסה מלא (טקסט, טבלאות, לוגואים, משוואות) דרך מנוע PyMuPDF נלווה
 - 🔲 **Voice Activity Detection (VAD)** — זיהוי דיבור מקומי (silero-vad) לשיפור חיסכון סוללה ודיוק
 - 🔲 **Push-to-Talk** — מימוש מצב "לחץ-והחזק"
 - 🔲 **גיבוי ושחזור לוח הגזרים** — שמירה ושחזור תוכן ה-Clipboard סביב פעולות הזרקה

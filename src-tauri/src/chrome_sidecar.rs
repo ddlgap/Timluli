@@ -238,16 +238,25 @@ pub fn ensure_chrome(app: &AppHandle, shared: &SidecarShared) -> Result<(), Stri
             .creation_flags(CREATE_NO_WINDOW)
             .spawn()
             .map_err(|e| format!("הפעלת Chrome נכשלה: {e}"))?;
+        let pid = child.id();
         *guard = Some(child);
         drop(guard);
 
         // Best-effort: once the recognizer window appears, strip it from the
-        // taskbar and shove it off-screen so the user never sees it.
-        std::thread::spawn(|| {
-            for _ in 0..40 {
-                std::thread::sleep(std::time::Duration::from_millis(200));
-                if crate::win_util::hide_offscreen_by_title("Timluli Recognizer") {
-                    break;
+        // taskbar and shove it off-screen so the user never sees it. We target
+        // the Chrome child by PID (timing-independent, can't match the wrong
+        // window) and keep re-applying for a bit, because Chrome re-asserts its
+        // window state — re-adding the taskbar button — as the page finishes
+        // loading. `hide_offscreen_by_pid` only does work when a window actually
+        // needs re-stripping, so steady state is just a cheap window scan.
+        std::thread::spawn(move || {
+            let mut found_by_pid = false;
+            for _ in 0..80 {
+                std::thread::sleep(std::time::Duration::from_millis(150));
+                if crate::win_util::hide_offscreen_by_pid(pid) {
+                    found_by_pid = true;
+                } else if !found_by_pid {
+                    let _ = crate::win_util::hide_offscreen_by_title("Timluli Recognizer");
                 }
             }
         });

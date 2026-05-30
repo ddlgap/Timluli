@@ -101,6 +101,17 @@
           </div>
         </div>
       </div>
+
+      <div class="field">
+        <div class="field-row">
+          <label for="field_docking_enabled">
+            הצמד את המיקרופון לשדה ההקלדה הפעיל
+            <span class="badge-experimental">ניסיוני</span>
+          </label>
+          <div class="toggle" data-key="field_docking_enabled"><input type="checkbox" id="field_docking_enabled" /></div>
+        </div>
+        <small class="muted">המיקרופון יקפוץ אוטומטית לצד שדה ההקלדה שתבחר ברוב התוכנות (Notepad, Office, Chrome/Edge, VS Code, Terminal). לא יעבוד ב-Java, משחקים, ותוכנות ללא תמיכה בנגישות. בזמן הכתבה המיקרופון מוקפא במקומו.</small>
+      </div>
     </section>
 
     <section id="behavior" class="section">
@@ -225,21 +236,22 @@
     <section id="about" class="section">
       <div class="about-hero">
         <h2 class="about-title">Timluli</h2>
-        <p class="about-tagline">כלי תמלול עברית מערכתי לווינדוס</p>
+        <p class="about-tagline">כלי תמלול ותרגום עברית מערכתי לווינדוס — מהיר ועוצמתי.</p>
         <span class="about-version">גרסה 1.2.0 · Oliel Studio</span>
       </div>
 
       <div class="about-card">
         <h3>פרטיות</h3>
-        <p>האודיו נשלח לשרתי Google לתמלול דרך Web Speech API. אין שמירת אודיו או טקסט מקומית או בענן.</p>
-        <p>מנוע מקומי (Timluli Local): כל העיבוד מתבצע על המחשב שלך. אין שליחת נתונים לשרת חיצוני.</p>
+        <p>האודיו נשלח לשרתי Google לתמלול (Web Speech API). לא נשמרים אודיו או טקסט — לא במחשב ולא בענן.</p>
+        <p>במנוע המקומי (Timluli Local) כל העיבוד מתבצע על המחשב שלך, ללא שליחת נתונים לשרת חיצוני.</p>
       </div>
 
-      <div class="about-card">
+      <div class="about-card about-contact">
         <h3>תמיכה ויצירת קשר</h3>
-        <p class="about-line">לקבלת תמיכה על האפליקציה הזאת,</p>
-        <p class="about-line">או אם יש לכם רעיון שאתם רוצים להביא לעולם —</p>
-        <p class="about-line about-line-strong">צרו איתי קשר.</p>
+        <p class="about-line">יש לכם שאלה, תקלה או רעיון לפיצ'ר?</p>
+        <p class="about-line about-line-strong">אשמח לשמוע — צרו קשר.</p>
+        <p class="about-line about-pitch">ואם אתם חולמים על מוצר מבוסס AI — בואו נדבר, אני אוהב להפוך רעיונות למציאות.</p>
+        <img class="about-logo" src="./logo3.png" alt="Daniel Daloya" />
         <p class="about-author">דניאל דלויה</p>
         <a class="about-email" href="mailto:ddlgap@gmail.com">ddlgap@gmail.com</a>
       </div>

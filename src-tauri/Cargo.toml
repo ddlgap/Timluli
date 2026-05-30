@@ -52,6 +52,7 @@ windows = { version = "0.58", features = [
     "Win32_UI_Input_KeyboardAndMouse",
     "Win32_UI_WindowsAndMessaging",
 ] }
+uiautomation = { version = "0.24", features = ["event"] }
 
 [profile.dev]
 # Disable debug info to keep peak compile memory under control on low-RAM

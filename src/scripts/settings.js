@@ -139,6 +139,7 @@ async function loadSettings() {
   setToggle('show_mic_on_startup', stg.show_mic_on_startup);
   setToggle('mute_during_fullscreen', stg.mute_during_fullscreen);
   setToggle('mute_during_calls', stg.mute_during_calls);
+  setToggle('field_docking_enabled', stg.field_docking_enabled);
   shortcutInput.textContent = stg.shortcut || 'Ctrl+Super+Space';
   $('activation_mode').value = stg.activation_mode || 'toggle';
   $('mic_size').value = stg.mic_size || 'medium';
@@ -218,6 +219,7 @@ async function saveSettings() {
     show_mic_on_startup: getToggle('show_mic_on_startup'),
     mute_during_fullscreen: getToggle('mute_during_fullscreen'),
     mute_during_calls: getToggle('mute_during_calls'),
+    field_docking_enabled: getToggle('field_docking_enabled'),
     silence_timeout_ms: Number(silence.value),
     translate_target_language: $('translate_target_language').value,
     // engine_id is saved immediately on radio change, not on Save button
@@ -229,6 +231,9 @@ async function saveSettings() {
     }
     if (newSettings.start_with_windows !== previous.start_with_windows) {
       await invoke('set_autostart_enabled', { enabled: newSettings.start_with_windows });
+    }
+    if (newSettings.field_docking_enabled !== previous.field_docking_enabled) {
+      await invoke('set_field_docking', { enabled: newSettings.field_docking_enabled });
     }
     await invoke('save_settings', { newSettings });
 
@@ -284,6 +289,7 @@ function setStatus(text, kind = '') {
 $('save').addEventListener('click', saveSettings);
 $('reset').addEventListener('click', async () => {
   if (!confirm('לשחזר הגדרות ברירת מחדל?')) return;
+  await invoke('set_field_docking', { enabled: false });
   await invoke('save_settings', {
     newSettings: {
       language: 'he-IL',
@@ -299,6 +305,7 @@ $('reset').addEventListener('click', async () => {
       mic_position: null,
       engine_id: 'web-speech',
       local_model_id: null,
+      field_docking_enabled: false,
     },
   });
   await loadSettings();

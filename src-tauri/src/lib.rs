@@ -15,6 +15,8 @@ mod tray;
 mod whisper_local;
 
 #[cfg(target_os = "windows")]
+mod field_tracker;
+#[cfg(target_os = "windows")]
 mod text_injection;
 #[cfg(target_os = "windows")]
 mod win_util;
@@ -32,6 +34,9 @@ pub struct AppState {
     pub sidecar: Arc<chrome_sidecar::SidecarShared>,
     /// The hidden Chrome process running the online recognizer, if launched.
     pub chrome_child: Mutex<Option<std::process::Child>>,
+    /// Experimental dynamic field-docking tracker. Some when enabled.
+    #[cfg(target_os = "windows")]
+    pub field_tracker: Mutex<Option<field_tracker::FieldTrackerHandle>>,
 }
 
 impl AppState {
@@ -44,6 +49,8 @@ impl AppState {
             active_downloads: Mutex::new(HashMap::new()),
             sidecar: Arc::new(chrome_sidecar::SidecarShared::new()),
             chrome_child: Mutex::new(None),
+            #[cfg(target_os = "windows")]
+            field_tracker: Mutex::new(None),
         }
     }
 }
@@ -80,6 +87,7 @@ pub fn run() {
             commands::set_mic_visible,
             commands::quit_app,
             commands::store_mic_position,
+            commands::set_field_docking,
             // ── document translation commands ──
             commands::translate_file,
             commands::save_translation_keys,
@@ -130,6 +138,10 @@ pub fn run() {
             {
                 if let Some(mic) = app.get_webview_window("mic") {
                     win_util::make_topmost_noactivate(&mic);
+                }
+                if stg.field_docking_enabled {
+                    let handle = field_tracker::FieldTrackerHandle::start(app.handle().clone());
+                    *app.state::<AppState>().field_tracker.lock() = Some(handle);
                 }
             }
 

@@ -88,6 +88,19 @@ main {
 .toggle.on { background: var(--accent); }
 .toggle.on::after { right: 20px; }
 
+.badge-experimental {
+  display: inline-block;
+  margin-inline-start: 6px;
+  padding: 1px 6px;
+  font-size: 10px;
+  font-weight: 600;
+  color: #1a1a1a;
+  background: #f0a020;
+  border-radius: 6px;
+  vertical-align: middle;
+  letter-spacing: 0.3px;
+}
+
 .shortcut-input {
   width: 100%;
   font-family: Consolas, "Cascadia Mono", monospace;
@@ -473,7 +486,17 @@ button.saved {
   line-height: 1.65;
 }
 
+.about-contact { text-align: center; }
+.about-logo {
+  display: block;
+  width: 200px;
+  max-width: 70%;
+  height: auto;
+  margin: 18px auto 8px;
+}
+
 .about-line { color: var(--text-dim); }
+.about-pitch { margin-top: 12px !important; }
 .about-line-strong {
   color: var(--text);
   font-weight: 600;

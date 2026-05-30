@@ -251,10 +251,62 @@ pub fn quit_app(app: AppHandle) {
 }
 
 #[tauri::command]
-pub fn store_mic_position(app: AppHandle, x: i32, y: i32) -> Result<(), String> {
+pub fn store_mic_position(
+    app: AppHandle,
+    state: State<AppState>,
+    x: i32,
+    y: i32,
+) -> Result<(), String> {
+    // While field-docking is active, the mic's position is computed from the
+    // focused field. Don't overwrite the user's manual fallback position with
+    // auto-docked coordinates.
+    #[cfg(target_os = "windows")]
+    {
+        if state.field_tracker.lock().is_some() {
+            return Ok(());
+        }
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        let _ = state;
+    }
     let mut stg = settings::load_or_init(&app).map_err(|e| e.to_string())?;
     stg.mic_position = Some(MicPosition { x, y });
     settings::save(&app, &stg).map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+#[tauri::command]
+pub fn set_field_docking(
+    app: AppHandle,
+    state: State<AppState>,
+    enabled: bool,
+) -> Result<(), String> {
+    #[cfg(target_os = "windows")]
+    {
+        let mut slot = state.field_tracker.lock();
+        if enabled && slot.is_none() {
+            *slot = Some(crate::field_tracker::FieldTrackerHandle::start(app.clone()));
+        } else if !enabled && slot.is_some() {
+            *slot = None; // Drop signals shutdown
+            // Restore the user's manual fallback position so the mic doesn't
+            // freeze in the last docked spot.
+            drop(slot);
+            if let Ok(stg) = settings::load_or_init(&app) {
+                if let Some(pos) = stg.mic_position {
+                    if let Some(mic) = app.get_webview_window("mic") {
+                        let _ = mic.set_position(tauri::Position::Physical(
+                            tauri::PhysicalPosition::new(pos.x, pos.y),
+                        ));
+                    }
+                }
+            }
+        }
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        let _ = (app, state, enabled);
+    }
     Ok(())
 }
 

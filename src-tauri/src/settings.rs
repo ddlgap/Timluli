@@ -48,6 +48,10 @@ pub struct Settings {
     pub onboarding_done: bool,
     #[serde(default = "default_translate_target_language")]
     pub translate_target_language: String,
+    /// Experimental: when true, the mic window auto-docks next to the focused
+    /// text field via UI Automation. Off by default while we gather coverage data.
+    #[serde(default)]
+    pub field_docking_enabled: bool,
 }
 
 impl Default for Settings {
@@ -69,6 +73,7 @@ impl Default for Settings {
             mic_theme: default_mic_theme(),
             onboarding_done: false,
             translate_target_language: default_translate_target_language(),
+            field_docking_enabled: false,
         }
     }
 }

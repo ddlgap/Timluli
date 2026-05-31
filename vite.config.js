@@ -22,6 +22,7 @@ export default defineConfig({
       input: {
         main: resolve(root, 'index.html'),
         mic: resolve(root, 'mic.html'),
+        panel: resolve(root, 'panel.html'),
         speech: resolve(root, 'speech.html'),
         settings: resolve(root, 'settings.html'),
         onboarding: resolve(root, 'onboarding.html'),

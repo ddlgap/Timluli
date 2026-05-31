@@ -8,6 +8,34 @@ const bubble = document.getElementById('bubble');
 
 let bubbleTimer = null;
 
+const winLabel = getCurrentWindow().label;
+
+// Clip the (otherwise transparent) window down to just the mic circle so clicks
+// around it pass through to the desktop. While the interim-text bubble or the
+// context menu is showing we need the whole window, so the region is cleared.
+async function updateMicRegion() {
+  try {
+    const bubbleUp = bubble.classList.contains('show');
+    const menuUp = !!document.getElementById('__ctxmenu');
+    if (bubbleUp || menuUp) {
+      await invoke('clear_hit_region', { label: winLabel });
+      return;
+    }
+    const dpr = window.devicePixelRatio || 1;
+    const r = mic.offsetWidth / 2; // layout size, ignores hover transform
+    if (r <= 0) return;
+    const cx = (window.innerWidth / 2) * dpr; // mic is centered in its window
+    const cy = (window.innerHeight / 2) * dpr;
+    // Pad to include the mic's soft drop-shadow / orb glow (box-shadow ≈ 24–28px)
+    // so the circle keeps its floating look. This glow aura is the mic's visual
+    // body, so it reads as the element — not empty frame.
+    const rad = (r + 26) * dpr;
+    await invoke('set_circle_region', { label: winLabel, cx, cy, r: rad });
+  } catch (e) {
+    /* ignore */
+  }
+}
+
 function setState(state) {
   mic.dataset.state = state;
 }
@@ -29,8 +57,12 @@ function showBubble(text) {
   if (!text) return;
   bubble.textContent = truncateForBubble(text);
   bubble.classList.add('show');
+  updateMicRegion(); // bubble needs the full window
   clearTimeout(bubbleTimer);
-  bubbleTimer = setTimeout(() => bubble.classList.remove('show'), 1500);
+  bubbleTimer = setTimeout(() => {
+    bubble.classList.remove('show');
+    updateMicRegion(); // re-clip to the circle
+  }, 1500);
 }
 
 mic.addEventListener('click', async (event) => {
@@ -52,6 +84,7 @@ mic.addEventListener('contextmenu', async (event) => {
 await listen('speakly://state-changed', (e) => {
   setState(e.payload || 'idle');
   if (e.payload !== 'listening') bubble.classList.remove('show');
+  updateMicRegion();
 });
 
 await listen('speakly://interim', (e) => {
@@ -62,44 +95,71 @@ await listen('speakly://settings-changed', (e) => {
   applySettings(e.payload);
 });
 
-// --- Document translation via drag-drop onto the mic ---
+// --- File drag-drop onto the mic: document translation + audio transcription ---
 const TRANSLATE_EXTS = ['srt', 'vtt', 'sbv', 'txt', 'md', 'markdown', 'docx', 'doc', 'pdf'];
-const isTranslatable = (p) => {
+const AUDIO_EXTS = ['mp3', 'wav', 'm4a', 'aac', 'flac', 'ogg', 'oga', 'opus', 'wma', 'webm', 'mp4', 'mpeg', 'mpga'];
+const extOf = (p) => {
   const m = /\.([^.\\/]+)$/.exec(p);
-  return !!m && TRANSLATE_EXTS.includes(m[1].toLowerCase());
+  return m ? m[1].toLowerCase() : '';
 };
+const isTranslatable = (p) => TRANSLATE_EXTS.includes(extOf(p));
+const isAudio = (p) => AUDIO_EXTS.includes(extOf(p));
 
 await listen('speakly://translate-progress', (e) => {
   const { batch, total } = e.payload || {};
   if (batch && total) showBubble(`מתרגם… ${batch}/${total}`);
 });
 
+await listen('speakly://transcribe-progress', (e) => {
+  const { chunk, total } = e.payload || {};
+  if (chunk && total > 1) showBubble(`מתמלל… ${chunk}/${total}`);
+});
+
 await getCurrentWebview().onDragDropEvent(async (event) => {
   if (event.payload.type !== 'drop' || !event.payload.paths?.length) return;
-  const paths = event.payload.paths.filter(isTranslatable);
-  if (paths.length === 0) {
+  const audioPaths = event.payload.paths.filter(isAudio);
+  const docPaths = event.payload.paths.filter(isTranslatable);
+  if (audioPaths.length === 0 && docPaths.length === 0) {
     showBubble('פורמט לא נתמך');
     return;
   }
+
   setState('listening');
-  showBubble('מתרגם…');
   let ok = 0;
   let fail = 0;
-  for (const p of paths) {
-    try {
-      await invoke('translate_file', { path: p });
-      ok++;
-    } catch (err) {
-      fail++;
-      console.warn('translate_file failed:', err);
+
+  if (audioPaths.length) {
+    showBubble('מתמלל…');
+    for (const p of audioPaths) {
+      try {
+        await invoke('transcribe_audio_file', { path: p });
+        ok++;
+      } catch (err) {
+        fail++;
+        console.warn('transcribe_audio_file failed:', err);
+      }
     }
   }
+
+  if (docPaths.length) {
+    showBubble('מתרגם…');
+    for (const p of docPaths) {
+      try {
+        await invoke('translate_file', { path: p });
+        ok++;
+      } catch (err) {
+        fail++;
+        console.warn('translate_file failed:', err);
+      }
+    }
+  }
+
   if (fail === 0) {
     setState('idle');
     showBubble('✓ נשמר');
   } else {
     setState('error');
-    showBubble(ok > 0 ? `✓ ${ok} · ✗ ${fail}` : 'שגיאה בתרגום');
+    showBubble(ok > 0 ? `✓ ${ok} · ✗ ${fail}` : 'שגיאה');
     setTimeout(() => setState('idle'), 1500);
   }
 });
@@ -115,7 +175,12 @@ function applySettings(stg) {
   document.body.dataset.size = stg.mic_size || 'medium';
   document.body.style.opacity = String(stg.mic_opacity ?? 0.95);
   mic.dataset.theme = stg.mic_theme || 'graphite';
+  // Mic diameter may have changed → re-clip the window region.
+  updateMicRegion();
 }
+
+// DPI changes (moving between monitors) alter physical sizes — re-clip.
+window.addEventListener('resize', () => updateMicRegion());
 
 // Persist position when window is moved by the user (drag region handles drag).
 const win = getCurrentWindow();
@@ -175,6 +240,7 @@ function showContextMenu(x, y) {
     menu.appendChild(el);
   }
   document.body.appendChild(menu);
+  updateMicRegion(); // menu extends beyond the circle → need the full window
   setTimeout(() => {
     document.addEventListener('click', removeContextMenu, { once: true });
   }, 0);
@@ -183,4 +249,5 @@ function showContextMenu(x, y) {
 function removeContextMenu() {
   const m = document.getElementById('__ctxmenu');
   if (m) m.remove();
+  updateMicRegion(); // re-clip to the circle
 }

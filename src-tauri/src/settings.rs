@@ -73,6 +73,23 @@ pub struct Settings {
     /// When true, treat the Cerebras key as a paid-tier key. See `groq_paid`.
     #[serde(default)]
     pub cerebras_paid: bool,
+    /// Backend used to transcribe audio files dragged onto the mic.
+    /// `"groq"` (cloud, whisper-large-v3-turbo, reuses the Groq key) or
+    /// `"whisper-local"` (offline, the loaded local model). Independent of
+    /// `engine_id`, which only governs live dictation.
+    #[serde(default = "default_audio_file_engine")]
+    pub audio_file_engine: String,
+    /// UI display mode: `"floating-mic"` (default, the draggable mic button) or
+    /// `"side-panel"` (a vertical handle docked to the right screen edge that
+    /// expands into a 3-button panel). Mutually exclusive — only one window is
+    /// shown at a time.
+    #[serde(default = "default_display_mode")]
+    pub display_mode: String,
+    /// Physical Y of the side-panel's top edge (X is always anchored to the
+    /// right work-area edge). `None` = vertically centered. Analogous to
+    /// `mic_position` but only the vertical axis is user-controlled.
+    #[serde(default)]
+    pub panel_offset_y: Option<i32>,
 }
 
 impl Default for Settings {
@@ -100,6 +117,9 @@ impl Default for Settings {
             cerebras_model: None,
             groq_paid: false,
             cerebras_paid: false,
+            audio_file_engine: default_audio_file_engine(),
+            display_mode: default_display_mode(),
+            panel_offset_y: None,
         }
     }
 }
@@ -109,6 +129,8 @@ fn default_engine_id() -> String { "web-speech".into() }
 fn default_mic_theme() -> String { "graphite".into() }
 fn default_translate_target_language() -> String { "Hebrew".into() }
 fn default_pdf_rtl_layout() -> String { "same-box".into() }
+fn default_audio_file_engine() -> String { "groq".into() }
+fn default_display_mode() -> String { "floating-mic".into() }
 
 pub fn settings_dir(app: &AppHandle) -> PathBuf {
     app.path()

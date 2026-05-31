@@ -6,6 +6,15 @@ use tauri::{AppHandle, Emitter, Manager, State};
 #[cfg(target_os = "windows")]
 use crate::{text_injection, win_util};
 
+/// Emits a UI event to both the floating mic and the side panel. Only one of the
+/// two is ever visible (per `display_mode`), so the hidden one simply ignores it.
+/// Used for events both display modes consume: state changes, interim text, and
+/// translate/transcribe done/error. `serde::Serialize + Clone` mirrors `emit_to`.
+fn emit_ui<S: serde::Serialize + Clone>(app: &AppHandle, event: &str, payload: S) {
+    let _ = app.emit_to("mic", event, payload.clone());
+    let _ = app.emit_to("panel", event, payload);
+}
+
 #[tauri::command]
 pub fn capture_target_window(state: State<AppState>) -> Result<isize, String> {
     #[cfg(target_os = "windows")]
@@ -51,16 +60,15 @@ pub async fn start_listening(app: AppHandle, state: State<'_, AppState>) -> Resu
         if let Err(e) = crate::chrome_sidecar::ensure_chrome(&app, &state.sidecar) {
             *state.is_listening.lock() = false;
             crate::chrome_sidecar::request_stop(&state.sidecar);
-            let _ = app.emit_to("mic", "speakly://state-changed", "error");
+            emit_ui(&app, "speakly://state-changed", "error");
             let _ = app.emit_to("settings", "speakly://error", &e);
             return Err(e);
         }
-        let _ = app.emit_to("mic", "speakly://state-changed", "listening");
+        emit_ui(&app, "speakly://state-changed", "listening");
     } else {
         app.emit_to("speech", "speakly://start-listening", ())
             .map_err(|e| e.to_string())?;
-        app.emit_to("mic", "speakly://state-changed", "listening")
-            .map_err(|e| e.to_string())?;
+        emit_ui(&app, "speakly://state-changed", "listening");
     }
     Ok(())
 }
@@ -74,7 +82,7 @@ pub async fn stop_listening(app: AppHandle, state: State<'_, AppState>) -> Resul
     } else {
         let _ = app.emit_to("speech", "speakly://stop-listening", ());
     }
-    let _ = app.emit_to("mic", "speakly://state-changed", "idle");
+    emit_ui(&app, "speakly://state-changed", "idle");
     Ok(())
 }
 
@@ -97,7 +105,7 @@ pub async fn inject_text(
     *state.is_listening.lock() = false;
     let hwnd_opt = *state.target_hwnd.lock();
 
-    let _ = app.emit_to("mic", "speakly://state-changed", "processing");
+    emit_ui(&app, "speakly://state-changed", "processing");
 
     #[cfg(target_os = "windows")]
     {
@@ -112,7 +120,7 @@ pub async fn inject_text(
         let _ = (hwnd_opt, text);
     }
 
-    let _ = app.emit_to("mic", "speakly://state-changed", "idle");
+    emit_ui(&app, "speakly://state-changed", "idle");
     Ok(())
 }
 
@@ -134,8 +142,8 @@ pub async fn inject_partial(state: State<'_, AppState>, text: String) -> Result<
 
 #[tauri::command]
 pub fn report_interim(app: AppHandle, text: String) -> Result<(), String> {
-    app.emit_to("mic", "speakly://interim", text)
-        .map_err(|e| e.to_string())
+    emit_ui(&app, "speakly://interim", text);
+    Ok(())
 }
 
 #[tauri::command]
@@ -149,13 +157,13 @@ pub fn report_state(
     if state == "idle" || state == "error" {
         *app_state.is_listening.lock() = false;
     }
-    app.emit_to("mic", "speakly://state-changed", state)
-        .map_err(|e| e.to_string())
+    emit_ui(&app, "speakly://state-changed", state);
+    Ok(())
 }
 
 #[tauri::command]
 pub fn report_error(app: AppHandle, message: String) -> Result<(), String> {
-    let _ = app.emit_to("mic", "speakly://state-changed", "error");
+    emit_ui(&app, "speakly://state-changed", "error");
     let _ = app.emit_to("settings", "speakly://error", &message);
     log::error!("speech error: {message}");
     Ok(())
@@ -284,9 +292,19 @@ pub fn set_field_docking(
 ) -> Result<(), String> {
     #[cfg(target_os = "windows")]
     {
+        // In side-panel mode the tracker is always running in auto-hide mode and
+        // is governed by the display mode, not this toggle. Leave it untouched;
+        // the preference is still persisted (for when the user returns to
+        // floating-mic) by the regular settings save.
+        if settings::load_or_init(&app)
+            .map(|s| s.display_mode == "side-panel")
+            .unwrap_or(false)
+        {
+            return Ok(());
+        }
         let mut slot = state.field_tracker.lock();
         if enabled && slot.is_none() {
-            *slot = Some(crate::field_tracker::FieldTrackerHandle::start(app.clone()));
+            *slot = Some(crate::field_tracker::FieldTrackerHandle::start(app.clone(), false));
         } else if !enabled && slot.is_some() {
             *slot = None; // Drop signals shutdown
             // Restore the user's manual fallback position so the mic doesn't
@@ -317,13 +335,44 @@ pub async fn translate_file(app: AppHandle, path: String) -> Result<String, Stri
     let result = crate::translation::translate_file(&app, &path).await;
     match &result {
         Ok(out) => {
-            let _ = app.emit_to("mic", "speakly://translate-done", out.clone());
+            emit_ui(&app, "speakly://translate-done", out.clone());
         }
         Err(e) => {
-            let _ = app.emit_to("mic", "speakly://translate-error", e.clone());
+            emit_ui(&app, "speakly://translate-error", e.clone());
         }
     }
     result
+}
+
+// ─── Audio-file transcription ───────────────────────────────────────────────────
+
+/// Transcribes an audio file dragged onto the mic, saving the transcript as
+/// `<stem>.txt` next to the source. Backend (`groq` / `whisper-local`) is chosen
+/// by `settings.audio_file_engine`.
+#[tauri::command]
+pub async fn transcribe_audio_file(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    path: String,
+) -> Result<String, String> {
+    let result = crate::transcription::transcribe_audio_file(&app, state, &path).await;
+    match &result {
+        Ok(out) => {
+            emit_ui(&app, "speakly://transcribe-done", out.clone());
+        }
+        Err(e) => {
+            emit_ui(&app, "speakly://transcribe-error", e.clone());
+        }
+    }
+    result
+}
+
+/// Persists the audio-file transcription backend (`groq` | `whisper-local`).
+#[tauri::command]
+pub fn set_audio_file_engine(app: AppHandle, engine_id: String) -> Result<(), String> {
+    let mut stg = settings::load_or_init(&app)?;
+    stg.audio_file_engine = engine_id;
+    settings::save(&app, &stg)
 }
 
 #[tauri::command]
@@ -349,6 +398,112 @@ pub async fn list_provider_models(
     key: Option<String>,
 ) -> Result<Vec<crate::translation::ModelInfo>, String> {
     crate::translation::list_models(&app, &provider, key).await
+}
+
+// ─── Display mode (floating mic ⇄ side panel) ───────────────────────────────────
+
+/// Switches the UI display mode and swaps the visible window accordingly. Persists
+/// the choice and broadcasts `speakly://display-mode-changed` so other windows
+/// (e.g. settings) can sync. `mode` is `"floating-mic"` or `"side-panel"`.
+#[tauri::command]
+pub fn set_display_mode(app: AppHandle, state: State<AppState>, mode: String) -> Result<(), String> {
+    let mut stg = settings::load_or_init(&app)?;
+    stg.display_mode = mode.clone();
+    settings::save(&app, &stg)?;
+
+    if mode == "side-panel" {
+        if let Some(mic) = app.get_webview_window("mic") {
+            let _ = mic.hide();
+        }
+        crate::panel::show_panel(&app);
+        // The mic becomes dynamic: hidden by default, shown (docked) only while a
+        // text field is focused. Restart the tracker in auto-hide mode.
+        #[cfg(target_os = "windows")]
+        {
+            *state.field_tracker.lock() =
+                Some(crate::field_tracker::FieldTrackerHandle::start(app.clone(), true));
+        }
+    } else {
+        crate::panel::hide_panel(&app);
+        if let Some(mic) = app.get_webview_window("mic") {
+            let _ = mic.show();
+            #[cfg(target_os = "windows")]
+            win_util::make_topmost_noactivate(&mic);
+        }
+        // Back to floating-mic: drop the auto-hide tracker, then re-enable classic
+        // field-docking only if the user had it on.
+        #[cfg(target_os = "windows")]
+        {
+            *state.field_tracker.lock() = None;
+            if stg.field_docking_enabled {
+                *state.field_tracker.lock() =
+                    Some(crate::field_tracker::FieldTrackerHandle::start(app.clone(), false));
+            }
+        }
+    }
+
+    emit_ui(&app, "speakly://display-mode-changed", mode.clone());
+    let _ = app.emit_to("settings", "speakly://display-mode-changed", mode);
+    Ok(())
+}
+
+/// Expands or collapses the side panel (resize + reposition). No-op visually when
+/// the panel window isn't the active display mode.
+#[tauri::command]
+pub fn set_panel_expanded(app: AppHandle, expanded: bool) -> Result<(), String> {
+    crate::panel::position_panel(&app, expanded);
+    Ok(())
+}
+
+/// Clips a window (`mic` or `panel`) to a circle so clicks outside it pass through
+/// to the desktop — removing the transparent dead-zone around the visible widget.
+/// `cx`/`cy`/`r` are physical pixels relative to the window's top-left (the JS
+/// caller multiplies CSS coords by `devicePixelRatio`). A circle centered on the
+/// window's right edge yields the side-panel's left-facing semicircle.
+#[tauri::command]
+pub fn set_circle_region(app: AppHandle, label: String, cx: f64, cy: f64, r: f64) -> Result<(), String> {
+    #[cfg(target_os = "windows")]
+    {
+        if let Some(win) = app.get_webview_window(&label) {
+            let left = (cx - r).round() as i32;
+            let top = (cy - r).round() as i32;
+            let right = (cx + r).round() as i32;
+            let bottom = (cy + r).round() as i32;
+            win_util::set_ellipse_region(&win, left, top, right, bottom);
+        }
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        let _ = (app, label, cx, cy, r);
+    }
+    Ok(())
+}
+
+/// Restores a window's full rectangular hit area (used while the mic's bubble or
+/// context menu needs the whole window).
+#[tauri::command]
+pub fn clear_hit_region(app: AppHandle, label: String) -> Result<(), String> {
+    #[cfg(target_os = "windows")]
+    {
+        if let Some(win) = app.get_webview_window(&label) {
+            win_util::clear_region(&win);
+        }
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        let _ = (app, label);
+    }
+    Ok(())
+}
+
+/// Persists the panel's vertical position (analogous to `store_mic_position`, but
+/// only Y — X is always anchored to the right work-area edge).
+#[tauri::command]
+pub fn store_panel_offset_y(app: AppHandle, y: i32) -> Result<(), String> {
+    let mut stg = settings::load_or_init(&app).map_err(|e| e.to_string())?;
+    stg.panel_offset_y = Some(y);
+    settings::save(&app, &stg).map_err(|e| e.to_string())?;
+    Ok(())
 }
 
 /// Opens an http(s) URL in the user's default browser. The webview intercepts

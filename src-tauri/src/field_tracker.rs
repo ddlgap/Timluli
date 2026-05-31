@@ -32,13 +32,20 @@ pub struct FieldTrackerHandle {
 }
 
 impl FieldTrackerHandle {
-    pub fn start(app: AppHandle) -> Self {
+    /// Starts the focus tracker. `auto_hide` selects the behavior:
+    /// - `false` (floating-mic / classic field-docking): the always-visible mic
+    ///   is *repositioned* next to the focused field; focusing a non-editable
+    ///   element is ignored (the mic stays where it is).
+    /// - `true` (side-panel mode): the mic is hidden by default and only *shown*
+    ///   (docked) when a text field gains focus; focusing any non-editable
+    ///   element immediately *hides* it again.
+    pub fn start(app: AppHandle, auto_hide: bool) -> Self {
         let shutdown = Arc::new(AtomicBool::new(false));
         let shutdown_clone = shutdown.clone();
         let app_clone = app.clone();
         let thread = thread::Builder::new()
             .name("field-tracker".into())
-            .spawn(move || run_tracker(app_clone, shutdown_clone))
+            .spawn(move || run_tracker(app_clone, shutdown_clone, auto_hide))
             .ok();
         Self {
             shutdown,
@@ -66,8 +73,16 @@ struct FieldRect {
     right: i32,
 }
 
+/// What the focus landed on. `Other` (a non-editable, non-own element) is only
+/// acted on in auto-hide mode, where it triggers hiding the mic.
+#[derive(Debug, Clone, Copy)]
+enum FocusEvent {
+    Field(FieldRect),
+    Other,
+}
+
 struct FocusHandler {
-    tx: Mutex<Sender<FieldRect>>,
+    tx: Mutex<Sender<FocusEvent>>,
     own_hwnds: Vec<isize>,
     shutdown: Arc<AtomicBool>,
 }
@@ -77,7 +92,8 @@ impl CustomFocusChangedEventHandler for FocusHandler {
         if self.shutdown.load(Ordering::Relaxed) {
             return Ok(());
         }
-        // Don't dock to our own windows (clicking the mic or settings UI).
+        // Don't react to focus on our own windows (clicking the mic, the side
+        // panel, or settings UI) — that must not move or hide the mic.
         // Handle exposes the underlying HANDLE via AsRef; HANDLE.0 is the raw
         // *mut c_void pointer, which we cast to isize to compare against the
         // HWND values we recorded for our own webview windows.
@@ -88,16 +104,18 @@ impl CustomFocusChangedEventHandler for FocusHandler {
             }
         }
         if !is_editable(sender) {
+            // Focus moved to something that isn't a text field.
+            let _ = self.tx.lock().send(FocusEvent::Other);
             return Ok(());
         }
         let rect = match sender.get_bounding_rectangle() {
             Ok(r) => r,
             Err(_) => return Ok(()),
         };
-        let _ = self.tx.lock().send(FieldRect {
+        let _ = self.tx.lock().send(FocusEvent::Field(FieldRect {
             top: rect.get_top(),
             right: rect.get_right(),
-        });
+        }));
         Ok(())
     }
 }
@@ -112,9 +130,9 @@ fn is_editable(elem: &UIElement) -> bool {
     )
 }
 
-fn run_tracker(app: AppHandle, shutdown: Arc<AtomicBool>) {
+fn run_tracker(app: AppHandle, shutdown: Arc<AtomicBool>, auto_hide: bool) {
     let mut own_hwnds = Vec::new();
-    for label in &["mic", "settings", "onboarding", "speech"] {
+    for label in &["mic", "panel", "settings", "onboarding", "speech"] {
         if let Some(w) = app.get_webview_window(label) {
             if let Ok(h) = w.hwnd() {
                 own_hwnds.push(h.0 as isize);
@@ -130,7 +148,7 @@ fn run_tracker(app: AppHandle, shutdown: Arc<AtomicBool>) {
         }
     };
 
-    let (tx, rx): (Sender<FieldRect>, Receiver<FieldRect>) = channel();
+    let (tx, rx): (Sender<FocusEvent>, Receiver<FocusEvent>) = channel();
     let focus_handler = FocusHandler {
         tx: Mutex::new(tx),
         own_hwnds,
@@ -144,7 +162,14 @@ fn run_tracker(app: AppHandle, shutdown: Arc<AtomicBool>) {
 
     while !shutdown.load(Ordering::Relaxed) {
         match rx.recv_timeout(Duration::from_millis(500)) {
-            Ok(rect) => apply_rect(&app, rect),
+            Ok(FocusEvent::Field(rect)) => apply_rect(&app, rect, auto_hide),
+            // In auto-hide mode, focusing a non-field hides the mic (unless we're
+            // mid-dictation). In classic docking mode we ignore it.
+            Ok(FocusEvent::Other) => {
+                if auto_hide {
+                    hide_mic(&app);
+                }
+            }
             Err(std::sync::mpsc::RecvTimeoutError::Timeout) => continue,
             Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => break,
         }
@@ -153,7 +178,7 @@ fn run_tracker(app: AppHandle, shutdown: Arc<AtomicBool>) {
     let _ = automation.remove_focus_changed_event_handler(&handler);
 }
 
-fn apply_rect(app: &AppHandle, rect: FieldRect) {
+fn apply_rect(app: &AppHandle, rect: FieldRect, auto_hide: bool) {
     let state = app.state::<AppState>();
     if *state.is_listening.lock() {
         return;
@@ -165,4 +190,21 @@ fn apply_rect(app: &AppHandle, rect: FieldRect) {
     let x = rect.right + PAD;
     let y = rect.top;
     let _ = mic.set_position(Position::Physical(PhysicalPosition::new(x, y)));
+    // In side-panel (auto-hide) mode the mic starts hidden; reveal it on the
+    // field it just docked to, and keep it on top without stealing focus.
+    if auto_hide {
+        let _ = mic.show();
+        crate::win_util::make_topmost_noactivate(&mic);
+    }
+}
+
+/// Hides the mic unless dictation is in progress (don't yank it away mid-speech).
+fn hide_mic(app: &AppHandle) {
+    let state = app.state::<AppState>();
+    if *state.is_listening.lock() {
+        return;
+    }
+    if let Some(mic) = app.get_webview_window("mic") {
+        let _ = mic.hide();
+    }
 }

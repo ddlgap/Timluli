@@ -17,9 +17,20 @@ pub fn stereo_to_mono(samples: &[f32]) -> Vec<f32> {
         .collect()
 }
 
+/// Downmixes interleaved f32 audio with `channels` channels to mono by
+/// averaging each frame's channels. `channels <= 1` returns the input as-is.
+pub fn downmix_to_mono(samples: &[f32], channels: usize) -> Vec<f32> {
+    if channels <= 1 {
+        return samples.to_vec();
+    }
+    samples
+        .chunks(channels)
+        .map(|frame| frame.iter().sum::<f32>() / frame.len() as f32)
+        .collect()
+}
+
 /// Resamples mono f32 audio from `from_rate` Hz to 16 000 Hz.
 /// Returns the input unchanged if already 16 kHz.
-#[allow(dead_code)]
 pub fn resample_to_16k(samples: &[f32], from_rate: u32) -> Result<Vec<f32>, String> {
     if from_rate == 16_000 {
         return Ok(samples.to_vec());

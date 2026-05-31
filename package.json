@@ -1,7 +1,7 @@
 {
   "name": "timluli",
   "private": true,
-  "version": "1.5.0",
+  "version": "1.6.0",
   "type": "module",
   "description": "Hebrew speech-to-text system-wide for Windows",
   "scripts": {
@@ -13,8 +13,9 @@
     "tauri:build": "tauri build"
   },
   "dependencies": {
-    "@tauri-apps/api": "^2.1.0",
+    "@tauri-apps/api": "~2.10.0",
     "@tauri-apps/plugin-autostart": "^2.0.0",
+    "@tauri-apps/plugin-dialog": "^2.7.1",
     "@tauri-apps/plugin-global-shortcut": "^2.0.0",
     "@tauri-apps/plugin-store": "^2.1.0"
   },

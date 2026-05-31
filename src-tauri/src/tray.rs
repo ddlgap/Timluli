@@ -86,14 +86,25 @@ fn handle_menu(app: &AppHandle, id: &str) {
 }
 
 fn toggle_mic_visibility(app: &AppHandle) {
-    if let Some(mic) = app.get_webview_window("mic") {
-        let visible = mic.is_visible().unwrap_or(false);
+    // In side-panel mode the mic is hidden and the panel is the active window;
+    // toggle whichever one the current display mode uses so left-click and
+    // "show/hide" stay meaningful in both modes.
+    let side_panel = crate::settings::load_or_init(app)
+        .map(|s| s.display_mode == "side-panel")
+        .unwrap_or(false);
+
+    let label = if side_panel { "panel" } else { "mic" };
+    if let Some(win) = app.get_webview_window(label) {
+        let visible = win.is_visible().unwrap_or(false);
         if visible {
-            let _ = mic.hide();
+            let _ = win.hide();
+        } else if side_panel {
+            // Re-show docked to the right edge with the correct geometry.
+            crate::panel::show_panel(app);
         } else {
-            let _ = mic.show();
+            let _ = win.show();
             #[cfg(target_os = "windows")]
-            crate::win_util::make_topmost_noactivate(&mic);
+            crate::win_util::make_topmost_noactivate(&win);
         }
     }
 }

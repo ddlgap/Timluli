@@ -59,6 +59,17 @@
 
     <section id="display" class="section">
       <div class="field">
+        <label for="display_mode">
+          מצב תצוגה
+          <span class="badge-experimental">ניסיוני</span>
+        </label>
+        <select id="display_mode">
+          <option value="floating-mic">מיקרופון מרחף</option>
+          <option value="side-panel">תפריט צד</option>
+        </select>
+        <small class="muted">"תפריט צד" מציג ידית נשלפת בקצה הימני של המסך עם שלושה כפתורים (תמלול לייב, תרגום קובץ, תמלול קובץ). המעבר חזרה למיקרופון נעשה כאן או דרך אייקון ה-tray.</small>
+      </div>
+      <div class="field">
         <label>גודל המיקרופון</label>
         <select id="mic_size">
           <option value="small">קטן</option>
@@ -148,6 +159,30 @@
             <div class="engine-option-content">
               <span class="engine-name">מקומי (אופליין)</span>
               <span class="engine-desc">תמלול על המחשב — ללא אינטרנט, דורש הורדת מודל (~700MB)</span>
+            </div>
+          </label>
+        </div>
+      </div>
+
+      <!-- ── תמלול בקבצי אודיו ── -->
+      <div class="field" style="margin-top:18px; padding-top:16px; border-top:1px solid var(--border, #2a2a2a)">
+        <label class="field-label-bold">תמלול בקבצי אודיו</label>
+        <small class="muted" style="margin-bottom:8px">
+          גרור קובץ אודיו (mp3, wav, m4a, ועוד) על המיקרופון כדי לתמלל אותו. התמלול נשמר כקובץ טקסט לצד הקובץ המקורי.
+        </small>
+        <div class="engine-radio-group">
+          <label class="engine-option" id="audio-engine-opt-groq">
+            <input type="radio" name="audio_file_engine" value="groq" />
+            <div class="engine-option-content">
+              <span class="engine-name">ענן (Groq · whisper-large-v3-turbo)</span>
+              <span class="engine-desc">מהיר ומדויק — דורש חיבור לשירות Groq ואינטרנט (משתמש באותו מפתח של התרגום)</span>
+            </div>
+          </label>
+          <label class="engine-option" id="audio-engine-opt-local">
+            <input type="radio" name="audio_file_engine" value="whisper-local" />
+            <div class="engine-option-content">
+              <span class="engine-name">מקומי (ivrit.ai Turbo)</span>
+              <span class="engine-desc">תמלול על המחשב — ללא אינטרנט, דורש מודל מקומי מותקן</span>
             </div>
           </label>
         </div>

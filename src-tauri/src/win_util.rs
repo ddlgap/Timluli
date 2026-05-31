@@ -2,13 +2,14 @@
 
 use tauri::WebviewWindow;
 use windows::Win32::Foundation::{BOOL, HWND, LPARAM};
+use windows::Win32::Graphics::Gdi::{CreateEllipticRgn, DeleteObject, SetWindowRgn, HGDIOBJ, HRGN};
 use windows::Win32::System::Threading::{AttachThreadInput, GetCurrentThreadId};
 use windows::Win32::UI::WindowsAndMessaging::{
     EnumWindows, GetForegroundWindow, GetWindowLongW, GetWindowTextLengthW, GetWindowTextW,
     GetWindowThreadProcessId, IsWindow, IsWindowVisible, SetForegroundWindow, SetWindowLongW,
-    SetWindowPos, ShowWindow, GWL_EXSTYLE, HWND_BOTTOM, HWND_TOPMOST, SWP_NOACTIVATE, SWP_NOMOVE,
-    SWP_NOSIZE, SW_HIDE, SW_SHOWNOACTIVATE, WS_EX_APPWINDOW, WS_EX_LAYERED, WS_EX_NOACTIVATE,
-    WS_EX_TOOLWINDOW, WS_EX_TOPMOST,
+    SetWindowPos, ShowWindow, GWL_EXSTYLE, HWND_BOTTOM, HWND_TOPMOST, SWP_NOACTIVATE,
+    SWP_NOMOVE, SWP_NOSIZE, SW_HIDE, SW_SHOWNOACTIVATE, WS_EX_APPWINDOW, WS_EX_LAYERED,
+    WS_EX_NOACTIVATE, WS_EX_TOOLWINDOW, WS_EX_TOPMOST,
 };
 
 pub fn is_window(hwnd_raw: isize) -> bool {
@@ -187,5 +188,45 @@ pub fn make_topmost_noactivate(window: &WebviewWindow) {
             0,
             SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE,
         );
+    }
+}
+
+/// Clip `window` to an ellipse (physical pixels, relative to the window's
+/// top-left). Because `SetWindowRgn` shrinks the window to the region, clicks
+/// outside the ellipse fall through to whatever is beneath it — eliminating the
+/// transparent dead-zone around small widgets like the mic and the side panel.
+/// `SetWindowRgn` takes ownership of the region on success.
+pub fn set_ellipse_region(window: &WebviewWindow, left: i32, top: i32, right: i32, bottom: i32) {
+    let raw = match window.hwnd() {
+        Ok(h) => h,
+        Err(_) => return,
+    };
+    if right <= left || bottom <= top {
+        return;
+    }
+    let hwnd = HWND(raw.0 as *mut _);
+    unsafe {
+        let rgn = CreateEllipticRgn(left, top, right, bottom);
+        if rgn.is_invalid() {
+            return;
+        }
+        if SetWindowRgn(hwnd, rgn, true) == 0 {
+            // Failed to assign — we still own the region, so free it.
+            let _ = DeleteObject(HGDIOBJ(rgn.0));
+        }
+    }
+}
+
+/// Remove any window region, restoring the full rectangular hit area. Used while
+/// transient overlays (the interim-text bubble, the context menu) need the whole
+/// window to be visible/clickable.
+pub fn clear_region(window: &WebviewWindow) {
+    let raw = match window.hwnd() {
+        Ok(h) => h,
+        Err(_) => return,
+    };
+    let hwnd = HWND(raw.0 as *mut _);
+    unsafe {
+        let _ = SetWindowRgn(hwnd, HRGN(std::ptr::null_mut()), true);
     }
 }

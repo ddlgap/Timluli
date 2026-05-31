@@ -142,6 +142,7 @@ async function loadSettings() {
   setToggle('field_docking_enabled', stg.field_docking_enabled);
   shortcutInput.textContent = stg.shortcut || 'Ctrl+Super+Space';
   $('activation_mode').value = stg.activation_mode || 'toggle';
+  $('display_mode').value = stg.display_mode || 'floating-mic';
   $('mic_size').value = stg.mic_size || 'medium';
   const op = Math.round((stg.mic_opacity ?? 0.95) * 100);
   opacity.value = String(op);
@@ -153,6 +154,7 @@ async function loadSettings() {
   // Engine tab
   const engineId = stg.engine_id || 'web-speech';
   setEngineRadio(engineId);
+  setAudioFileEngineRadio(stg.audio_file_engine || 'groq');
 
   // Theme swatches
   setSelectedTheme(stg.mic_theme || 'graphite');
@@ -448,6 +450,7 @@ $('save').addEventListener('click', saveSettings);
 $('reset').addEventListener('click', async () => {
   if (!confirm('לשחזר הגדרות ברירת מחדל?')) return;
   await invoke('set_field_docking', { enabled: false });
+  await invoke('set_display_mode', { mode: 'floating-mic' }).catch(() => {});
   await invoke('save_settings', {
     newSettings: {
       language: 'he-IL',
@@ -502,6 +505,32 @@ function updateNoModelGuidance() {
     currentEngineId === 'whisper-local' && !hasInstalled ? 'flex' : 'none';
 }
 
+// Audio-file transcription backend selection
+function setAudioFileEngineRadio(engineId) {
+  document.querySelectorAll('input[name="audio_file_engine"]').forEach((r) => {
+    r.checked = r.value === engineId;
+    r.closest('.engine-option').classList.toggle('selected', r.checked);
+  });
+}
+
+document.querySelectorAll('input[name="audio_file_engine"]').forEach((radio) => {
+  radio.addEventListener('change', async () => {
+    const engineId = radio.value;
+    setAudioFileEngineRadio(engineId);
+    try {
+      await invoke('set_audio_file_engine', { engineId });
+      showToast(
+        engineId === 'groq'
+          ? 'תמלול קבצים: ענן (Groq)'
+          : 'תמלול קבצים: מקומי',
+        'ok'
+      );
+    } catch (e) {
+      showToast(`שגיאה: ${e}`, 'err');
+    }
+  });
+});
+
 // Engine radio change handler
 document.querySelectorAll('input[name="engine_id"]').forEach((radio) => {
   radio.addEventListener('change', async () => {
@@ -528,6 +557,26 @@ document.querySelectorAll('input[name="engine_id"]').forEach((radio) => {
 // Listen for engine-changed from other windows / shortcut
 await listen('speakly://engine-changed', (e) => {
   setEngineRadio(e?.payload?.engineId || 'web-speech');
+});
+
+// ── Display mode (floating mic ⇄ side panel) ──────────────────────────────────
+// Mirrors the engine picker: apply immediately on change, no Save needed.
+$('display_mode')?.addEventListener('change', async () => {
+  const mode = $('display_mode').value;
+  try {
+    await invoke('set_display_mode', { mode });
+    showToast(
+      mode === 'side-panel' ? 'עברת לתפריט צד' : 'עברת למיקרופון מרחף',
+      'ok'
+    );
+  } catch (e) {
+    showToast(`שגיאה: ${e}`, 'err');
+  }
+});
+
+await listen('speakly://display-mode-changed', (e) => {
+  const mode = typeof e?.payload === 'string' ? e.payload : 'floating-mic';
+  if ($('display_mode')) $('display_mode').value = mode;
 });
 
 // Listen for model install / delete to refresh list

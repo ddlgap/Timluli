@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+  <meta charset="UTF-8" />
+  <title>Timluli Panel</title>
+  <link rel="stylesheet" href="./styles/panel.css" />
+</head>
+<body data-expanded="false">
+  <!-- ════════════════ CLOSED: vertical tab + half-circle trigger ════════════════ -->
+  <div id="closed" class="closed">
+    <button id="trigger" class="trigger" type="button" aria-label="פתח תפריט">
+      <svg class="chevron" viewBox="0 0 128 128" aria-hidden="true">
+        <path d="M78 32L42 64l36 32" />
+      </svg>
+    </button>
+  </div>
+
+  <!-- ════════════════ OPEN: radial half-circle menu (3 sectors) ════════════════ -->
+  <div id="open" class="open">
+    <svg class="radial" viewBox="0 0 640 1280" preserveAspectRatio="xMaxYMid meet" aria-hidden="true">
+      <defs>
+        <radialGradient id="glassFill" gradientUnits="userSpaceOnUse" cx="640" cy="640" r="600">
+          <stop offset="0%"  stop-color="#012D45" stop-opacity="0.55" />
+          <stop offset="55%" stop-color="#013766" stop-opacity="0.62" />
+          <stop offset="85%" stop-color="#0097C9" stop-opacity="0.70" />
+          <stop offset="100%" stop-color="#16D6F3" stop-opacity="0.85" />
+        </radialGradient>
+        <radialGradient id="innerFill" gradientUnits="userSpaceOnUse" cx="640" cy="640" r="250">
+          <stop offset="0%"  stop-color="#010F26" stop-opacity="0.97" />
+          <stop offset="100%" stop-color="#00040E" stop-opacity="0.97" />
+        </radialGradient>
+        <filter id="neonGlow" x="-40%" y="-40%" width="180%" height="180%">
+          <feGaussianBlur stdDeviation="9" result="b" />
+          <feMerge>
+            <feMergeNode in="b" />
+            <feMergeNode in="SourceGraphic" />
+          </feMerge>
+        </filter>
+      </defs>
+
+      <!-- Dark navy body behind the wedges; its slivers read as the separators. -->
+      <path class="base" d="M640 1248 A608 608 0 0 1 640 32 Z" />
+
+      <!-- Three wedge sectors (2° gap each side reveals the dark base as separators). -->
+      <path id="sector-bottom" class="sector"
+        d="M619.1 1239.6 A600 600 0 0 1 131.2 957.9 L428.0 772.5 A250 250 0 0 0 631.3 889.8 Z" />
+      <path id="sector-middle" class="sector"
+        d="M110.3 921.7 A600 600 0 0 1 110.3 358.3 L419.3 522.6 A250 250 0 0 0 419.3 757.4 Z" />
+      <path id="sector-top" class="sector"
+        d="M131.2 322.1 A600 600 0 0 1 619.1 40.4 L631.3 390.2 A250 250 0 0 0 428.0 507.5 Z" />
+
+      <!-- Outer neon arc bloom (left semicircle). -->
+      <path class="neon-arc" d="M640 1240 A600 600 0 0 1 640 40" filter="url(#neonGlow)" />
+
+      <!-- Inner dark half-circle control (close). -->
+      <path id="close" class="inner" d="M640 890 A250 250 0 0 1 640 390 Z" />
+    </svg>
+
+    <!-- Live HTML overlays: icons + Hebrew labels (pointer-events pass to SVG). -->
+    <div class="overlay">
+      <!-- TOP — live transcription -->
+      <div class="wedge" data-sector="top" style="top:21.2%; left:66.8%">
+        <span class="wedge-icon">
+          <svg viewBox="0 0 256 256" aria-hidden="true">
+            <circle cx="128" cy="128" r="89"/>
+            <rect x="102" y="62" width="52" height="94" rx="26"/>
+            <path d="M126 84h25M126 103h25M126 122h25M128 156v39M93 198h70"/>
+            <path d="M102 101c-15 14-15 40 0 54M87 86c-26 26-26 68 0 94M154 101c15 14 15 40 0 54M169 86c26 26 26 68 0 94"/>
+          </svg>
+        </span>
+        <span class="wedge-label">תמלול לייב</span>
+      </div>
+
+      <!-- MIDDLE — file translation -->
+      <div class="wedge" data-sector="middle" style="top:50%; left:37%">
+        <span class="wedge-icon">
+          <svg viewBox="0 0 256 256" aria-hidden="true">
+            <path d="M47 34h67l36 36v113H47z"/>
+            <path d="M114 34v36h36"/>
+            <path d="M67 88h67M67 111h82M67 134h70M67 157h48"/>
+            <circle cx="160" cy="165" r="48"/>
+            <text x="132" y="174" font-family="'Noto Sans', Arial" font-size="44" fill="#EEF6F9" stroke="none">文</text>
+            <text x="166" y="188" font-family="Inter, Arial" font-size="40" fill="#EEF6F9" stroke="none">x</text>
+          </svg>
+        </span>
+        <span class="wedge-label">תרגום קובץ</span>
+      </div>
+
+      <!-- BOTTOM — file transcription -->
+      <div class="wedge" data-sector="bottom" style="top:78.8%; left:66.8%">
+        <span class="wedge-icon">
+          <svg viewBox="0 0 256 256" aria-hidden="true">
+            <path d="M47 34h67l36 36v113H47z"/>
+            <path d="M114 34v36h36"/>
+            <path d="M67 88h67M67 111h82M67 134h70M67 157h48"/>
+            <circle cx="160" cy="165" r="48"/>
+            <text x="137" y="194" font-family="Inter, Arial" font-size="80" font-weight="600" fill="#EEF6F9" stroke="none">T</text>
+          </svg>
+        </span>
+        <span class="wedge-label">תמלול קובץ</span>
+      </div>
+
+      <!-- Center close arrow (sits over the inner control). -->
+      <span class="close-arrow" style="top:50%; left:76%">
+        <svg viewBox="0 0 128 128" aria-hidden="true">
+          <path d="M78 32L42 64l36 32" />
+        </svg>
+      </span>
+
+      <!-- Generic status line (spinner-free feedback for file ops). -->
+      <div id="status" class="status"></div>
+    </div>
+  </div>
+
+  <script type="module" src="./scripts/panel.js"></script>
+</body>
+</html>

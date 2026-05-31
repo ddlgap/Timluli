@@ -7,9 +7,11 @@ mod chrome_sidecar;
 mod commands;
 mod commands_local;
 mod models;
+mod panel;
 mod secrets;
 mod settings;
 mod shortcut;
+mod transcription;
 mod translation;
 mod tray;
 mod whisper_local;
@@ -58,6 +60,7 @@ impl AppState {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_store::Builder::new().build())
         .plugin(tauri_plugin_autostart::init(
             tauri_plugin_autostart::MacosLauncher::LaunchAgent,
@@ -88,6 +91,15 @@ pub fn run() {
             commands::quit_app,
             commands::store_mic_position,
             commands::set_field_docking,
+            // ── side-panel display mode ──
+            commands::set_display_mode,
+            commands::set_panel_expanded,
+            commands::store_panel_offset_y,
+            commands::set_circle_region,
+            commands::clear_hit_region,
+            // ── audio-file transcription commands ──
+            commands::transcribe_audio_file,
+            commands::set_audio_file_engine,
             // ── document translation commands ──
             commands::translate_file,
             commands::save_translation_keys,
@@ -135,18 +147,36 @@ pub fn run() {
                 }
             }
 
+            let side_panel = stg.display_mode == "side-panel";
+
             #[cfg(target_os = "windows")]
             {
                 if let Some(mic) = app.get_webview_window("mic") {
                     win_util::make_topmost_noactivate(&mic);
                 }
-                if stg.field_docking_enabled {
-                    let handle = field_tracker::FieldTrackerHandle::start(app.handle().clone());
+                if side_panel {
+                    // Side-panel mode: the mic is dynamic — hidden by default and
+                    // shown (docked) only while a text field is focused. Always
+                    // run the tracker in auto-hide mode.
+                    let handle =
+                        field_tracker::FieldTrackerHandle::start(app.handle().clone(), true);
+                    *app.state::<AppState>().field_tracker.lock() = Some(handle);
+                } else if stg.field_docking_enabled {
+                    // Floating-mic mode: classic opt-in field-docking (reposition
+                    // the always-visible mic; no auto-hide).
+                    let handle =
+                        field_tracker::FieldTrackerHandle::start(app.handle().clone(), false);
                     *app.state::<AppState>().field_tracker.lock() = Some(handle);
                 }
             }
 
-            if let Some(mic) = app.get_webview_window("mic") {
+            if side_panel {
+                // Side-panel mode: hide the mic, dock the panel to the right edge.
+                if let Some(mic) = app.get_webview_window("mic") {
+                    let _ = mic.hide();
+                }
+                panel::show_panel(app.handle());
+            } else if let Some(mic) = app.get_webview_window("mic") {
                 if let Some(pos) = stg.mic_position.as_ref() {
                     let _ = mic.set_position(tauri::Position::Physical(
                         tauri::PhysicalPosition::new(pos.x, pos.y),
@@ -174,7 +204,7 @@ pub fn run() {
             if let tauri::WindowEvent::CloseRequested { api, .. } = event {
                 // Don't actually quit when individual windows close; hide them.
                 let label = window.label();
-                if label == "settings" || label == "mic" || label == "onboarding" {
+                if label == "settings" || label == "mic" || label == "onboarding" || label == "panel" {
                     api.prevent_close();
                     let _ = window.hide();
                 }

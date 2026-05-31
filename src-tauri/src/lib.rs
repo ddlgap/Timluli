@@ -14,6 +14,7 @@ mod shortcut;
 mod transcription;
 mod translation;
 mod tray;
+mod updater;
 mod whisper_local;
 
 #[cfg(target_os = "windows")]
@@ -60,6 +61,7 @@ impl AppState {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_store::Builder::new().build())
         .plugin(tauri_plugin_autostart::init(
@@ -197,6 +199,10 @@ pub fn run() {
 
             tray::create(app, &stg)?;
             shortcut::register_initial(app.handle(), &stg.shortcut)?;
+
+            // Silent auto-update check on startup. Stays quiet unless a newer
+            // signed release is actually available (see updater.rs).
+            updater::check(app.handle().clone(), false);
 
             Ok(())
         })

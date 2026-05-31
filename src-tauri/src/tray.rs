@@ -16,6 +16,8 @@ pub fn create(app: &mut App, _settings: &Settings) -> tauri::Result<()> {
     let toggle_mic_item =
         MenuItem::with_id(handle, "toggle_mic", "הצג / הסתר מיקרופון", true, None::<&str>)?;
     let about_item = MenuItem::with_id(handle, "about", "אודות Timluli", true, None::<&str>)?;
+    let update_item =
+        MenuItem::with_id(handle, "check_update", "בדוק עדכונים", true, None::<&str>)?;
     let separator = PredefinedMenuItem::separator(handle)?;
     let quit_item = MenuItem::with_id(handle, "quit", "יציאה", true, None::<&str>)?;
 
@@ -27,6 +29,7 @@ pub fn create(app: &mut App, _settings: &Settings) -> tauri::Result<()> {
             &toggle_mic_item,
             &separator,
             &about_item,
+            &update_item,
             &quit_item,
         ],
     )?;
@@ -80,6 +83,7 @@ fn handle_menu(app: &AppHandle, id: &str) {
                 let _ = w.eval("window.location.hash = '#about';");
             }
         }
+        "check_update" => crate::updater::check(app.clone(), true),
         "quit" => app.exit(0),
         _ => {}
     }

@@ -1,0 +1,64 @@
+name: Release
+
+# Build, sign and publish a new Timluli release whenever a version tag is
+# pushed (e.g. `git tag v1.7.0 && git push origin v1.7.0`).
+#
+# tauri-action builds the NSIS installer, signs the updater artifact with the
+# private key (GitHub secrets below) and uploads `latest.json` to the GitHub
+# Release. The installed app polls that `latest.json` and auto-updates.
+#
+# Required repository secrets (Settings → Secrets and variables → Actions):
+#   TAURI_SIGNING_PRIVATE_KEY           contents of ~/.tauri/timluli_updater.key
+#   TAURI_SIGNING_PRIVATE_KEY_PASSWORD  the password chosen when generating it
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust build
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: "src-tauri -> target"
+
+      # whisper.cpp is compiled from C++ via whisper-rs, so the build needs
+      # CMake + LLVM/Clang (libclang for bindgen). CMake ships with the runner;
+      # install LLVM and point LIBCLANG_PATH at it.
+      - name: Install LLVM
+        run: choco install llvm --yes --no-progress
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Build, sign and publish
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          LIBCLANG_PATH: C:\Program Files\LLVM\bin
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        with:
+          tagName: ${{ github.ref_name }}
+          releaseName: "Timluli ${{ github.ref_name }}"
+          releaseBody: "ראה את השינויים למטה. העדכון יותקן אוטומטית למשתמשים קיימים."
+          releaseDraft: false
+          prerelease: false

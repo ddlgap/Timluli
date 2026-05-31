@@ -6,6 +6,8 @@ use std::collections::HashMap;
 
 pub const GROQ_URL: &str = "https://api.groq.com/openai/v1/chat/completions";
 pub const CEREBRAS_URL: &str = "https://api.cerebras.ai/v1/chat/completions";
+pub const GROQ_MODELS_URL: &str = "https://api.groq.com/openai/v1/models";
+pub const CEREBRAS_MODELS_URL: &str = "https://api.cerebras.ai/v1/models";
 
 pub fn base_url(provider: &str) -> &'static str {
     match provider {
@@ -13,6 +15,140 @@ pub fn base_url(provider: &str) -> &'static str {
         "cerebras" => CEREBRAS_URL,
         _ => "",
     }
+}
+
+fn models_url(provider: &str) -> &'static str {
+    match provider {
+        "groq" => GROQ_MODELS_URL,
+        "cerebras" => CEREBRAS_MODELS_URL,
+        _ => "",
+    }
+}
+
+/// A chat/text model offered by a provider, as surfaced to the settings UI.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct ModelInfo {
+    pub id: String,
+    pub context_window: Option<u32>,
+    pub max_completion_tokens: Option<u32>,
+}
+
+/// Live rate-limit budget read from a provider's response headers. Used by the
+/// paid (parallel) path to apply backpressure before hitting a hard 429. We track
+/// the per-minute *token* budget (the binding constraint for both providers) and
+/// its reset window; request counts are not used for short cooldowns.
+#[derive(Debug, Clone, Default)]
+pub struct RateInfo {
+    pub remaining_tokens: Option<u64>,
+    pub reset_secs: Option<u64>,
+}
+
+/// Parses the leading numeric portion of a header value, tolerating unit
+/// suffixes like `"7.66s"` (→ 8) that providers attach to reset headers.
+fn parse_leading_number(v: &str) -> Option<u64> {
+    let s: String = v
+        .trim()
+        .chars()
+        .take_while(|c| c.is_ascii_digit() || *c == '.')
+        .collect();
+    s.parse::<f64>().ok().map(|f| f.ceil() as u64)
+}
+
+fn header_num(headers: &reqwest::header::HeaderMap, names: &[&str]) -> Option<u64> {
+    for n in names {
+        if let Some(val) = headers.get(*n).and_then(|v| v.to_str().ok()) {
+            if let Some(num) = parse_leading_number(val) {
+                return Some(num);
+            }
+        }
+    }
+    None
+}
+
+/// Reads rate-limit budget from response headers. Groq and Cerebras use
+/// different header names, so we try both families.
+fn parse_rate_info(headers: &reqwest::header::HeaderMap) -> RateInfo {
+    RateInfo {
+        remaining_tokens: header_num(
+            headers,
+            &[
+                "x-ratelimit-remaining-tokens",
+                "x-ratelimit-remaining-tokens-minute",
+            ],
+        ),
+        reset_secs: header_num(
+            headers,
+            &[
+                "x-ratelimit-reset-tokens",
+                "x-ratelimit-reset-tokens-minute",
+            ],
+        ),
+    }
+}
+
+/// Fetches the provider's chat/text model catalogue via its OpenAI-compatible
+/// `/models` endpoint, filtering out non-text models (STT/TTS/guard/vision).
+pub async fn fetch_models(
+    client: &reqwest::Client,
+    provider: &str,
+    api_key: &str,
+) -> Result<Vec<ModelInfo>, String> {
+    let url = models_url(provider);
+    if url.is_empty() {
+        return Err(format!("ספק לא נתמך: {provider}"));
+    }
+
+    let resp = client
+        .get(url)
+        .bearer_auth(api_key)
+        .send()
+        .await
+        .map_err(|e| format!("שגיאת רשת: {e}"))?;
+
+    let status = resp.status();
+    if !status.is_success() {
+        let text = resp.text().await.unwrap_or_default();
+        return Err(format!("HTTP {}: {}", status.as_u16(), truncate(&text, 200)));
+    }
+
+    let json: serde_json::Value = resp
+        .json()
+        .await
+        .map_err(|e| format!("תשובה לא תקינה מהשרת: {e}"))?;
+
+    let data = json["data"].as_array().ok_or("רשימת מודלים ריקה")?;
+    let mut models: Vec<ModelInfo> = data
+        .iter()
+        .filter_map(|m| {
+            let id = m["id"].as_str()?.to_string();
+            // Groq exposes `active`; skip retired models. Cerebras omits it (treat as active).
+            if m["active"].as_bool() == Some(false) {
+                return None;
+            }
+            if !is_text_model(&id) {
+                return None;
+            }
+            Some(ModelInfo {
+                id,
+                context_window: m["context_window"].as_u64().map(|v| v as u32),
+                max_completion_tokens: m["max_completion_tokens"].as_u64().map(|v| v as u32),
+            })
+        })
+        .collect();
+
+    models.sort_by(|a, b| a.id.cmp(&b.id));
+    Ok(models)
+}
+
+/// Heuristic: keep only text-generation chat models. The `/models` payload has no
+/// modality field, so we exclude by well-known id substrings (audio, safety,
+/// vision, embedding models).
+fn is_text_model(id: &str) -> bool {
+    let lower = id.to_lowercase();
+    const EXCLUDE: &[&str] = &[
+        "whisper", "tts", "guard", "safeguard", "embed", "-vl-", "vision", "playai",
+    ];
+    !EXCLUDE.iter().any(|needle| lower.contains(needle))
 }
 
 pub enum TranslateError {
@@ -67,7 +203,8 @@ fn truncate(s: &str, n: usize) -> String {
     s.chars().take(n).collect()
 }
 
-/// Translates one batch of `(id, text)` pairs, returning a map of id → translated text.
+/// Translates one batch of `(id, text)` pairs, returning a map of id → translated
+/// text plus the live rate-limit budget read from the response headers.
 pub async fn translate_batch(
     client: &reqwest::Client,
     base_url: &str,
@@ -76,7 +213,7 @@ pub async fn translate_batch(
     target_language: &str,
     system_prompt: &str,
     batch: &[(usize, &str)],
-) -> Result<HashMap<String, String>, TranslateError> {
+) -> Result<(HashMap<String, String>, RateInfo), TranslateError> {
     let mut payload = serde_json::Map::new();
     for (id, text) in batch {
         payload.insert(id.to_string(), serde_json::Value::String((*text).to_string()));
@@ -119,6 +256,8 @@ pub async fn translate_batch(
         return Err(classify(status.as_u16(), &text, retry_after, msg));
     }
 
+    let rate = parse_rate_info(resp.headers());
+
     let json: serde_json::Value = resp
         .json()
         .await
@@ -127,7 +266,8 @@ pub async fn translate_batch(
         .as_str()
         .unwrap_or("");
     let cleaned = strip_fences(raw);
-    serde_json::from_str::<HashMap<String, String>>(&cleaned).map_err(|_| {
+    let map = serde_json::from_str::<HashMap<String, String>>(&cleaned).map_err(|_| {
         TranslateError::Transient(format!("Model returned invalid JSON: {}", truncate(raw, 200)))
-    })
+    })?;
+    Ok((map, rate))
 }

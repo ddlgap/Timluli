@@ -340,6 +340,17 @@ pub fn get_translation_keys_status(app: AppHandle) -> Result<crate::secrets::Key
     Ok(crate::secrets::status(&app))
 }
 
+/// Lists a provider's available chat/text models (live from its `/models`
+/// endpoint) for the translation settings model picker. Requires a saved key.
+#[tauri::command]
+pub async fn list_provider_models(
+    app: AppHandle,
+    provider: String,
+    key: Option<String>,
+) -> Result<Vec<crate::translation::ModelInfo>, String> {
+    crate::translation::list_models(&app, &provider, key).await
+}
+
 /// Opens an http(s) URL in the user's default browser. The webview intercepts
 /// `target="_blank"` navigation, so external links must round-trip through here.
 #[tauri::command]

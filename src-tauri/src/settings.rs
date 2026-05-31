@@ -48,10 +48,31 @@ pub struct Settings {
     pub onboarding_done: bool,
     #[serde(default = "default_translate_target_language")]
     pub translate_target_language: String,
+    /// PDF→PDF Hebrew RTL layout mode passed to the `timluli-pdf` sidecar.
+    /// `"same-box"` (default) keeps each block in its original position; `"mirror-text"`
+    /// mirrors safe text blocks to the right within the page content frame.
+    #[serde(default = "default_pdf_rtl_layout")]
+    pub pdf_rtl_layout: String,
     /// Experimental: when true, the mic window auto-docks next to the focused
     /// text field via UI Automation. Off by default while we gather coverage data.
     #[serde(default)]
     pub field_docking_enabled: bool,
+    /// Preferred Groq chat model for document translation. `None`/empty = automatic
+    /// (use the built-in fallback chain). When set, it is tried first, then the
+    /// remaining chain serves as backup.
+    #[serde(default)]
+    pub groq_model: Option<String>,
+    /// Preferred Cerebras chat model for document translation. See `groq_model`.
+    #[serde(default)]
+    pub cerebras_model: Option<String>,
+    /// When true, treat the Groq key as a paid/Developer-tier key: translate in
+    /// parallel (concurrent batches, no fixed inter-batch sleep) to exploit the
+    /// much higher paid rate limits. Off = conservative free-tier behavior.
+    #[serde(default)]
+    pub groq_paid: bool,
+    /// When true, treat the Cerebras key as a paid-tier key. See `groq_paid`.
+    #[serde(default)]
+    pub cerebras_paid: bool,
 }
 
 impl Default for Settings {
@@ -73,7 +94,12 @@ impl Default for Settings {
             mic_theme: default_mic_theme(),
             onboarding_done: false,
             translate_target_language: default_translate_target_language(),
+            pdf_rtl_layout: default_pdf_rtl_layout(),
             field_docking_enabled: false,
+            groq_model: None,
+            cerebras_model: None,
+            groq_paid: false,
+            cerebras_paid: false,
         }
     }
 }
@@ -82,6 +108,7 @@ fn default_silence_timeout_ms() -> u32 { 1500 }
 fn default_engine_id() -> String { "web-speech".into() }
 fn default_mic_theme() -> String { "graphite".into() }
 fn default_translate_target_language() -> String { "Hebrew".into() }
+fn default_pdf_rtl_layout() -> String { "same-box".into() }
 
 pub fn settings_dir(app: &AppHandle) -> PathBuf {
     app.path()

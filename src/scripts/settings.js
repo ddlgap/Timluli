@@ -159,22 +159,170 @@ async function loadSettings() {
 
   // Translation tab
   $('translate_target_language').value = stg.translate_target_language || 'Hebrew';
+  $('pdf_rtl_layout').value = stg.pdf_rtl_layout || 'same-box';
+  // Speed is an outcome-level control mapping to the per-provider paid flags.
+  setSpeed(stg.groq_paid || stg.cerebras_paid ? 'fast' : 'normal');
   await refreshKeyStatus();
+  await populateModels('groq', stg.groq_model);
+  await populateModels('cerebras', stg.cerebras_model);
 
   return stg;
+}
+
+// ---- Translation speed segmented control ----
+function setSpeed(speed) {
+  document.querySelectorAll('#speed_segmented .seg').forEach((b) => {
+    b.classList.toggle('on', b.dataset.speed === speed);
+  });
+}
+function getSpeed() {
+  const on = document.querySelector('#speed_segmented .seg.on');
+  return on ? on.dataset.speed : 'normal';
+}
+document.querySelectorAll('#speed_segmented .seg').forEach((btn) => {
+  btn.addEventListener('click', () => setSpeed(btn.dataset.speed));
+});
+
+// Updates the status banner from the current key state.
+function updateTranslateBanner(hasKey) {
+  const banner = $('translate_banner');
+  if (!banner) return;
+  const icon = banner.querySelector('.tb-icon');
+  const text = banner.querySelector('.tb-text');
+  banner.classList.toggle('ready', hasKey);
+  banner.classList.toggle('setup', !hasKey);
+  if (hasKey) {
+    icon.textContent = '✓';
+    text.textContent = 'הכול מוכן — גרור מסמך על אייקון המיקרופון כדי לתרגם.';
+  } else {
+    icon.textContent = '↓';
+    text.textContent = "כדי להתחיל, לחץ על „חבר שירות תרגום” למטה.";
+  }
+}
+
+// ---- Connect wizard (guided key setup + live validation) ----
+const connectDialog = $('connect_dialog');
+let wizValidatedKey = null;
+let wizTimer = null;
+
+function setWizFeedback(text, kind) {
+  const f = $('wiz_feedback');
+  if (!f) return;
+  f.textContent = text;
+  f.className = 'wiz-feedback' + (kind ? ' ' + kind : '');
+}
+
+function resetWizard() {
+  if ($('groq_api_key')) $('groq_api_key').value = '';
+  setWizFeedback('', '');
+  if ($('wiz_save')) $('wiz_save').disabled = true;
+  wizValidatedKey = null;
+  clearTimeout(wizTimer);
+}
+
+$('conn_open')?.addEventListener('click', () => {
+  resetWizard();
+  if (connectDialog?.showModal) connectDialog.showModal();
+});
+$('wiz_close')?.addEventListener('click', () => connectDialog?.close());
+$('wiz_cancel')?.addEventListener('click', () => connectDialog?.close());
+connectDialog?.addEventListener('close', resetWizard);
+
+$('wiz_open_site')?.addEventListener('click', () => {
+  invoke('open_external', { url: 'https://console.groq.com/keys' }).catch(() => {});
+});
+
+// Validate the pasted key live (debounced) before allowing save.
+$('groq_api_key')?.addEventListener('input', () => {
+  const key = $('groq_api_key').value.trim();
+  $('wiz_save').disabled = true;
+  wizValidatedKey = null;
+  clearTimeout(wizTimer);
+  if (!key) {
+    setWizFeedback('', '');
+    return;
+  }
+  setWizFeedback('בודק את המפתח…', 'checking');
+  wizTimer = setTimeout(async () => {
+    try {
+      const models = await invoke('list_provider_models', { provider: 'groq', key });
+      if ($('groq_api_key').value.trim() !== key) return; // stale
+      setWizFeedback(`✓ המפתח תקין — נמצאו ${models.length} מודלים`, 'ok');
+      wizValidatedKey = key;
+      $('wiz_save').disabled = false;
+    } catch (e) {
+      if ($('groq_api_key').value.trim() !== key) return; // stale
+      setWizFeedback('✗ המפתח לא תקין או שאין חיבור לאינטרנט', 'err');
+      wizValidatedKey = null;
+      $('wiz_save').disabled = true;
+    }
+  }, 600);
+});
+
+$('wiz_save')?.addEventListener('click', async () => {
+  const key = wizValidatedKey || $('groq_api_key').value.trim();
+  if (!key) return;
+  $('wiz_save').disabled = true;
+  try {
+    await invoke('save_translation_keys', { groq: key, cerebras: null });
+    connectDialog?.close();
+    await refreshKeyStatus();
+    await populateModels('groq', $('groq_model').value);
+    showToast('שירות התרגום חובר בהצלחה', 'ok');
+  } catch (err) {
+    setWizFeedback(`שגיאה בשמירה: ${err}`, 'err');
+    $('wiz_save').disabled = false;
+  }
+});
+
+/// Fills a provider's model <select> from its live /models endpoint (requires a
+/// saved key). Keeps the leading "automatic" option and preserves `selected`.
+async function populateModels(provider, selected) {
+  const sel = $(`${provider}_model`);
+  if (!sel) return;
+  // Reset to just the "automatic" option (the first child).
+  while (sel.options.length > 1) sel.remove(1);
+  let models = [];
+  try {
+    models = await invoke('list_provider_models', { provider, key: null });
+  } catch (e) {
+    /* no key yet, or fetch failed — leave only "automatic" */
+  }
+  for (const m of models) {
+    const opt = document.createElement('option');
+    opt.value = m.id;
+    opt.textContent = m.id;
+    sel.appendChild(opt);
+  }
+  const want = selected || '';
+  // If a previously-saved model isn't in the fetched list, keep it selectable.
+  if (want && !Array.from(sel.options).some((o) => o.value === want)) {
+    const opt = document.createElement('option');
+    opt.value = want;
+    opt.textContent = want;
+    sel.appendChild(opt);
+  }
+  sel.value = want;
 }
 
 async function refreshKeyStatus() {
   try {
     const status = await invoke('get_translation_keys_status');
-    const g = $('groq_saved');
+    // Primary connection (Groq) — surfaced via the connect row.
+    const cs = $('conn_status');
+    const cb = $('conn_open');
+    if (cs) {
+      cs.textContent = status.groq_set ? 'מחובר ✓' : 'לא מחובר';
+      cs.classList.toggle('ok', status.groq_set);
+    }
+    if (cb) cb.textContent = status.groq_set ? 'החלף מפתח' : 'חבר שירות תרגום';
+    // Backup service (Cerebras) lives in the advanced section.
     const c = $('cerebras_saved');
-    if (g) g.style.display = status.groq_set ? 'inline' : 'none';
     if (c) c.style.display = status.cerebras_set ? 'inline' : 'none';
-    if (status.groq_set) $('groq_api_key').placeholder = '•••••••••• (מפתח שמור)';
-    if (status.cerebras_set) $('cerebras_api_key').placeholder = '•••••••••• (מפתח שמור)';
+    if (status.cerebras_set) $('cerebras_api_key').placeholder = '•••••••••• (מחובר)';
+    updateTranslateBanner(status.groq_set || status.cerebras_set);
   } catch (e) {
-    /* ignore */
+    updateTranslateBanner(false);
   }
 }
 
@@ -222,6 +370,13 @@ async function saveSettings() {
     field_docking_enabled: getToggle('field_docking_enabled'),
     silence_timeout_ms: Number(silence.value),
     translate_target_language: $('translate_target_language').value,
+    pdf_rtl_layout: $('pdf_rtl_layout').value,
+    groq_model: $('groq_model').value || null,
+    cerebras_model: $('cerebras_model').value || null,
+    // One "speed" control drives both providers' paid flags (the backend selects
+    // the parallel path off whichever provider's key is active).
+    groq_paid: getSpeed() === 'fast',
+    cerebras_paid: getSpeed() === 'fast',
     // engine_id is saved immediately on radio change, not on Save button
   };
 
@@ -248,6 +403,9 @@ async function saveSettings() {
       $('groq_api_key').value = '';
       $('cerebras_api_key').value = '';
       await refreshKeyStatus();
+      // A freshly-saved key unlocks the live model list.
+      if (groqVal) await populateModels('groq', $('groq_model').value);
+      if (cerebrasVal) await populateModels('cerebras', $('cerebras_model').value);
     }
 
     saveBtn.textContent = '✓ נשמר';

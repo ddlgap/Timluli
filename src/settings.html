@@ -181,12 +181,13 @@
 
     <!-- ── תרגום מסמכים ── -->
     <section id="translation" class="section">
-      <p class="translate-intro">
-        גרור מסמך על אייקון המיקרופון כדי לתרגם אותו. הקובץ המתורגם יישמר באותה תיקייה,
-        ליד המקור. נתמכים: כתוביות (SRT, VTT, SBV), טקסט (TXT, MD), ומסמכים (DOCX, DOC, PDF).
-        מסמכי PDF ו-DOC מתורגמים לקובץ DOCX.
-      </p>
+      <!-- D: status banner -->
+      <div id="translate_banner" class="translate-banner">
+        <span class="tb-icon">✓</span>
+        <span class="tb-text">בודק…</span>
+      </div>
 
+      <!-- שפת יעד -->
       <div class="field">
         <label for="translate_target_language">שפת יעד לתרגום</label>
         <select id="translate_target_language">
@@ -204,33 +205,108 @@
         </select>
       </div>
 
+      <!-- חיבור לשירות (A) — מנוהל דרך אשף מודרך -->
       <div class="field">
-        <label for="groq_api_key">
-          מפתח Groq API
-          <span class="info-icon" title="היכנס לקישור, צור חשבון חינמי, צור API key, העתק והדבק כאן">ⓘ</span>
-          <span class="key-saved" id="groq_saved" style="display:none">מפתח שמור ✓</span>
+        <label>
+          חיבור לשירות תרגום
+          <span class="info-icon" title="התרגום מתבצע בענן. צריך לחבר פעם אחת שירות תרגום חינמי — נלווה אותך בתהליך.">ⓘ</span>
         </label>
-        <input type="password" id="groq_api_key" placeholder="gsk_…" autocomplete="off" spellcheck="false" />
+        <div class="conn-row">
+          <span class="conn-status" id="conn_status">בודק…</span>
+          <button type="button" class="conn-btn" id="conn_open">חבר שירות תרגום</button>
+        </div>
+        <small class="muted">🔒 המפתח נשמר מוצפן במחשב שלך בלבד ולא נשלח לאף שרת מלבד שירות התרגום.</small>
+      </div>
+
+      <!-- B: מהירות כתוצאה, לא כז'רגון -->
+      <div class="field">
+        <label>מהירות תרגום</label>
+        <div class="segmented" id="speed_segmented" role="group" aria-label="מהירות תרגום">
+          <button type="button" class="seg on" data-speed="normal">רגיל · חינמי</button>
+          <button type="button" class="seg" data-speed="fast">מהיר · בתשלום</button>
+        </div>
         <small class="muted">
-          מנוע ענן מהיר וחינמי לתרגום.
-          <a class="link-btn" href="https://console.groq.com/keys" target="_blank" rel="noopener">קבל מפתח Groq חינם ↗</a>
+          "מהיר" מתרגם בקריאות מקבילות ומתאים רק לבעלי חשבון API בתשלום.
         </small>
       </div>
 
-      <div class="field">
-        <label for="cerebras_api_key">
-          מפתח Cerebras API
-          <span class="info-icon" title="היכנס לקישור, צור חשבון חינמי, צור API key, העתק והדבק כאן">ⓘ</span>
-          <span class="key-saved" id="cerebras_saved" style="display:none">מפתח שמור ✓</span>
-        </label>
-        <input type="password" id="cerebras_api_key" placeholder="csk-…" autocomplete="off" spellcheck="false" />
-        <small class="muted">
-          גיבוי אוטומטי כאשר מכסת Groq מסתיימת.
-          <a class="link-btn" href="https://cloud.cerebras.ai/" target="_blank" rel="noopener">קבל מפתח Cerebras חינם ↗</a>
-        </small>
-      </div>
+      <!-- מתקדם — מקופל כברירת מחדל -->
+      <details class="advanced" id="translate_advanced">
+        <summary>הגדרות מתקדמות</summary>
+        <div class="advanced-body">
+          <div class="field">
+            <label for="groq_model">מודל תרגום</label>
+            <select id="groq_model">
+              <option value="">אוטומטי (מומלץ)</option>
+            </select>
+            <small class="muted">"אוטומטי" בוחר את המודל הטוב ביותר. שנה רק אם אתה יודע מה אתה עושה.</small>
+          </div>
 
-      <small class="muted">המפתחות נשמרים מוצפנים על המחשב שלך (DPAPI) ולעולם לא נשלחים לאף שרת מלבד הספק שבחרת.</small>
+          <div class="field">
+            <label for="cerebras_api_key">
+              שירות גיבוי (אופציונלי)
+              <span class="info-icon" title="נכנס לפעולה אוטומטית אם המכסה החינמית של השירות הראשי נגמרת.">ⓘ</span>
+              <span class="key-saved" id="cerebras_saved" style="display:none">מחובר ✓</span>
+            </label>
+            <input type="password" id="cerebras_api_key" placeholder="מפתח גיבוי (csk-…)" autocomplete="off" spellcheck="false" />
+            <small class="muted">
+              גיבוי אוטומטי כשהמכסה הראשית נגמרת.
+              <a class="link-btn" href="https://cloud.cerebras.ai/" target="_blank" rel="noopener">קבלת מפתח גיבוי חינם ↗</a>
+            </small>
+            <select id="cerebras_model" style="margin-top:8px">
+              <option value="">מודל גיבוי: אוטומטי (מומלץ)</option>
+            </select>
+          </div>
+
+          <div class="field">
+            <label for="pdf_rtl_layout">פריסת PDF בתרגום לעברית</label>
+            <select id="pdf_rtl_layout">
+              <option value="same-box">שימור מיקום מקורי</option>
+              <option value="mirror-text">התאמת פריסה לימין</option>
+            </select>
+            <small class="muted">
+              "שימור מיקום מקורי" משאיר כל בלוק במקומו. "התאמת פריסה לימין" מעביר בלוקי
+              טקסט בטוחים לצד ימין (ניסיוני) — נוסחאות, איורים וכותרות ממורכזות נשארים במקום.
+            </small>
+          </div>
+
+          <small class="muted">המפתחות נשמרים מוצפנים על המחשב שלך (DPAPI) ולעולם לא נשלחים לאף שרת מלבד שירות התרגום.</small>
+        </div>
+      </details>
+
+      <!-- אשף חיבור מודרך -->
+      <dialog id="connect_dialog" class="wizard">
+        <div class="wizard-card">
+          <div class="wizard-head">
+            <h3>חיבור לשירות תרגום</h3>
+            <button type="button" class="wizard-x" id="wiz_close" aria-label="סגור">✕</button>
+          </div>
+
+          <ol class="wizard-steps">
+            <li>
+              <span class="step-n">1</span>
+              <div class="step-body">
+                <div class="step-title">קבל מפתח חינמי</div>
+                <p class="step-desc">ניקח אותך לאתר Groq. הירשם (חינם), צור מפתח (API key) והעתק אותו.</p>
+                <button type="button" class="ghost-link" id="wiz_open_site">פתח את אתר Groq (חינם) ↗</button>
+              </div>
+            </li>
+            <li>
+              <span class="step-n">2</span>
+              <div class="step-body">
+                <div class="step-title">הדבק את המפתח כאן</div>
+                <input type="password" id="groq_api_key" placeholder="gsk_…" autocomplete="off" spellcheck="false" />
+                <div class="wiz-feedback" id="wiz_feedback"></div>
+              </div>
+            </li>
+          </ol>
+
+          <div class="wizard-actions">
+            <button type="button" class="btn-secondary" id="wiz_cancel">ביטול</button>
+            <button type="button" class="btn-primary" id="wiz_save" disabled>שמור וסיים</button>
+          </div>
+        </div>
+      </dialog>
     </section>
 
     <section id="about" class="section">

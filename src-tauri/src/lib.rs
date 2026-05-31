@@ -92,6 +92,7 @@ pub fn run() {
             commands::translate_file,
             commands::save_translation_keys,
             commands::get_translation_keys_status,
+            commands::list_provider_models,
             commands::open_external,
             // ── new local-engine commands (appended) ──
             commands_local::list_engines,

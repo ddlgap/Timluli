@@ -32,14 +32,31 @@ pub async fn translate_pdf(app: &AppHandle, input: &Path, target: &str) -> Resul
     let exe = resolve_sidecar(app)?;
     let out = super::output_path_with_ext(input, target, "pdf");
 
+    // RTL layout mode (same-box default) + batch concurrency. Unknown layout values
+    // are tolerated by the sidecar, which falls back to same-box itself.
+    let settings = crate::settings::load_or_init(app).ok();
+    let rtl_layout = settings
+        .as_ref()
+        .map(|s| s.pdf_rtl_layout.clone())
+        .unwrap_or_else(|| "same-box".into());
+    // Translate batches in parallel only when the PRIMARY provider's key is paid
+    // (Groq is tried first; Cerebras is primary only when there's no Groq key).
+    // Free-tier stays at 1 to respect per-minute limits.
+    let primary_paid = settings
+        .as_ref()
+        .map(|s| if groq.is_some() { s.groq_paid } else { s.cerebras_paid })
+        .unwrap_or(false);
+    let concurrency: u32 = if primary_paid { 6 } else { 1 };
+
     let app2 = app.clone();
     let exe2 = exe.clone();
     let in2 = input.to_path_buf();
     let out2 = out.clone();
-    let (code, stderr, saved) =
-        tokio::task::spawn_blocking(move || run_sidecar(&app2, &exe2, &in2, &out2, groq, cerebras))
-            .await
-            .map_err(|e| e.to_string())??;
+    let (code, stderr, saved) = tokio::task::spawn_blocking(move || {
+        run_sidecar(&app2, &exe2, &in2, &out2, groq, cerebras, &rtl_layout, concurrency)
+    })
+    .await
+    .map_err(|e| e.to_string())??;
 
     // Prefer the path the sidecar actually wrote (may be a `_new.pdf` fallback if
     // the intended target was locked).
@@ -76,6 +93,8 @@ fn run_sidecar(
     out: &Path,
     groq: Option<String>,
     cerebras: Option<String>,
+    rtl_layout: &str,
+    concurrency: u32,
 ) -> Result<(i32, String, Option<String>), String> {
     let mut cmd = Command::new(exe);
     cmd.arg(input)
@@ -84,6 +103,10 @@ fn run_sidecar(
         .arg(out)
         .arg("--target")
         .arg("Hebrew")
+        .arg("--rtl-layout")
+        .arg(rtl_layout)
+        .arg("--concurrency")
+        .arg(concurrency.to_string())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
     // Keys go through the environment only — never argv (would show in the process list).

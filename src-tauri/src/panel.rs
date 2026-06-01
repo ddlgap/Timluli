@@ -61,8 +61,11 @@ pub fn position_panel(app: &AppHandle, expanded: bool) {
     #[cfg(target_os = "windows")]
     {
         let win_h_logical = (area_h as f64 / scale).max(1.0);
-        // Radii mirror the CSS: collapsed trigger is 38px; the open menu radius is
-        // min(24vh, 280) logical (its container is half the window height tall).
+        // Radii mirror the CSS `--menu-r` in `src/styles/panel.css`: collapsed
+        // trigger is 38px; the open menu radius is min(24vh, 280) logical. The
+        // small extra is bloom headroom only — it keeps the region a touch larger
+        // than the drawn art on the *curve* so the neon glow is never hard-clipped;
+        // the precise straight wall edge is owned by the CSS clip-path, not here.
         let r_logical = if expanded {
             (0.24 * win_h_logical).min(280.0) + 16.0
         } else {
@@ -91,4 +94,21 @@ pub fn hide_panel(app: &AppHandle) {
     if let Some(win) = app.get_webview_window("panel") {
         let _ = win.hide();
     }
+}
+
+/// Fallback mic anchor for side-panel mode: just left of the collapsed panel
+/// strip, vertically centered on the panel's monitor. Used only when no editable
+/// field can be located at recording start, so the live-text bubble is still
+/// shown somewhere sensible (its RTL bubble grows leftward, away from the panel).
+pub(crate) fn default_mic_pos(app: &AppHandle) -> Option<(i32, i32)> {
+    let panel = app.get_webview_window("panel")?;
+    let monitor = panel.current_monitor().ok()??;
+    let scale = monitor.scale_factor();
+    let area = monitor.work_area();
+    let mic = app.get_webview_window("mic")?;
+    let mic_sz = mic.outer_size().ok()?;
+    let strip = (COLLAPSED_W * scale).round() as i32;
+    let x = area.position.x + area.size.width as i32 - strip - mic_sz.width as i32 - 8;
+    let y = area.position.y + (area.size.height as i32 - mic_sz.height as i32) / 2;
+    Some((x, y))
 }

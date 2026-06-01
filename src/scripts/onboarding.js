@@ -19,14 +19,14 @@ const MIC_SVG = `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 14a3 3
 
 let currentStep = 1;
 let selectedTheme = 'graphite';
-let selectedShortcut = 'Ctrl+Super+Space';
+let selectedShortcut = 'Ctrl+Ctrl';
 let recording = false;
 let currentSettings = {};
 
 try {
   currentSettings = await invoke('get_settings');
   selectedTheme = currentSettings.mic_theme || 'graphite';
-  selectedShortcut = currentSettings.shortcut || 'Ctrl+Super+Space';
+  selectedShortcut = currentSettings.shortcut || 'Ctrl+Ctrl';
 } catch (_) {}
 
 // Build theme grid

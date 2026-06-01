@@ -39,12 +39,12 @@ pub async fn translate_pdf(app: &AppHandle, input: &Path, target: &str) -> Resul
         .as_ref()
         .map(|s| s.pdf_rtl_layout.clone())
         .unwrap_or_else(|| "same-box".into());
-    // Translate batches in parallel only when the PRIMARY provider's key is paid
-    // (Groq is tried first; Cerebras is primary only when there's no Groq key).
-    // Free-tier stays at 1 to respect per-minute limits.
+    // Translate batches in parallel only when the PRIMARY provider's key is paid.
+    // Cerebras is tried first now; Groq is primary only when there's no Cerebras
+    // key. Free-tier stays at 1 to respect the (low) per-minute request limits.
     let primary_paid = settings
         .as_ref()
-        .map(|s| if groq.is_some() { s.groq_paid } else { s.cerebras_paid })
+        .map(|s| if cerebras.is_some() { s.cerebras_paid } else { s.groq_paid })
         .unwrap_or(false);
     let concurrency: u32 = if primary_paid { 6 } else { 1 };
 

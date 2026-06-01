@@ -95,6 +95,47 @@ window.addEventListener('keydown', (e) => {
   endRecording(false);
 });
 
+// ---- Shortcut type: double-tap (e.g. Ctrl+Ctrl) vs custom combo ----
+const shortcutType = $('shortcut_type');
+const doubleTapModifier = $('double_tap_modifier');
+const doubleTapField = $('double_tap_field');
+const comboField = $('combo_field');
+
+const DT_MODS = ['Ctrl', 'Alt', 'Shift', 'Win'];
+
+// "Ctrl+Ctrl" / "Alt+Alt" → the modifier name; any real chord → null.
+function doubleTapModifierOf(combo) {
+  if (!combo) return null;
+  const toks = combo.split('+').map((t) => t.trim()).filter(Boolean);
+  if (toks.length < 2) return null;
+  const norm = toks.map((t) => {
+    const l = t.toLowerCase();
+    if (l === 'super' || l === 'meta' || l === 'win' || l === 'cmd') return 'Win';
+    if (l === 'control') return 'Ctrl';
+    return t;
+  });
+  const first = norm[0];
+  if (!DT_MODS.includes(first)) return null;
+  return norm.every((t) => t === first) ? first : null;
+}
+
+function applyShortcutType(type) {
+  const isDouble = type === 'double';
+  doubleTapField.style.display = isDouble ? '' : 'none';
+  comboField.style.display = isDouble ? 'none' : '';
+}
+
+// The shortcut string currently configured in the UI.
+function currentShortcutString() {
+  if (shortcutType.value === 'double') {
+    const mod = doubleTapModifier.value || 'Ctrl';
+    return `${mod}+${mod}`;
+  }
+  return shortcutInput.textContent;
+}
+
+shortcutType.addEventListener('change', () => applyShortcutType(shortcutType.value));
+
 // ---- Toggle widgets ----
 document.querySelectorAll('.toggle').forEach((el) => {
   const checkbox = el.querySelector('input');
@@ -140,7 +181,16 @@ async function loadSettings() {
   setToggle('mute_during_fullscreen', stg.mute_during_fullscreen);
   setToggle('mute_during_calls', stg.mute_during_calls);
   setToggle('field_docking_enabled', stg.field_docking_enabled);
-  shortcutInput.textContent = stg.shortcut || 'Ctrl+Super+Space';
+  const sc = stg.shortcut || 'Ctrl+Ctrl';
+  const dtMod = doubleTapModifierOf(sc);
+  if (dtMod) {
+    shortcutType.value = 'double';
+    doubleTapModifier.value = dtMod;
+  } else {
+    shortcutType.value = 'combo';
+    shortcutInput.textContent = sc;
+  }
+  applyShortcutType(shortcutType.value);
   $('activation_mode').value = stg.activation_mode || 'toggle';
   $('display_mode').value = stg.display_mode || 'floating-mic';
   $('mic_size').value = stg.mic_size || 'medium';
@@ -162,8 +212,9 @@ async function loadSettings() {
   // Translation tab
   $('translate_target_language').value = stg.translate_target_language || 'Hebrew';
   $('pdf_rtl_layout').value = stg.pdf_rtl_layout || 'same-box';
-  // Speed is an outcome-level control mapping to the per-provider paid flags.
-  setSpeed(stg.groq_paid || stg.cerebras_paid ? 'fast' : 'normal');
+  // Each provider's tier maps to its own paid flag (independent free/paid).
+  setSpeed('groq', stg.groq_paid ? 'fast' : 'normal');
+  setSpeed('cerebras', stg.cerebras_paid ? 'fast' : 'normal');
   await refreshKeyStatus();
   await populateModels('groq', stg.groq_model);
   await populateModels('cerebras', stg.cerebras_model);
@@ -171,18 +222,22 @@ async function loadSettings() {
   return stg;
 }
 
-// ---- Translation speed segmented control ----
-function setSpeed(speed) {
-  document.querySelectorAll('#speed_segmented .seg').forEach((b) => {
+// ---- Translation speed segmented controls (one per provider/key) ----
+// Each provider has its own free/paid tier, so a free main service can sit next
+// to a paid backup (or vice versa). 'groq' = main service, 'cerebras' = backup.
+function setSpeed(provider, speed) {
+  document.querySelectorAll(`#${provider}_speed_segmented .seg`).forEach((b) => {
     b.classList.toggle('on', b.dataset.speed === speed);
   });
 }
-function getSpeed() {
-  const on = document.querySelector('#speed_segmented .seg.on');
+function getSpeed(provider) {
+  const on = document.querySelector(`#${provider}_speed_segmented .seg.on`);
   return on ? on.dataset.speed : 'normal';
 }
-document.querySelectorAll('#speed_segmented .seg').forEach((btn) => {
-  btn.addEventListener('click', () => setSpeed(btn.dataset.speed));
+['groq', 'cerebras'].forEach((provider) => {
+  document.querySelectorAll(`#${provider}_speed_segmented .seg`).forEach((btn) => {
+    btn.addEventListener('click', () => setSpeed(provider, btn.dataset.speed));
+  });
 });
 
 // Updates the status banner from the current key state.
@@ -361,7 +416,7 @@ async function saveSettings() {
   const newSettings = {
     ...previous,
     language: $('language').value,
-    shortcut: shortcutInput.textContent,
+    shortcut: currentShortcutString(),
     activation_mode: $('activation_mode').value,
     mic_size: $('mic_size').value,
     mic_opacity: Number(opacity.value) / 100,
@@ -375,10 +430,10 @@ async function saveSettings() {
     pdf_rtl_layout: $('pdf_rtl_layout').value,
     groq_model: $('groq_model').value || null,
     cerebras_model: $('cerebras_model').value || null,
-    // One "speed" control drives both providers' paid flags (the backend selects
-    // the parallel path off whichever provider's key is active).
-    groq_paid: getSpeed() === 'fast',
-    cerebras_paid: getSpeed() === 'fast',
+    // Independent per-provider tiers: the backend uses each model's own flag for
+    // its output cap / pacing, and the primary's for the job-level path.
+    groq_paid: getSpeed('groq') === 'fast',
+    cerebras_paid: getSpeed('cerebras') === 'fast',
     // engine_id is saved immediately on radio change, not on Save button
   };
 
@@ -451,10 +506,11 @@ $('reset').addEventListener('click', async () => {
   if (!confirm('לשחזר הגדרות ברירת מחדל?')) return;
   await invoke('set_field_docking', { enabled: false });
   await invoke('set_display_mode', { mode: 'floating-mic' }).catch(() => {});
+  await invoke('update_shortcut', { combo: 'Ctrl+Ctrl' }).catch(() => {});
   await invoke('save_settings', {
     newSettings: {
       language: 'he-IL',
-      shortcut: 'Ctrl+Super+Space',
+      shortcut: 'Ctrl+Ctrl',
       activation_mode: 'toggle',
       mic_size: 'medium',
       mic_opacity: 0.95,

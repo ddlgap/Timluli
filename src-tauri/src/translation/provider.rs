@@ -165,13 +165,24 @@ pub enum TranslateError {
 /// message sniffing so that e.g. a 413 "request too large (TPM)" cascades to the
 /// next model instead of being mistaken for a permanent quota error.
 fn classify(code: u16, body: &str, retry_after: Option<u64>, msg: String) -> TranslateError {
+    let m = body.to_lowercase();
+    // A *daily* cap (e.g. Cerebras free's 1M tokens/day) is often reported as a
+    // 429, but it won't reset within this job — so treat it as `Quota` (permanent
+    // skip → fall straight through to the next provider) instead of retrying the
+    // same model. Per-*minute* limits below keep retrying the same model.
+    let daily_exhausted = m.contains("tokens per day")
+        || m.contains("requests per day")
+        || m.contains("tokens_per_day")
+        || m.contains("daily")
+        || m.contains("quota_exceeded")
+        || m.contains("token_quota");
     match code {
+        429 if daily_exhausted => TranslateError::Quota(msg),
         429 => TranslateError::RateLimit(msg, retry_after),
         402 => TranslateError::Quota(msg),
         413 => TranslateError::Transient(msg),
         _ => {
-            let m = body.to_lowercase();
-            if m.contains("payment") || m.contains("insufficient_quota") {
+            if m.contains("payment") || m.contains("insufficient_quota") || daily_exhausted {
                 TranslateError::Quota(msg)
             } else if m.contains("rate limit")
                 || m.contains("rate_limit")
@@ -205,6 +216,7 @@ fn truncate(s: &str, n: usize) -> String {
 
 /// Translates one batch of `(id, text)` pairs, returning a map of id → translated
 /// text plus the live rate-limit budget read from the response headers.
+#[allow(clippy::too_many_arguments)]
 pub async fn translate_batch(
     client: &reqwest::Client,
     base_url: &str,
@@ -213,6 +225,7 @@ pub async fn translate_batch(
     target_language: &str,
     system_prompt: &str,
     batch: &[(usize, &str)],
+    max_output_tokens: u32,
 ) -> Result<(HashMap<String, String>, RateInfo), TranslateError> {
     let mut payload = serde_json::Map::new();
     for (id, text) in batch {
@@ -229,10 +242,10 @@ pub async fn translate_batch(
         ],
         "temperature": 0.2,
         "top_p": 1,
-        // Providers count this reservation against the per-minute token limit, so
-        // keep it modest: a single request must fit well under free-tier TPM caps
-        // (the smallest fallback models cap around 6000 TPM).
-        "max_completion_tokens": 4096,
+        // Providers count this reservation against the per-minute token limit, and
+        // on free Cerebras it must also fit the ~8K context window. The caller sizes
+        // it per provider+tier (see `profile_for`): small on free, larger on paid.
+        "max_completion_tokens": max_output_tokens,
     });
 
     let resp = client

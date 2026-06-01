@@ -130,6 +130,53 @@ fn is_editable(elem: &UIElement) -> bool {
     )
 }
 
+/// One-shot lookup of the currently focused editable element's bounding box,
+/// returning `(top, right)` in physical screen coords — the same anchor the
+/// auto-hide tracker used in `apply_rect`. Returns `None` when focus isn't on an
+/// editable field, when it's one of our own windows, or when UIA can't resolve it.
+///
+/// Used by side-panel mode to dock the mic next to the dictation area *only while
+/// recording* (no background follow tracker). Runs UIA on a short-lived thread so
+/// it owns its own COM apartment and never disturbs the caller's. The lookup is
+/// bounded by a timeout (via a channel, not `join`) so an unresponsive target app
+/// can't stall the caller — which is an async command worker — for more than a
+/// blink; on timeout we return `None` and the caller falls back to a default spot.
+pub fn focused_field_rect(app: &AppHandle) -> Option<(i32, i32)> {
+    let own: Vec<isize> = ["mic", "panel", "settings", "onboarding", "speech"]
+        .iter()
+        .filter_map(|label| app.get_webview_window(label))
+        .filter_map(|w| w.hwnd().ok().map(|h| h.0 as isize))
+        .collect();
+
+    let (tx, rx) = channel::<Option<(i32, i32)>>();
+    thread::Builder::new()
+        .name("focused-field".into())
+        .spawn(move || {
+            let rect = (|| -> Option<(i32, i32)> {
+                let automation = UIAutomation::new().ok()?;
+                let el = automation.get_focused_element().ok()?;
+                // Never anchor to our own (NOACTIVATE) windows.
+                if let Ok(handle) = el.get_native_window_handle() {
+                    let raw = handle.as_ref().0 as isize;
+                    if raw != 0 && own.contains(&raw) {
+                        return None;
+                    }
+                }
+                if !is_editable(&el) {
+                    return None;
+                }
+                let rect = el.get_bounding_rectangle().ok()?;
+                Some((rect.get_top(), rect.get_right()))
+            })();
+            // If we already timed out, the receiver is gone — that's fine, the
+            // worker thread just exits (it never holds any of our locks).
+            let _ = tx.send(rect);
+        })
+        .ok()?;
+
+    rx.recv_timeout(Duration::from_millis(400)).ok().flatten()
+}
+
 fn run_tracker(app: AppHandle, shutdown: Arc<AtomicBool>, auto_hide: bool) {
     let mut own_hwnds = Vec::new();
     for label in &["mic", "panel", "settings", "onboarding", "speech"] {

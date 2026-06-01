@@ -16,7 +16,10 @@
   </div>
 
   <!-- ════════════════ OPEN: radial half-circle menu (3 sectors) ════════════════ -->
+  <!-- `.open` is the static clip wrapper pinned to the wall; `.menu-inner` holds the
+       graphic and carries the grow/collapse scale (so the clip never jitters). -->
   <div id="open" class="open">
+   <div class="menu-inner">
     <svg class="radial" viewBox="0 0 640 1280" preserveAspectRatio="xMaxYMid meet" aria-hidden="true">
       <defs>
         <radialGradient id="glassFill" gradientUnits="userSpaceOnUse" cx="640" cy="640" r="600">
@@ -41,13 +44,15 @@
       <!-- Dark navy body behind the wedges; its slivers read as the separators. -->
       <path class="base" d="M640 1248 A608 608 0 0 1 640 32 Z" />
 
-      <!-- Three wedge sectors (2° gap each side reveals the dark base as separators). -->
+      <!-- Three wedge sectors. Internal separators between wedges keep their 2° gap,
+           but the TOP and BOTTOM wedges' wall-side edges run flush to the chord
+           (x=640) so the button fill reaches the right wall with no dark margin. -->
       <path id="sector-bottom" class="sector"
-        d="M619.1 1239.6 A600 600 0 0 1 131.2 957.9 L428.0 772.5 A250 250 0 0 0 631.3 889.8 Z" />
+        d="M640 1240 A600 600 0 0 1 131.2 957.9 L428.0 772.5 A250 250 0 0 0 640 890 Z" />
       <path id="sector-middle" class="sector"
         d="M110.3 921.7 A600 600 0 0 1 110.3 358.3 L419.3 522.6 A250 250 0 0 0 419.3 757.4 Z" />
       <path id="sector-top" class="sector"
-        d="M131.2 322.1 A600 600 0 0 1 619.1 40.4 L631.3 390.2 A250 250 0 0 0 428.0 507.5 Z" />
+        d="M131.2 322.1 A600 600 0 0 1 640 40 L640 390 A250 250 0 0 0 428.0 507.5 Z" />
 
       <!-- Outer neon arc bloom (left semicircle). -->
       <path class="neon-arc" d="M640 1240 A600 600 0 0 1 640 40" filter="url(#neonGlow)" />
@@ -110,6 +115,7 @@
       <!-- Generic status line (spinner-free feedback for file ops). -->
       <div id="status" class="status"></div>
     </div>
+   </div>
   </div>
 
   <script type="module" src="./scripts/panel.js"></script>

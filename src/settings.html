@@ -43,13 +43,33 @@
 
     <section id="shortcut" class="section">
       <div class="field">
+        <label for="shortcut_type">אופן הקיצור</label>
+        <select id="shortcut_type">
+          <option value="double">לחיצה כפולה על מקש</option>
+          <option value="combo">צירוף מקשים מותאם</option>
+        </select>
+      </div>
+
+      <div class="field" id="double_tap_field">
+        <label for="double_tap_modifier">מקש ללחיצה כפולה</label>
+        <select id="double_tap_modifier">
+          <option value="Ctrl">Ctrl — לחיצה כפולה</option>
+          <option value="Alt">Alt — לחיצה כפולה</option>
+          <option value="Shift">Shift — לחיצה כפולה</option>
+          <option value="Win">Win — לחיצה כפולה</option>
+        </select>
+        <small class="muted">הקש פעמיים ברצף (כמו דאבל-קליק) על המקש הנבחר כדי להתחיל/לעצור תמלול. ברירת מחדל: Ctrl פעמיים.</small>
+      </div>
+
+      <div class="field" id="combo_field" style="display:none">
         <label>קיצור מקלדת גלובלי</label>
         <button id="shortcut-key" class="shortcut-input" type="button">Ctrl+Super+Space</button>
-        <small class="muted">לחץ על הכפתור והקש את הקיצור הרצוי. ברירת מחדל: Ctrl+Win+Space.</small>
+        <small class="muted">לחץ על הכפתור והקש את הקיצור הרצוי (מודיפייר + מקש).</small>
         <small id="shortcut-status" class="muted"></small>
       </div>
+
       <div class="field">
-        <label>אופן הפעלה</label>
+        <label for="activation_mode">אופן הפעלה</label>
         <select id="activation_mode">
           <option value="toggle">Toggle (לחיצה ראשונה מתחילה, שנייה עוצרת)</option>
           <option value="push_to_talk">Push-to-talk (הקלטה רק כל עוד לחוץ)</option>
@@ -253,10 +273,10 @@
         <small class="muted">🔒 המפתח נשמר מוצפן במחשב שלך בלבד ולא נשלח לאף שרת מלבד שירות התרגום.</small>
       </div>
 
-      <!-- B: מהירות כתוצאה, לא כז'רגון -->
+      <!-- B: מהירות השירות הראשי כתוצאה, לא כז'רגון -->
       <div class="field">
-        <label>מהירות תרגום</label>
-        <div class="segmented" id="speed_segmented" role="group" aria-label="מהירות תרגום">
+        <label>מהירות שירות התרגום</label>
+        <div class="segmented" id="groq_speed_segmented" role="group" aria-label="מהירות שירות התרגום">
           <button type="button" class="seg on" data-speed="normal">רגיל · חינמי</button>
           <button type="button" class="seg" data-speed="fast">מהיר · בתשלום</button>
         </div>
@@ -291,6 +311,14 @@
             <select id="cerebras_model" style="margin-top:8px">
               <option value="">מודל גיבוי: אוטומטי (מומלץ)</option>
             </select>
+            <label style="margin-top:10px">מהירות שירות הגיבוי</label>
+            <div class="segmented" id="cerebras_speed_segmented" role="group" aria-label="מהירות שירות הגיבוי">
+              <button type="button" class="seg on" data-speed="normal">רגיל · חינמי</button>
+              <button type="button" class="seg" data-speed="fast">מהיר · בתשלום</button>
+            </div>
+            <small class="muted">
+              קבע בנפרד אם מפתח הגיבוי הוא חינמי או בתשלום — אין צורך שיהיה זהה לשירות הראשי.
+            </small>
           </div>
 
           <div class="field">

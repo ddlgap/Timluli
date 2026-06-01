@@ -20,25 +20,82 @@ use tauri::{AppHandle, Emitter};
 
 pub use provider::ModelInfo;
 
+/// Default fallback order: **Cerebras first** (much faster — 2,000–3,000 tok/s,
+/// and on a paid key ~1,000 rpm / 1M tpm / no daily cap), then **Groq as backup**.
+/// If Cerebras's daily quota runs out mid-document, the failing segment re-walks
+/// the chain onto Groq and finishes there (see `run_batch` + `classify`).
 const FALLBACK_CHAIN: &[(&str, &str)] = &[
-    ("groq", "llama-3.3-70b-versatile"),
-    ("groq", "openai/gpt-oss-120b"),
-    ("groq", "llama-3.1-8b-instant"),
     ("cerebras", "qwen-3-235b-a22b-instruct-2507"),
     ("cerebras", "gpt-oss-120b"),
     ("cerebras", "llama3.1-8b"),
+    ("groq", "llama-3.3-70b-versatile"),
+    ("groq", "openai/gpt-oss-120b"),
+    ("groq", "llama-3.1-8b-instant"),
 ];
 
-const SLEEP_BETWEEN_BATCHES_MS: u64 = 1500;
-
-/// Paid-mode parallelism cap. The binding provider constraint is tokens-per-minute,
-/// not requests, so we keep concurrency modest and let the adaptive token-budget
-/// check below throttle further when the remaining TPM budget runs low.
-const PAID_MAX_CONCURRENCY: usize = 8;
 /// When a paid-mode response reports fewer than this many tokens left in the
 /// current window, cool down briefly so concurrent batches don't trip a 429.
 const PAID_LOW_TOKEN_THRESHOLD: u64 = 4000;
 const PAID_COOLDOWN_CAP_SECS: u64 = 15;
+
+/// Execution profile for one provider + tier (free/paid). This is what makes
+/// chunking/pacing dynamic and *per-provider*: the job's primary entry drives the
+/// upfront, job-level knobs (`batch_multiplier`, `concurrency`, path), while each
+/// individual request reads the profile of the model it actually hits for the
+/// per-request knobs (`max_output_tokens`, `free_sleep_ms`). So a free-Cerebras
+/// request keeps its small, 8K-context-safe cap even after the job has fallen
+/// through to a paid Groq, and that paid Groq tail stops sleeping.
+struct Profile {
+    /// Multiplier applied to the per-format base batch size. Big on paid (exploit
+    /// throughput), 1 on free (respect low rpm / 8K context).
+    batch_multiplier: usize,
+    /// `max_completion_tokens` reserved per request.
+    max_output_tokens: u32,
+    /// Bounded concurrency for the paid (parallel) path.
+    concurrency: usize,
+    /// Sleep after a request served by this profile on the free (sequential) path, ms.
+    free_sleep_ms: u64,
+}
+
+/// Picks chunk scaling, output-token cap, concurrency and free-tier pacing for a
+/// given `provider` + `paid` tier. Single source of truth; numbers are intentionally
+/// easy to tune. Rationale per cell is in PLAN/Context.
+fn profile_for(provider: &str, paid: bool) -> Profile {
+    match (provider, paid) {
+        // Paid Cerebras: exploit the throughput — fat batches, big output cap,
+        // high concurrency, no fixed sleep (token-budget backpressure handles it).
+        ("cerebras", true) => Profile {
+            batch_multiplier: 3,
+            max_output_tokens: 8000,
+            concurrency: 12,
+            free_sleep_ms: 0,
+        },
+        // Free Cerebras: ~5–30 rpm + ~8K context cap. Keep the format-native batch
+        // size, a small output cap that fits the 8K window, and pace requests well
+        // under the rpm ceiling so the new Cerebras-first default doesn't 429.
+        ("cerebras", false) => Profile {
+            batch_multiplier: 1,
+            max_output_tokens: 3000,
+            concurrency: 1,
+            free_sleep_ms: 8000,
+        },
+        // Paid Groq: higher than free but below paid Cerebras — moderate scaling.
+        ("groq", true) => Profile {
+            batch_multiplier: 2,
+            max_output_tokens: 6000,
+            concurrency: 8,
+            free_sleep_ms: 0,
+        },
+        // Free Groq (and any unknown provider): preserve the prior conservative
+        // behavior — format-native batch, 4096 cap, sequential, 1.5s spacing.
+        _ => Profile {
+            batch_multiplier: 1,
+            max_output_tokens: 4096,
+            concurrency: 1,
+            free_sleep_ms: 1500,
+        },
+    }
+}
 
 /// Fetches a provider's available chat/text models for the settings UI. If `key`
 /// is supplied it is used directly (lets the connect wizard validate a pasted key
@@ -127,6 +184,10 @@ impl Keys {
 struct BatchOutcome {
     map: Option<HashMap<usize, String>>,
     last_error: Option<String>,
+    /// Free-path pacing appropriate for the model that actually served this batch
+    /// (`Some` only on success). Lets the sequential loop drop the primary's slow
+    /// spacing once a paid provider takes over after a free primary is exhausted.
+    served_sleep_ms: Option<u64>,
 }
 
 fn merge_outcome(
@@ -309,12 +370,15 @@ pub(crate) async fn translate_units(
 
     let chain = build_chain(&settings);
     // Path selection: the first chain entry whose provider key exists is the
-    // primary model; its paid flag decides parallel-vs-sequential execution.
-    let primary_paid = chain
-        .iter()
-        .find(|e| keys.for_provider(e.provider).is_some())
-        .map(|e| e.paid)
-        .unwrap_or(false);
+    // primary model; its provider + paid flag drive the execution profile
+    // (chunk size, output cap, concurrency, pacing) and parallel-vs-sequential.
+    let primary = chain.iter().find(|e| keys.for_provider(e.provider).is_some());
+    let primary_paid = primary.map(|e| e.paid).unwrap_or(false);
+    let primary_profile = profile_for(primary.map(|e| e.provider).unwrap_or("groq"), primary_paid);
+    // Chunking is decided once, upfront, sized for the primary (the provider doing
+    // most of the work). Per-request output cap + free-path pacing adapt per entry
+    // inside `run_batch` (see `BatchOutcome::served_sleep_ms`).
+    let batch_size = batch_size.saturating_mul(primary_profile.batch_multiplier).max(1);
 
     let total_batches = units.len().div_ceil(batch_size);
     let client = reqwest::Client::new();
@@ -326,7 +390,7 @@ pub(crate) async fn translate_units(
     if primary_paid {
         // Paid path: run batches concurrently (bounded), letting per-response token
         // budget cool-downs throttle so we ride the high paid limits without 429s.
-        let concurrency = PAID_MAX_CONCURRENCY.min(total_batches).max(1);
+        let concurrency = primary_profile.concurrency.min(total_batches).max(1);
         let completed = AtomicUsize::new(0);
         // Drive per-batch futures with bounded concurrency. Each closure takes an
         // owned (start,end) range and borrows `units` from the function scope (not
@@ -344,9 +408,17 @@ pub(crate) async fn translate_units(
             async move {
                 let pairs: Vec<(usize, &str)> =
                     units[start..end].iter().map(|(id, t)| (*id, t.as_str())).collect();
-                let outcome =
-                    run_batch(client, chain, keys, target, system_prompt, &pairs, exhausted, true)
-                        .await;
+                let outcome = run_batch(
+                    client,
+                    chain,
+                    keys,
+                    target,
+                    system_prompt,
+                    &pairs,
+                    exhausted,
+                    true,
+                )
+                .await;
                 let done = completed.fetch_add(1, Ordering::Relaxed) + 1;
                 let _ = app.emit_to(
                     "mic",
@@ -375,13 +447,27 @@ pub(crate) async fn translate_units(
             );
             let pairs: Vec<(usize, &str)> = batch.iter().map(|(id, t)| (*id, t.as_str())).collect();
             let outcome = run_batch(
-                &client, &chain, &keys, target, system_prompt, &pairs, &exhausted, false,
+                &client,
+                &chain,
+                &keys,
+                target,
+                system_prompt,
+                &pairs,
+                &exhausted,
+                false,
             )
             .await;
+            // Pace by whoever actually served this batch: once a free primary is
+            // exhausted and a paid provider takes over, its `free_sleep_ms` is 0,
+            // so the tail stops crawling at the primary's spacing. Falls back to the
+            // primary's pacing if the batch failed entirely.
+            let sleep_ms = outcome
+                .served_sleep_ms
+                .unwrap_or(primary_profile.free_sleep_ms);
             merge_outcome(outcome, &mut translated, &mut last_error);
 
-            if bi + 1 < total_batches {
-                tokio::time::sleep(Duration::from_millis(SLEEP_BETWEEN_BATCHES_MS)).await;
+            if bi + 1 < total_batches && sleep_ms > 0 {
+                tokio::time::sleep(Duration::from_millis(sleep_ms)).await;
             }
         }
     }
@@ -427,6 +513,11 @@ async fn run_batch(
             continue;
         };
 
+        // Per-entry profile: each request's output cap (and the pacing it implies)
+        // matches the model actually being hit, not the job's primary — so a free
+        // Cerebras request stays 8K-safe and a paid fallback isn't throttled.
+        let entry_profile = profile_for(entry.provider, entry.paid);
+
         match provider::translate_batch(
             client,
             provider::base_url(entry.provider),
@@ -435,6 +526,7 @@ async fn run_batch(
             target,
             system_prompt,
             pairs,
+            entry_profile.max_output_tokens,
         )
         .await
         {
@@ -446,6 +538,7 @@ async fn run_batch(
                     }
                 }
                 outcome.map = Some(out);
+                outcome.served_sleep_ms = Some(entry_profile.free_sleep_ms);
                 // Paid path backpressure: if the remaining per-minute token budget
                 // is low, cool down briefly so concurrent batches don't trip a 429.
                 if paid {

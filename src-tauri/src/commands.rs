@@ -15,6 +15,72 @@ fn emit_ui<S: serde::Serialize + Clone>(app: &AppHandle, event: &str, payload: S
     let _ = app.emit_to("panel", event, payload);
 }
 
+/// Broadcasts a `speakly://state-changed` like `emit_ui`, plus side-panel mic
+/// management: in side-panel mode the floating mic is hidden at rest and only
+/// shown — docked to the active dictation field — while recording (`listening`/
+/// `processing`), then hidden again on `idle`/`error`. In floating-mic mode this
+/// is just `emit_ui` (the mic is always visible). Use this for every state change.
+fn emit_state(app: &AppHandle, state: &str) {
+    emit_ui(app, "speakly://state-changed", state);
+    sync_side_panel_mic(app, state);
+}
+
+/// Shows/hides + docks the floating mic for side-panel mode based on the dictation
+/// state. No-op unless `display_mode == "side-panel"`. Callable from any thread
+/// (also invoked by the Chrome sidecar's HTTP handler on `idle`/`error`).
+pub(crate) fn sync_side_panel_mic(app: &AppHandle, state: &str) {
+    #[cfg(target_os = "windows")]
+    {
+        let side_panel = settings::load_or_init(app)
+            .map(|s| s.display_mode == "side-panel")
+            .unwrap_or(false);
+        if !side_panel {
+            return;
+        }
+        let Some(mic) = app.get_webview_window("mic") else {
+            return;
+        };
+        match state {
+            // Recording just started: dock the mic to the field being dictated
+            // into (exactly like the old auto-hide tracker), then reveal it.
+            "listening" => {
+                // The dock happens once, on the transition into recording. Both
+                // the command and (for the local engine) the renderer report
+                // "listening"; if the mic is already shown, don't re-run the UIA
+                // lookup or re-dock to a possibly-stale field (the old tracker also
+                // froze the mic's position for the duration of a recording).
+                if mic.is_visible().unwrap_or(false) {
+                    return;
+                }
+                const PAD: i32 = 8;
+                let pos = crate::field_tracker::focused_field_rect(app)
+                    .map(|(top, right)| (right + PAD, top))
+                    .or_else(|| crate::panel::default_mic_pos(app));
+                if let Some((x, y)) = pos {
+                    let _ = mic.set_position(tauri::Position::Physical(
+                        tauri::PhysicalPosition::new(x, y),
+                    ));
+                }
+                let _ = mic.show();
+                win_util::make_topmost_noactivate(&mic);
+            }
+            // Transcribing/injecting the final result: keep it visible (don't move).
+            "processing" => {
+                let _ = mic.show();
+                win_util::make_topmost_noactivate(&mic);
+            }
+            // idle / error / anything else: back to hidden.
+            _ => {
+                let _ = mic.hide();
+            }
+        }
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        let _ = (app, state);
+    }
+}
+
 #[tauri::command]
 pub fn capture_target_window(state: State<AppState>) -> Result<isize, String> {
     #[cfg(target_os = "windows")]
@@ -60,15 +126,15 @@ pub async fn start_listening(app: AppHandle, state: State<'_, AppState>) -> Resu
         if let Err(e) = crate::chrome_sidecar::ensure_chrome(&app, &state.sidecar) {
             *state.is_listening.lock() = false;
             crate::chrome_sidecar::request_stop(&state.sidecar);
-            emit_ui(&app, "speakly://state-changed", "error");
+            emit_state(&app, "error");
             let _ = app.emit_to("settings", "speakly://error", &e);
             return Err(e);
         }
-        emit_ui(&app, "speakly://state-changed", "listening");
+        emit_state(&app, "listening");
     } else {
         app.emit_to("speech", "speakly://start-listening", ())
             .map_err(|e| e.to_string())?;
-        emit_ui(&app, "speakly://state-changed", "listening");
+        emit_state(&app, "listening");
     }
     Ok(())
 }
@@ -82,7 +148,7 @@ pub async fn stop_listening(app: AppHandle, state: State<'_, AppState>) -> Resul
     } else {
         let _ = app.emit_to("speech", "speakly://stop-listening", ());
     }
-    emit_ui(&app, "speakly://state-changed", "idle");
+    emit_state(&app, "idle");
     Ok(())
 }
 
@@ -105,7 +171,7 @@ pub async fn inject_text(
     *state.is_listening.lock() = false;
     let hwnd_opt = *state.target_hwnd.lock();
 
-    emit_ui(&app, "speakly://state-changed", "processing");
+    emit_state(&app, "processing");
 
     #[cfg(target_os = "windows")]
     {
@@ -120,7 +186,7 @@ pub async fn inject_text(
         let _ = (hwnd_opt, text);
     }
 
-    emit_ui(&app, "speakly://state-changed", "idle");
+    emit_state(&app, "idle");
     Ok(())
 }
 
@@ -157,13 +223,13 @@ pub fn report_state(
     if state == "idle" || state == "error" {
         *app_state.is_listening.lock() = false;
     }
-    emit_ui(&app, "speakly://state-changed", state);
+    emit_state(&app, &state);
     Ok(())
 }
 
 #[tauri::command]
 pub fn report_error(app: AppHandle, message: String) -> Result<(), String> {
-    emit_ui(&app, "speakly://state-changed", "error");
+    emit_state(&app, "error");
     let _ = app.emit_to("settings", "speakly://error", &message);
     log::error!("speech error: {message}");
     Ok(())
@@ -267,10 +333,17 @@ pub fn store_mic_position(
 ) -> Result<(), String> {
     // While field-docking is active, the mic's position is computed from the
     // focused field. Don't overwrite the user's manual fallback position with
-    // auto-docked coordinates.
+    // auto-docked coordinates. Likewise in side-panel mode the mic is auto-docked
+    // to the dictation field while recording, so a stray drag must not persist.
     #[cfg(target_os = "windows")]
     {
         if state.field_tracker.lock().is_some() {
+            return Ok(());
+        }
+        if settings::load_or_init(&app)
+            .map(|s| s.display_mode == "side-panel")
+            .unwrap_or(false)
+        {
             return Ok(());
         }
     }
@@ -292,9 +365,9 @@ pub fn set_field_docking(
 ) -> Result<(), String> {
     #[cfg(target_os = "windows")]
     {
-        // In side-panel mode the tracker is always running in auto-hide mode and
-        // is governed by the display mode, not this toggle. Leave it untouched;
-        // the preference is still persisted (for when the user returns to
+        // In side-panel mode there is no follow tracker (the mic only appears while
+        // recording, docked by sync_side_panel_mic), so this toggle does nothing
+        // now. The preference is still persisted (for when the user returns to
         // floating-mic) by the regular settings save.
         if settings::load_or_init(&app)
             .map(|s| s.display_mode == "side-panel")
@@ -416,12 +489,12 @@ pub fn set_display_mode(app: AppHandle, state: State<AppState>, mode: String) ->
             let _ = mic.hide();
         }
         crate::panel::show_panel(&app);
-        // The mic becomes dynamic: hidden by default, shown (docked) only while a
-        // text field is focused. Restart the tracker in auto-hide mode.
+        // No follow tracker in side-panel mode: the mic is hidden at rest and only
+        // appears (docked to the active field) while recording — see
+        // sync_side_panel_mic. Drop any floating-mic field-docking tracker.
         #[cfg(target_os = "windows")]
         {
-            *state.field_tracker.lock() =
-                Some(crate::field_tracker::FieldTrackerHandle::start(app.clone(), true));
+            *state.field_tracker.lock() = None;
         }
     } else {
         crate::panel::hide_panel(&app);

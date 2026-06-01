@@ -96,7 +96,7 @@ impl Default for Settings {
     fn default() -> Self {
         Self {
             language: "he-IL".into(),
-            shortcut: "Ctrl+Super+Space".into(),
+            shortcut: "Ctrl+Ctrl".into(),
             activation_mode: ActivationMode::Toggle,
             mic_size: MicSize::Medium,
             mic_opacity: 0.95,

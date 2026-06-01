@@ -12,6 +12,16 @@
   --center-dark: #010F26;
   --text-primary: #EEF6F9;
   --arrow-cyan: #20F1FD;
+
+  /* Single source of truth for the open menu's half-circle geometry. The visible
+     width is the radius; the height is the full diameter. `panel.rs` mirrors this
+     (0.24 * work-area-height, capped 280) for the OS click-through region. */
+  --menu-r: min(24vh, 280px);
+  --menu-d: calc(var(--menu-r) * 2);
+}
+
+*, *::before, *::after {
+  box-sizing: border-box;
 }
 
 html, body {
@@ -37,6 +47,9 @@ body {
   inset: 0;
   opacity: 1;
   transition: opacity 220ms ease-out;
+  /* Same intentional wall clip as the open state: cut exactly at the right edge
+     so the trigger's box-shadow glow never leaks past it; expand the other sides. */
+  clip-path: inset(-60px 0px -60px -60px);
 }
 body[data-expanded="true"] .closed {
   opacity: 0;
@@ -101,29 +114,60 @@ body[data-expanded="true"] .closed {
 }
 
 /* ─────────────────────────── OPEN STATE ─────────────────────────── */
-/* All sub-elements (SVG body, icons, labels, arrow) are children of `.open`, so
-   they transform together as one organic unit. transform-origin is pinned to the
-   right edge (the screen wall) so the menu grows out of / collapses into the
-   closed half-circle with no horizontal drift — pure scale, no translateX. */
+/* `.open` is a STATIC clip wrapper pinned to the wall. Its job is to define the
+   straight right edge *intentionally*: `clip-path` cuts exactly at the right
+   border-box edge (the screen wall) while expanding generously on the other three
+   sides so the neon bloom on the curve is never flattened. The chord no longer
+   depends on the SVG viewBox or the OS window happening to end at the same column.
+   Only translateY here — never translateX (avoids sub-pixel horizontal offset). */
 .open {
   position: fixed;
   right: 0;
   top: 50%;
-  height: min(48vh, 560px);
-  width: min(24vh, 280px);
-  transform: translateY(-50%) scale(0.6);
-  transform-origin: right center;
+  width: var(--menu-r);
+  height: var(--menu-d);
+  transform: translateY(-50%);
+  clip-path: inset(-240px 0px -240px -240px);
   opacity: 0;
   pointer-events: none;
   /* Closing → ease-in (starts gently, accelerates away). */
-  transition: opacity 280ms ease-in, transform 320ms ease-in;
+  transition: opacity 280ms ease-in;
 }
 body[data-expanded="true"] .open {
   opacity: 1;
   pointer-events: auto;
-  transform: translateY(-50%) scale(1);
   /* Opening → ease-out (fast then settles softly). */
-  transition: opacity 340ms ease-out, transform 380ms ease-out;
+  transition: opacity 340ms ease-out;
+}
+
+/* The grow/collapse scale lives on the inner content, pinned to the right edge so
+   the menu grows out of / collapses into the wall with no horizontal drift. The
+   clip wrapper above stays put, so the wall edge never jitters during animation. */
+.menu-inner {
+  position: absolute;
+  inset: 0;
+  transform: scale(0.6);
+  transform-origin: right center;
+  transition: transform 320ms ease-in;
+}
+body[data-expanded="true"] .menu-inner {
+  transform: scale(1);
+  transition: transform 380ms ease-out;
+}
+
+/* Intentional crisp 1px edge line at the wall (replaces the half-clipped base
+   stroke). Spans only the chord's vertical extent (~95%) so it never overhangs
+   the half-circle at the very top/bottom. Scales with the menu. */
+.menu-inner::after {
+  content: "";
+  position: absolute;
+  right: 0;
+  top: 2.5%;
+  height: 95%;
+  width: 1px;
+  background: var(--panel-edge-cyan);
+  opacity: 0.55;
+  pointer-events: none;
 }
 
 .radial {
@@ -158,12 +202,13 @@ body[data-expanded="true"] .open {
   filter: drop-shadow(0 0 14px rgba(32, 241, 253, 0.75));
 }
 
-/* Outer neon arc bloom. */
+/* Outer neon arc bloom. `butt` linecap so the arc ends flat at the chord instead
+   of bulging rounded, blurred caps past the wall (the corner-glow remnants). */
 .radial .neon-arc {
   fill: none;
   stroke: var(--panel-edge-hot);
   stroke-width: 4;
-  stroke-linecap: round;
+  stroke-linecap: butt;
   pointer-events: none;
   opacity: 0.95;
 }

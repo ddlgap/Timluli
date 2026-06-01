@@ -23,6 +23,8 @@ mod field_tracker;
 mod text_injection;
 #[cfg(target_os = "windows")]
 mod win_util;
+#[cfg(target_os = "windows")]
+mod double_tap;
 
 pub struct AppState {
     pub target_hwnd: Mutex<Option<isize>>,
@@ -156,16 +158,12 @@ pub fn run() {
                 if let Some(mic) = app.get_webview_window("mic") {
                     win_util::make_topmost_noactivate(&mic);
                 }
-                if side_panel {
-                    // Side-panel mode: the mic is dynamic — hidden by default and
-                    // shown (docked) only while a text field is focused. Always
-                    // run the tracker in auto-hide mode.
-                    let handle =
-                        field_tracker::FieldTrackerHandle::start(app.handle().clone(), true);
-                    *app.state::<AppState>().field_tracker.lock() = Some(handle);
-                } else if stg.field_docking_enabled {
+                if !side_panel && stg.field_docking_enabled {
                     // Floating-mic mode: classic opt-in field-docking (reposition
                     // the always-visible mic; no auto-hide).
+                    // Side-panel mode runs no follow tracker — the mic stays hidden
+                    // and only appears (docked to the active field) while recording,
+                    // handled in commands::sync_side_panel_mic.
                     let handle =
                         field_tracker::FieldTrackerHandle::start(app.handle().clone(), false);
                     *app.state::<AppState>().field_tracker.lock() = Some(handle);
@@ -198,6 +196,10 @@ pub fn run() {
             }
 
             tray::create(app, &stg)?;
+            // Start the double-tap-modifier detector (e.g. Ctrl+Ctrl). Idempotent;
+            // the active gesture is selected by register_initial below.
+            #[cfg(target_os = "windows")]
+            double_tap::init(app.handle().clone());
             shortcut::register_initial(app.handle(), &stg.shortcut)?;
 
             // Silent auto-update check on startup. Stays quiet unless a newer

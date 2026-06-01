@@ -1,25 +1,69 @@
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { Channel } from '@tauri-apps/api/core';
+import { open } from '@tauri-apps/plugin-dialog';
+import { getVersion } from '@tauri-apps/api/app';
 
 const $ = (id) => document.getElementById(id);
 
-const tabs = document.querySelectorAll('nav.tabs button');
+// ---- Tabs (ARIA tablist with roving tabindex + arrow-key navigation) ----
+const tabs = Array.from(document.querySelectorAll('nav.tabs [role="tab"]'));
 const sections = document.querySelectorAll('main .section');
 
-tabs.forEach((tab) => {
-  tab.addEventListener('click', () => {
-    tabs.forEach((t) => t.classList.remove('active'));
-    sections.forEach((s) => s.classList.remove('active'));
-    tab.classList.add('active');
-    document.getElementById(tab.dataset.tab).classList.add('active');
+function activateTab(tab, focus = false) {
+  if (!tab) return;
+  tabs.forEach((t) => {
+    const on = t === tab;
+    t.classList.toggle('active', on);
+    t.setAttribute('aria-selected', on ? 'true' : 'false');
+    t.tabIndex = on ? 0 : -1;
   });
+  sections.forEach((s) => s.classList.remove('active'));
+  document.getElementById(tab.dataset.tab)?.classList.add('active');
+  if (focus) tab.focus();
+}
+
+tabs.forEach((tab) => {
+  tab.addEventListener('click', () => activateTab(tab));
 });
 
-if (location.hash === '#about') document.querySelector('[data-tab="about"]').click();
-if (location.hash === '#shortcut') document.querySelector('[data-tab="shortcut"]').click();
-if (location.hash === '#engine') document.querySelector('[data-tab="engine"]').click();
-if (location.hash === '#translation') document.querySelector('[data-tab="translation"]').click();
+// RTL tablist: ArrowLeft moves to the next tab, ArrowRight to the previous.
+document.querySelector('nav.tabs')?.addEventListener('keydown', (e) => {
+  const i = tabs.indexOf(document.activeElement);
+  if (i === -1) return;
+  let next = null;
+  if (e.key === 'ArrowLeft') next = tabs[(i + 1) % tabs.length];
+  else if (e.key === 'ArrowRight') next = tabs[(i - 1 + tabs.length) % tabs.length];
+  else if (e.key === 'Home') next = tabs[0];
+  else if (e.key === 'End') next = tabs[tabs.length - 1];
+  if (next) { e.preventDefault(); activateTab(next, true); }
+});
+
+const hashTab = location.hash.replace('#', '');
+if (hashTab) activateTab(document.querySelector(`[data-tab="${hashTab}"]`));
+
+// ---- Unsaved-changes tracking ----
+// Some controls apply immediately (theme, engine, display mode); the rest are
+// staged until "שמור הגדרות". This flag makes the staged state visible so the
+// user always knows whether their change is persisted.
+let dirty = false;
+function setDirty(v) {
+  dirty = v;
+  const ind = $('unsaved_indicator');
+  if (ind) ind.hidden = !v;
+  $('save')?.classList.toggle('has-changes', v);
+}
+
+// Controls that persist on change (so they must NOT mark the form dirty).
+const INSTANT_IDS = new Set(['display_mode']);
+const INSTANT_NAMES = new Set(['engine_id', 'audio_file_engine']);
+document.querySelector('main')?.addEventListener('change', (e) => {
+  const t = e.target;
+  if (!t || t.disabled) return;
+  if (INSTANT_IDS.has(t.id) || INSTANT_NAMES.has(t.name)) return;
+  if (t.closest('dialog')) return; // wizard inputs are saved on their own
+  setDirty(true);
+});
 
 // External links open in the system browser (the webview swallows target="_blank").
 document.addEventListener('click', (e) => {
@@ -92,6 +136,7 @@ window.addEventListener('keydown', (e) => {
     return;
   }
   shortcutInput.textContent = parts.join('+');
+  setDirty(true);
   endRecording(false);
 });
 
@@ -137,10 +182,19 @@ function currentShortcutString() {
 shortcutType.addEventListener('change', () => applyShortcutType(shortcutType.value));
 
 // ---- Toggle widgets ----
+// The checkbox is the source of truth (focusable for keyboard/Space + screen
+// readers); clicking the pill or its label drives it, and a single change
+// listener keeps the visual `.on` state and the dirty flag in sync.
 document.querySelectorAll('.toggle').forEach((el) => {
   const checkbox = el.querySelector('input');
-  el.addEventListener('click', () => {
+  if (!checkbox) return;
+  el.addEventListener('click', (e) => {
+    if (checkbox.disabled) return;
+    if (e.target === checkbox) return; // native toggle already handled it
     checkbox.checked = !checkbox.checked;
+    checkbox.dispatchEvent(new Event('change', { bubbles: true }));
+  });
+  checkbox.addEventListener('change', () => {
     el.classList.toggle('on', checkbox.checked);
   });
 });
@@ -178,8 +232,8 @@ async function loadSettings() {
   $('language').value = stg.language || 'he-IL';
   setToggle('start_with_windows', stg.start_with_windows);
   setToggle('show_mic_on_startup', stg.show_mic_on_startup);
-  setToggle('mute_during_fullscreen', stg.mute_during_fullscreen);
-  setToggle('mute_during_calls', stg.mute_during_calls);
+  // mute_during_fullscreen / mute_during_calls are disabled (feature not live yet) —
+  // they stay visibly off rather than showing a stored value behind a dead control.
   setToggle('field_docking_enabled', stg.field_docking_enabled);
   const sc = stg.shortcut || 'Ctrl+Ctrl';
   const dtMod = doubleTapModifierOf(sc);
@@ -219,6 +273,7 @@ async function loadSettings() {
   await populateModels('groq', stg.groq_model);
   await populateModels('cerebras', stg.cerebras_model);
 
+  setDirty(false);
   return stg;
 }
 
@@ -236,7 +291,7 @@ function getSpeed(provider) {
 }
 ['groq', 'cerebras'].forEach((provider) => {
   document.querySelectorAll(`#${provider}_speed_segmented .seg`).forEach((btn) => {
-    btn.addEventListener('click', () => setSpeed(provider, btn.dataset.speed));
+    btn.addEventListener('click', () => { setSpeed(provider, btn.dataset.speed); setDirty(true); });
   });
 });
 
@@ -385,7 +440,9 @@ async function refreshKeyStatus() {
 
 function setSelectedTheme(theme) {
   document.querySelectorAll('.theme-swatch').forEach((el) => {
-    el.classList.toggle('selected', el.dataset.theme === theme);
+    const on = el.dataset.theme === theme;
+    el.classList.toggle('selected', on);
+    el.setAttribute('aria-pressed', on ? 'true' : 'false');
   });
 }
 
@@ -467,6 +524,7 @@ async function saveSettings() {
 
     saveBtn.textContent = '✓ נשמר';
     saveBtn.classList.add('saved');
+    setDirty(false);
     showToast('הגדרות נשמרו בהצלחה', 'ok');
     setTimeout(() => {
       saveBtn.textContent = originalLabel;
@@ -648,18 +706,26 @@ $('guidance-scroll-btn')?.addEventListener('click', () => {
   $('model-list')?.scrollIntoView({ behavior: 'smooth' });
 });
 
-// Manual import button — uses prompt() for file path input.
-// A full file-picker dialog requires tauri-plugin-dialog (future enhancement).
+// Manual import button — native file picker (tauri-plugin-dialog).
 $('btn-import-manual')?.addEventListener('click', async () => {
-  const filePath = prompt(
-    'הכנס נתיב מלא לקובץ המודל (.bin או .gguf):\nדוגמה: C:\\Users\\User\\Downloads\\ggml-model-q5_0.bin'
-  );
-  if (!filePath || !filePath.trim()) return;
+  let filePath;
+  try {
+    filePath = await open({
+      multiple: false,
+      directory: false,
+      title: 'בחר קובץ מודל',
+      filters: [{ name: 'מודל Whisper (.bin, .gguf)', extensions: ['bin', 'gguf'] }],
+    });
+  } catch (e) {
+    showToast(`שגיאה בבחירת הקובץ: ${e}`, 'err');
+    return;
+  }
+  if (!filePath) return; // user cancelled
   const displayName = prompt('שם מותאם אישית למודל:', 'מודל ידני') || 'מודל ידני';
   try {
     showToast('מייבא מודל…', 'ok');
     const view = await invoke('import_model_manual', {
-      filePath: filePath.trim(),
+      filePath,
       displayName,
     });
     await refreshModelList();
@@ -704,11 +770,18 @@ function buildModelCard(m) {
 
   const sizeMB = m.sizeBytes ? `${Math.round(m.sizeBytes / 1_000_000)} MB` : '';
   const badge = m.source === 'manual' ? '<span class="model-badge">ידני</span>' : '';
+  // Quality comes from the backend in English; show it in Hebrew.
+  const QUALITY_HE = { high: 'איכות גבוהה', medium: 'איכות בינונית', low: 'איכות בסיסית' };
+  const qualityHe = m.quality ? (QUALITY_HE[m.quality] || m.quality) : '';
+  // Keep the LTR size+unit ("1620 MB") from being reversed inside the RTL line.
+  const metaParts = [];
+  if (sizeMB) metaParts.push(`<span dir="ltr">${sizeMB}</span>`);
+  if (qualityHe) metaParts.push(qualityHe);
 
   card.innerHTML = `
     <div class="model-card-info">
       <div class="model-card-name">${m.displayName}${badge}</div>
-      <div class="model-card-meta">${sizeMB}${m.quality ? ` · ${m.quality}` : ''}</div>
+      <div class="model-card-meta">${metaParts.join(' · ')}</div>
     </div>
     <div class="model-card-actions" id="actions-${m.id}"></div>
     <div class="model-card-progress" id="progress-${m.id}" style="display:none">
@@ -864,6 +937,17 @@ async function deleteModel(id) {
     showToast(`שגיאה במחיקה: ${e}`, 'err');
   }
 }
+
+// Show the real app version everywhere from a single source (tauri.conf.json),
+// so the header and the About tab can never drift apart.
+getVersion()
+  .then((v) => {
+    const hv = $('version');
+    if (hv) hv.textContent = `v${v}`;
+    const av = document.querySelector('.about-version');
+    if (av) av.textContent = `גרסה ${v} · Oliel Studio`;
+  })
+  .catch(() => {});
 
 // ── Initial load ─────────────────────────────────────────────────────────────
 await loadSettings();

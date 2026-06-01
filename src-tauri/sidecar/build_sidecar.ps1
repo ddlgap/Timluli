@@ -23,12 +23,31 @@ if (-not (Test-Path .\timluli_pdf.py)) {
     exit 1
 }
 
+# Pick a Python 3.12 interpreter to seed the venv: prefer the `py -3.12` launcher
+# (local dev), fall back to `python` on PATH (e.g. actions/setup-python in CI,
+# where the py launcher may not expose -3.12).
+$baseExe = $null
+$baseArgs = @()
+if (Get-Command py -ErrorAction SilentlyContinue) {
+    try {
+        & py -3.12 --version *> $null
+        if ($LASTEXITCODE -eq 0) { $baseExe = "py"; $baseArgs = @("-3.12") }
+    } catch {}
+}
+if (-not $baseExe -and (Get-Command python -ErrorAction SilentlyContinue)) {
+    $baseExe = "python"
+}
+if (-not $baseExe) {
+    Write-Error "No Python 3.12 found (need the 'py -3.12' launcher or 'python' on PATH)."
+    exit 1
+}
+
 $venv = ".build-venv"
 $python = Join-Path $venv "Scripts\python.exe"
 
 if (-not (Test-Path $python)) {
-    Write-Host "Creating build venv ($venv) with Python 3.12..."
-    py -3.12 -m venv $venv
+    Write-Host "Creating build venv ($venv) using '$baseExe $baseArgs'..."
+    & $baseExe @baseArgs -m venv $venv
 }
 
 Write-Host "Installing build dependencies..."

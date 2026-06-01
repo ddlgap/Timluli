@@ -9,26 +9,26 @@
 <body>
   <header>
     <h1>הגדרות Timluli</h1>
-    <span class="muted" id="version">v1.2.0</span>
+    <span class="muted" id="version">v1.8.0</span>
   </header>
 
-  <nav class="tabs">
-    <button data-tab="general" class="active">כללי</button>
-    <button data-tab="shortcut">קיצור מקלדת</button>
-    <button data-tab="display">תצוגה</button>
-    <button data-tab="behavior">התנהגות</button>
-    <button data-tab="engine">מנוע תמלול</button>
-    <button data-tab="translation">תרגום מסמכים</button>
-    <button data-tab="about">אודות</button>
+  <nav class="tabs" role="tablist" aria-label="הגדרות Timluli">
+    <button role="tab" id="tab-general" aria-controls="general" aria-selected="true" tabindex="0" data-tab="general" class="active">כללי</button>
+    <button role="tab" id="tab-shortcut" aria-controls="shortcut" aria-selected="false" tabindex="-1" data-tab="shortcut">קיצור מקלדת</button>
+    <button role="tab" id="tab-display" aria-controls="display" aria-selected="false" tabindex="-1" data-tab="display">תצוגה</button>
+    <button role="tab" id="tab-behavior" aria-controls="behavior" aria-selected="false" tabindex="-1" data-tab="behavior">התנהגות</button>
+    <button role="tab" id="tab-engine" aria-controls="engine" aria-selected="false" tabindex="-1" data-tab="engine">מנוע תמלול</button>
+    <button role="tab" id="tab-translation" aria-controls="translation" aria-selected="false" tabindex="-1" data-tab="translation">תרגום מסמכים</button>
+    <button role="tab" id="tab-about" aria-controls="about" aria-selected="false" tabindex="-1" data-tab="about">אודות</button>
   </nav>
 
   <main>
-    <section id="general" class="section active">
+    <section id="general" class="section active" role="tabpanel" aria-labelledby="tab-general">
       <div class="field">
         <label for="language">שפת תמלול</label>
         <select id="language">
-          <option value="he-IL">עברית (he-IL)</option>
-          <option value="en-US">English (en-US)</option>
+          <option value="he-IL">עברית</option>
+          <option value="en-US">אנגלית</option>
         </select>
       </div>
       <div class="field-row">
@@ -41,7 +41,7 @@
       </div>
     </section>
 
-    <section id="shortcut" class="section">
+    <section id="shortcut" class="section" role="tabpanel" aria-labelledby="tab-shortcut">
       <div class="field">
         <label for="shortcut_type">אופן הקיצור</label>
         <select id="shortcut_type">
@@ -71,13 +71,13 @@
       <div class="field">
         <label for="activation_mode">אופן הפעלה</label>
         <select id="activation_mode">
-          <option value="toggle">Toggle (לחיצה ראשונה מתחילה, שנייה עוצרת)</option>
-          <option value="push_to_talk">Push-to-talk (הקלטה רק כל עוד לחוץ)</option>
+          <option value="toggle">החלפה — לחיצה ראשונה מתחילה, שנייה עוצרת</option>
+          <option value="push_to_talk">החזקה — מקליט רק כל עוד המקש לחוץ</option>
         </select>
       </div>
     </section>
 
-    <section id="display" class="section">
+    <section id="display" class="section" role="tabpanel" aria-labelledby="tab-display">
       <div class="field">
         <label for="display_mode">
           מצב תצוגה
@@ -98,8 +98,12 @@
         </select>
       </div>
       <div class="field">
-        <label>שקיפות (<span id="opacity_value">95</span>%)</label>
+        <label for="mic_opacity">שקיפות (<span id="opacity_value">95</span>%)</label>
         <input id="mic_opacity" type="range" min="40" max="100" step="1" value="95" />
+        <div class="range-ends muted" aria-hidden="true">
+          <span>שקוף</span>
+          <span>אטום</span>
+        </div>
       </div>
 
       <div class="field">
@@ -108,27 +112,27 @@
         <div class="theme-group">
           <span class="theme-group-label">צבעים אחידים</span>
           <div class="theme-grid">
-            <button type="button" class="theme-swatch" data-theme="graphite" title="גרפיט"></button>
-            <button type="button" class="theme-swatch" data-theme="crimson"  title="אדום"></button>
-            <button type="button" class="theme-swatch" data-theme="azure"    title="כחול"></button>
-            <button type="button" class="theme-swatch" data-theme="emerald"  title="ירוק"></button>
+            <button type="button" class="theme-swatch" data-theme="graphite" title="גרפיט" aria-label="ערכת צבע: גרפיט"></button>
+            <button type="button" class="theme-swatch" data-theme="crimson"  title="אדום" aria-label="ערכת צבע: אדום"></button>
+            <button type="button" class="theme-swatch" data-theme="azure"    title="כחול" aria-label="ערכת צבע: כחול"></button>
+            <button type="button" class="theme-swatch" data-theme="emerald"  title="ירוק" aria-label="ערכת צבע: ירוק"></button>
           </div>
         </div>
 
         <div class="theme-group">
           <span class="theme-group-label">גרדיאנטים</span>
           <div class="theme-grid">
-            <button type="button" class="theme-swatch" data-theme="sunset" title="שקיעה"></button>
-            <button type="button" class="theme-swatch" data-theme="ocean"  title="אוקיינוס"></button>
-            <button type="button" class="theme-swatch" data-theme="violet" title="סגול"></button>
+            <button type="button" class="theme-swatch" data-theme="sunset" title="שקיעה" aria-label="ערכת צבע: שקיעה"></button>
+            <button type="button" class="theme-swatch" data-theme="ocean"  title="אוקיינוס" aria-label="ערכת צבע: אוקיינוס"></button>
+            <button type="button" class="theme-swatch" data-theme="violet" title="סגול" aria-label="ערכת צבע: סגול"></button>
           </div>
         </div>
 
         <div class="theme-group">
-          <span class="theme-group-label">ספירת אנימציה (3D)</span>
+          <span class="theme-group-label">כדור תלת־ממד</span>
           <div class="theme-grid">
-            <button type="button" class="theme-swatch" data-theme="orb-plasma" title="פלזמה"></button>
-            <button type="button" class="theme-swatch" data-theme="orb-aurora" title="זוהר הצפון"></button>
+            <button type="button" class="theme-swatch" data-theme="orb-plasma" title="פלזמה" aria-label="ערכת צבע: כדור פלזמה"></button>
+            <button type="button" class="theme-swatch" data-theme="orb-aurora" title="זוהר הצפון" aria-label="ערכת צבע: כדור זוהר הצפון"></button>
           </div>
         </div>
       </div>
@@ -145,40 +149,40 @@
       </div>
     </section>
 
-    <section id="behavior" class="section">
+    <section id="behavior" class="section" role="tabpanel" aria-labelledby="tab-behavior">
       <div class="field">
-        <label>זמן שתיקה לעצירה אוטומטית (<span id="silence_value">1500</span> ms)</label>
+        <label for="silence_timeout_ms">זמן שתיקה לעצירה אוטומטית (<span id="silence_value">1500</span> ms)</label>
         <input id="silence_timeout_ms" type="range" min="800" max="4000" step="100" value="1500" />
         <small class="muted">כמה זמן של שקט עד שהתמלול ייעצר. ברירת מחדל: 1500ms.</small>
       </div>
       <div class="field-row">
-        <label for="mute_during_fullscreen">השתק אוטומטית במצב מסך מלא</label>
-        <div class="toggle" data-key="mute_during_fullscreen"><input type="checkbox" id="mute_during_fullscreen" /></div>
+        <label for="mute_during_fullscreen">השתק אוטומטית במצב מסך מלא <span class="badge-soon">בקרוב</span></label>
+        <div class="toggle disabled" data-key="mute_during_fullscreen"><input type="checkbox" id="mute_during_fullscreen" disabled aria-disabled="true" /></div>
       </div>
       <div class="field-row">
-        <label for="mute_during_calls">השתק במהלך שיחות (Teams/Zoom)</label>
-        <div class="toggle" data-key="mute_during_calls"><input type="checkbox" id="mute_during_calls" /></div>
+        <label for="mute_during_calls">השתק במהלך שיחות (Teams/Zoom) <span class="badge-soon">בקרוב</span></label>
+        <div class="toggle disabled" data-key="mute_during_calls"><input type="checkbox" id="mute_during_calls" disabled aria-disabled="true" /></div>
       </div>
-      <small class="muted">אופציות אלה ייושמו במלואן בגרסאות עתידיות.</small>
+      <small class="muted">תכונות אלה עדיין בפיתוח ויתווספו בעדכון קרוב.</small>
     </section>
 
     <!-- ── מנוע תמלול (Phase 2) ── -->
-    <section id="engine" class="section">
+    <section id="engine" class="section" role="tabpanel" aria-labelledby="tab-engine">
       <div class="field">
         <label class="field-label-bold">בחר מנוע תמלול</label>
         <div class="engine-radio-group">
           <label class="engine-option" id="engine-opt-web">
             <input type="radio" name="engine_id" value="web-speech" />
             <div class="engine-option-content">
-              <span class="engine-name">Web Speech (מקוון)</span>
-              <span class="engine-desc">תמלול דרך Google — דורש חיבור לאינטרנט</span>
+              <span class="engine-name">מקוון (Google)</span>
+              <span class="engine-desc">מהיר ומדויק — דורש חיבור לאינטרנט</span>
             </div>
           </label>
           <label class="engine-option" id="engine-opt-local">
             <input type="radio" name="engine_id" value="whisper-local" />
             <div class="engine-option-content">
               <span class="engine-name">מקומי (אופליין)</span>
-              <span class="engine-desc">תמלול על המחשב — ללא אינטרנט, דורש הורדת מודל (~700MB)</span>
+              <span class="engine-desc">עובד על המחשב בלי אינטרנט — הורדה חד־פעמית (~700MB)</span>
             </div>
           </label>
         </div>
@@ -226,16 +230,15 @@
           <p class="muted">טוען מודלים…</p>
         </div>
         <small class="muted">
-          מודלים מאת <a href="https://www.ivrit.ai/" target="_blank" rel="noopener">ivrit.ai</a> —
-          רישיון Apache 2.0.
-          מודל Q5 (~700MB) מומלץ. FP16 (~1.5GB) לאיכות מקסימלית.
-          מודל טעון = גודלו בזיכרון RAM.
+          מודלים מאת <a href="https://www.ivrit.ai/" target="_blank" rel="noopener">ivrit.ai</a> (רישיון Apache 2.0).
+          מודל Q5 (~700MB) מומלץ לרוב המשתמשים; FP16 (~1.5GB) לאיכות מרבית.
+          כשמודל פעיל הוא תופס בזיכרון (RAM) מקום כגודל הקובץ.
         </small>
       </div>
     </section>
 
     <!-- ── תרגום מסמכים ── -->
-    <section id="translation" class="section">
+    <section id="translation" class="section" role="tabpanel" aria-labelledby="tab-translation">
       <!-- D: status banner -->
       <div id="translate_banner" class="translate-banner">
         <span class="tb-icon">✓</span>
@@ -372,17 +375,17 @@
       </dialog>
     </section>
 
-    <section id="about" class="section">
+    <section id="about" class="section" role="tabpanel" aria-labelledby="tab-about">
       <div class="about-hero">
         <h2 class="about-title">Timluli</h2>
         <p class="about-tagline">כלי תמלול ותרגום עברית מערכתי לווינדוס — מהיר ועוצמתי.</p>
-        <span class="about-version">גרסה 1.4.0 · Oliel Studio</span>
+        <span class="about-version">גרסה 1.8.0 · Oliel Studio</span>
       </div>
 
       <div class="about-card">
         <h3>פרטיות</h3>
-        <p>האודיו נשלח לשרתי Google לתמלול (Web Speech API). לא נשמרים אודיו או טקסט — לא במחשב ולא בענן.</p>
-        <p>במנוע המקומי (Timluli Local) כל העיבוד מתבצע על המחשב שלך, ללא שליחת נתונים לשרת חיצוני.</p>
+        <p>במנוע המקוון האודיו נשלח לשרתי Google לתמלול בלבד. לא נשמרים אודיו או טקסט — לא במחשב ולא בענן.</p>
+        <p>במנוע המקומי כל העיבוד מתבצע על המחשב שלך, ללא שליחת נתונים לשרת חיצוני.</p>
       </div>
 
       <div class="about-card about-contact">
@@ -400,6 +403,7 @@
   <footer>
     <button class="primary" id="save">שמור הגדרות</button>
     <button id="reset">שחזר ברירות מחדל</button>
+    <span id="unsaved_indicator" class="unsaved-indicator" hidden>● שינויים לא נשמרו</span>
     <span id="status" class="status-msg"></span>
   </footer>
 

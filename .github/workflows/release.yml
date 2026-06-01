@@ -49,6 +49,26 @@ jobs:
       - name: Install frontend dependencies
         run: npm ci
 
+      # The PDF-translation sidecar (timluli-pdf.exe, ~31 MB PyMuPDF+PyInstaller)
+      # is gitignored, so it must be BUILT here. Tauri packs resources/ at compile
+      # time, so this must run before the bundle step below — otherwise the
+      # installer ships without the sidecar and PDF translation is dead at runtime.
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Build PDF sidecar (timluli-pdf.exe)
+        shell: pwsh
+        run: ./src-tauri/sidecar/build_sidecar.ps1
+
+      - name: Verify sidecar was bundled
+        shell: pwsh
+        run: |
+          $p = "src-tauri/resources/timluli-pdf.exe"
+          if (-not (Test-Path $p)) { throw "Sidecar missing: $p" }
+          "Sidecar OK: {0:N1} MB" -f ((Get-Item $p).Length / 1MB)
+
       - name: Build, sign and publish
         uses: tauri-apps/tauri-action@v0
         env:

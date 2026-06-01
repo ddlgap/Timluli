@@ -73,7 +73,7 @@ main {
   cursor: pointer;
   transition: background 120ms ease;
 }
-.toggle input { display: none; }
+.toggle input { position: absolute; width: 1px; height: 1px; opacity: 0; margin: 0; }
 .toggle::after {
   content: '';
   position: absolute;
@@ -87,6 +87,12 @@ main {
 }
 .toggle.on { background: var(--accent); }
 .toggle.on::after { right: 20px; }
+/* Disabled / not-yet-available toggles read clearly as inactive. */
+.toggle.disabled { background: var(--surface-2); cursor: not-allowed; opacity: 0.55; }
+.toggle.disabled::after { background: #6b7280; }
+/* Keyboard focus ring lands on the pill, not the visually-hidden checkbox. */
+.toggle input:focus-visible { outline: none; }
+.toggle:has(input:focus-visible) { outline: 2px solid var(--accent-2); outline-offset: 3px; }
 
 .badge-experimental {
   display: inline-block;
@@ -99,6 +105,20 @@ main {
   border-radius: 6px;
   vertical-align: middle;
   letter-spacing: 0.3px;
+}
+
+/* "Coming soon" — distinct from "experimental"; marks a control that isn't live yet. */
+.badge-soon {
+  display: inline-block;
+  margin-inline-start: 6px;
+  padding: 1px 6px;
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--text-dim);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  vertical-align: middle;
 }
 
 .shortcut-input {
@@ -776,4 +796,35 @@ dialog.wizard::backdrop {
 }
 .about-email:hover {
   border-bottom-color: var(--accent-2);
+}
+
+/* ---- Keyboard focus visibility (a11y) ---- */
+/* Every interactive element shows a clear ring on keyboard focus (not on mouse).
+   The outline follows each element's own border-radius in Chromium/WebView2. */
+:focus-visible {
+  outline: 2px solid var(--accent-2);
+  outline-offset: 2px;
+}
+
+/* ---- Range slider end labels (clarifies RTL slider direction) ---- */
+.range-ends {
+  display: flex;
+  justify-content: space-between;
+  font-size: 11px;
+  margin-top: 2px;
+}
+
+/* Cap help-text line length for comfortable reading (long Hebrew paragraphs). */
+main small.muted { max-width: 66ch; }
+
+/* ---- Unsaved-changes indicator (footer) ---- */
+.unsaved-indicator {
+  align-self: center;
+  margin-inline-start: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--warning);
+}
+button.primary.has-changes {
+  box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.28);
 }

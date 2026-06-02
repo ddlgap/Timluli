@@ -26,10 +26,15 @@ async function updateMicRegion() {
     if (r <= 0) return;
     const cx = (window.innerWidth / 2) * dpr; // mic is centered in its window
     const cy = (window.innerHeight / 2) * dpr;
-    // Pad to include the mic's soft drop-shadow / orb glow (box-shadow ≈ 24–28px)
-    // so the circle keeps its floating look. This glow aura is the mic's visual
-    // body, so it reads as the element — not empty frame.
-    const rad = (r + 26) * dpr;
+    // Pad to fully CONTAIN the mic's soft drop-shadow / orb glow (box-shadow blur
+    // is 24–28px with a fade tail beyond). The clip must land where the glow has
+    // decayed to ~0: if the hard circle cuts through the still-visible glow, the
+    // step between the shadow-darkened area inside and the clear background outside
+    // reads as a faint arc above the mic (obvious on light backgrounds, invisible
+    // on dark ones). Cap to just inside the window so the circle never reaches the
+    // 160px frame and flatten into a straight edge.
+    const half = Math.min(window.innerWidth, window.innerHeight) / 2;
+    const rad = Math.min(r + 40, half - 1) * dpr;
     await invoke('set_circle_region', { label: winLabel, cx, cy, r: rad });
   } catch (e) {
     /* ignore */

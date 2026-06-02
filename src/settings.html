@@ -276,16 +276,36 @@
         <small class="muted">🔒 המפתח נשמר מוצפן במחשב שלך בלבד ולא נשלח לאף שרת מלבד שירות התרגום.</small>
       </div>
 
-      <!-- B: מהירות השירות הראשי כתוצאה, לא כז'רגון -->
+      <!-- סוג החשבון: מבהיר ויזואלית את ההבדל חינם/בתשלום -->
       <div class="field">
-        <label>מהירות שירות התרגום</label>
-        <div class="segmented" id="groq_speed_segmented" role="group" aria-label="מהירות שירות התרגום">
-          <button type="button" class="seg on" data-speed="normal">רגיל · חינמי</button>
-          <button type="button" class="seg" data-speed="fast">מהיר · בתשלום</button>
+        <label class="field-label-bold">סוג החשבון שלך בשירות התרגום</label>
+        <small class="muted">בחר לפי סוג החשבון שיש לך. רוב המשתמשים נשארים על „חינמי”.</small>
+        <div class="acct-cards" id="groq_speed_segmented" role="radiogroup" aria-label="סוג החשבון בשירות התרגום">
+          <button type="button" class="acct-card seg on" data-speed="normal" role="radio" aria-checked="true">
+            <span class="acct-head">
+              <span class="acct-dot"></span>
+              <span class="acct-title">חינמי</span>
+              <span class="acct-tag">מומלץ</span>
+            </span>
+            <ul class="acct-list">
+              <li>מתאים לרוב המשתמשים</li>
+              <li>תרגום קטע אחרי קטע</li>
+              <li>ללא עלות</li>
+            </ul>
+          </button>
+          <button type="button" class="acct-card seg" data-speed="fast" role="radio" aria-checked="false">
+            <span class="acct-head">
+              <span class="acct-dot"></span>
+              <span class="acct-title">בתשלום</span>
+            </span>
+            <ul class="acct-list">
+              <li>מהיר משמעותית</li>
+              <li>כמה קטעים במקביל</li>
+              <li>דורש חשבון API בתשלום</li>
+            </ul>
+          </button>
         </div>
-        <small class="muted">
-          "מהיר" מתרגם בקריאות מקבילות ומתאים רק לבעלי חשבון API בתשלום.
-        </small>
+        <small class="muted acct-warn">בחירה ב„בתשלום” ללא תוכנית מתאימה עלולה לגרום לתרגום להיכשל.</small>
       </div>
 
       <!-- מתקדם — מקופל כברירת מחדל -->
@@ -314,13 +334,13 @@
             <select id="cerebras_model" style="margin-top:8px">
               <option value="">מודל גיבוי: אוטומטי (מומלץ)</option>
             </select>
-            <label style="margin-top:10px">מהירות שירות הגיבוי</label>
-            <div class="segmented" id="cerebras_speed_segmented" role="group" aria-label="מהירות שירות הגיבוי">
-              <button type="button" class="seg on" data-speed="normal">רגיל · חינמי</button>
-              <button type="button" class="seg" data-speed="fast">מהיר · בתשלום</button>
+            <label style="margin-top:10px">סוג חשבון הגיבוי</label>
+            <div class="segmented" id="cerebras_speed_segmented" role="group" aria-label="סוג חשבון הגיבוי">
+              <button type="button" class="seg on" data-speed="normal">חינמי</button>
+              <button type="button" class="seg" data-speed="fast">בתשלום</button>
             </div>
             <small class="muted">
-              קבע בנפרד אם מפתח הגיבוי הוא חינמי או בתשלום — אין צורך שיהיה זהה לשירות הראשי.
+              קבע בנפרד אם חשבון הגיבוי חינמי או בתשלום — אין צורך שיהיה זהה לשירות הראשי.
             </small>
           </div>
 

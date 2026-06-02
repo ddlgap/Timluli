@@ -282,7 +282,9 @@ async function loadSettings() {
 // to a paid backup (or vice versa). 'groq' = main service, 'cerebras' = backup.
 function setSpeed(provider, speed) {
   document.querySelectorAll(`#${provider}_speed_segmented .seg`).forEach((b) => {
-    b.classList.toggle('on', b.dataset.speed === speed);
+    const on = b.dataset.speed === speed;
+    b.classList.toggle('on', on);
+    if (b.getAttribute('role') === 'radio') b.setAttribute('aria-checked', on ? 'true' : 'false');
   });
 }
 function getSpeed(provider) {

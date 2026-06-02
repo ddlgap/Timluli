@@ -156,6 +156,12 @@ pub fn run() {
             #[cfg(target_os = "windows")]
             {
                 if let Some(mic) = app.get_webview_window("mic") {
+                    // Force the webview backing fully transparent. Without this,
+                    // WebView2 paints empty (page-transparent) pixels as opaque
+                    // white, which the mic's circular window region then exposes as a
+                    // white halo/dome. With a truly transparent backing the mic's own
+                    // anti-aliased CSS circle is the visible edge — smooth, no halo.
+                    let _ = mic.set_background_color(Some(tauri::webview::Color(0, 0, 0, 0)));
                     win_util::make_topmost_noactivate(&mic);
                 }
                 if !side_panel && stg.field_docking_enabled {

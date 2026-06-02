@@ -24,17 +24,17 @@ async function updateMicRegion() {
     const dpr = window.devicePixelRatio || 1;
     const r = mic.offsetWidth / 2; // layout size, ignores hover transform
     if (r <= 0) return;
-    const cx = (window.innerWidth / 2) * dpr; // mic is centered in its window
+    // The mic is centered in its window (body margin:0 + grid place-items:center),
+    // and SetWindowRgn coords are window-relative, so the window centre IS the mic
+    // centre — use it directly (getBoundingClientRect would add the client/non-client
+    // offset and shift the clip off the disc).
+    const cx = (window.innerWidth / 2) * dpr;
     const cy = (window.innerHeight / 2) * dpr;
-    // Pad to fully CONTAIN the mic's soft drop-shadow / orb glow (box-shadow blur
-    // is 24–28px with a fade tail beyond). The clip must land where the glow has
-    // decayed to ~0: if the hard circle cuts through the still-visible glow, the
-    // step between the shadow-darkened area inside and the clear background outside
-    // reads as a faint arc above the mic (obvious on light backgrounds, invisible
-    // on dark ones). Cap to just inside the window so the circle never reaches the
-    // 160px frame and flatten into a straight edge.
-    const half = Math.min(window.innerWidth, window.innerHeight) / 2;
-    const rad = Math.min(r + 40, half - 1) * dpr;
+    // The webview backing is forced transparent (see lib.rs set_background_color),
+    // so empty pixels are truly see-through. That lets the clip sit out in empty
+    // space: the mic's own anti-aliased CSS circle (+ soft shadow) is the visible,
+    // smooth edge, while SetWindowRgn's 1-bit jagged edge hides in transparent space.
+    const rad = (r + 26) * dpr;
     await invoke('set_circle_region', { label: winLabel, cx, cy, r: rad });
   } catch (e) {
     /* ignore */
@@ -178,7 +178,13 @@ try {
 function applySettings(stg) {
   if (!stg) return;
   document.body.dataset.size = stg.mic_size || 'medium';
-  document.body.style.opacity = String(stg.mic_opacity ?? 0.95);
+  // Opacity MUST live on the mic element, not the body: body-level opacity forces
+  // the whole page into a single compositing layer whose empty pixels WebView2
+  // paints as opaque white, which the window region then exposes as a white arc /
+  // dome above the mic. Applied to the element, the body's empty area stays truly
+  // transparent and the float looks clean.
+  document.body.style.opacity = '';
+  mic.style.opacity = String(stg.mic_opacity ?? 0.95);
   mic.dataset.theme = stg.mic_theme || 'graphite';
   // Mic diameter may have changed → re-clip the window region.
   updateMicRegion();

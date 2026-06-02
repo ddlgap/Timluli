@@ -1,6 +1,6 @@
 [package]
 name = "timluli"
-version = "1.8.2"
+version = "1.8.3"
 description = "Hebrew speech-to-text system-wide for Windows"
 authors = ["Daniel Oliel <ddlgap@gmail.com>"]
 edition = "2021"

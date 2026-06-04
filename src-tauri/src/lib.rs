@@ -124,8 +124,19 @@ pub fn run() {
             commands_local::transcribe_local,
         ])
         .setup(|app| {
-            let stg = settings::load_or_init(app.handle())
+            let mut stg = settings::load_or_init(app.handle())
                 .unwrap_or_else(|_| settings::Settings::default());
+
+            // One-time migration for the enlarged (160→240) mic window: shift the
+            // saved floating position so the visible mic doesn't jump after upgrade.
+            // Must run before the position is restored below.
+            {
+                let scale = app
+                    .get_webview_window("mic")
+                    .and_then(|m| m.scale_factor().ok())
+                    .unwrap_or(1.0);
+                settings::migrate_mic_window_v2(app.handle(), &mut stg, scale);
+            }
 
             // Start the Chrome-sidecar local server (online speech engine), and
             // pre-launch the hidden Chrome when the online engine is active so the

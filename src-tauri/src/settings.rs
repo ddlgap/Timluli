@@ -54,7 +54,9 @@ pub struct Settings {
     #[serde(default = "default_pdf_rtl_layout")]
     pub pdf_rtl_layout: String,
     /// Experimental: when true, the mic window auto-docks next to the focused
-    /// text field via UI Automation. Off by default while we gather coverage data.
+    /// text field via UI Automation. Defaults ON for new installs (see the `Default`
+    /// impl). `#[serde(default)]` still yields `false` for older settings.json files
+    /// missing the field, so users who installed before it existed stay untouched.
     #[serde(default)]
     pub field_docking_enabled: bool,
     /// Preferred Groq chat model for document translation. `None`/empty = automatic
@@ -90,6 +92,11 @@ pub struct Settings {
     /// `mic_position` but only the vertical axis is user-controlled.
     #[serde(default)]
     pub panel_offset_y: Option<i32>,
+    /// Migration sentinel: set once the saved `mic_position` has been adjusted
+    /// for the enlarged (160→240) mic window. Prevents the one-time shift from
+    /// being applied twice. See `migrate_mic_window_v2`.
+    #[serde(default)]
+    pub mic_window_v2: bool,
 }
 
 impl Default for Settings {
@@ -112,7 +119,7 @@ impl Default for Settings {
             onboarding_done: false,
             translate_target_language: default_translate_target_language(),
             pdf_rtl_layout: default_pdf_rtl_layout(),
-            field_docking_enabled: false,
+            field_docking_enabled: true,
             groq_model: None,
             cerebras_model: None,
             groq_paid: false,
@@ -120,6 +127,7 @@ impl Default for Settings {
             audio_file_engine: default_audio_file_engine(),
             display_mode: default_display_mode(),
             panel_offset_y: None,
+            mic_window_v2: false,
         }
     }
 }
@@ -164,6 +172,25 @@ pub fn load_or_init(app: &AppHandle) -> Result<Settings, String> {
         let _ = fs::write(&path, serde_json::to_string_pretty(&defaults).unwrap_or_default());
         Ok(defaults)
     })
+}
+
+/// One-time migration for the enlarged mic window (160→240 logical px). The
+/// saved `mic_position` is the window's **physical** top-left; because the mic
+/// button is centered in its window, a bigger window shifts the *visible* mic by
+/// half the size delta. Subtract that half-delta (40 logical px → physical via
+/// `scale`) from both axes so the floating mic stays exactly where the user left
+/// it after upgrading. Idempotent: guarded by `mic_window_v2`, persisted once.
+pub fn migrate_mic_window_v2(app: &AppHandle, settings: &mut Settings, scale: f64) {
+    if settings.mic_window_v2 {
+        return;
+    }
+    if let Some(pos) = settings.mic_position.as_mut() {
+        let d = (40.0 * scale).round() as i32;
+        pos.x -= d;
+        pos.y -= d;
+    }
+    settings.mic_window_v2 = true;
+    let _ = save(app, settings);
 }
 
 pub fn save(app: &AppHandle, settings: &Settings) -> Result<(), String> {

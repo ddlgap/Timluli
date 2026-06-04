@@ -592,7 +592,7 @@ $('reset').addEventListener('click', async () => {
       mic_position: null,
       engine_id: 'web-speech',
       local_model_id: null,
-      field_docking_enabled: false,
+      field_docking_enabled: true,
     },
   });
   await loadSettings();

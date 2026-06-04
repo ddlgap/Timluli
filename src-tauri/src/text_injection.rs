@@ -40,6 +40,27 @@ pub fn inject(target_hwnd: isize, text: &str) -> Result<(), String> {
     Ok(())
 }
 
+/// Append-only injection for live (interim) streaming. Unlike `inject`, this
+/// ALWAYS types per-character via SendInput and NEVER uses the clipboard paste
+/// path — interim deltas fire many times per utterance, and the paste path
+/// clobbers the user's clipboard with no restore. Deltas are short (1-3 words),
+/// so per-char is cheap, and it's logical-order-safe for RTL Hebrew (Windows
+/// lays out the bidi display). Re-focuses + re-validates the HWND on every call
+/// because the target can close mid-utterance.
+pub fn inject_append(target_hwnd: isize, text: &str) -> Result<(), String> {
+    if text.is_empty() {
+        return Ok(());
+    }
+    if !win_util::is_window(target_hwnd) {
+        return Err("חלון היעד נסגר".into());
+    }
+    let focus_changed = win_util::focus_hwnd(target_hwnd);
+    if focus_changed {
+        sleep(Duration::from_millis(10));
+    }
+    inject_unicode_string(text)
+}
+
 fn inject_unicode_string(text: &str) -> Result<(), String> {
     // Each UTF-16 code unit needs a key-down + key-up pair.
     let units: Vec<u16> = text.encode_utf16().collect();

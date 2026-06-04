@@ -28,6 +28,11 @@ pub struct SidecarShared {
     pub port: AtomicU16,
     /// Recognition language (e.g. "he-IL"), mirrored from settings.
     pub lang: Mutex<String>,
+    /// Live-streaming state: the text already injected into the target field for
+    /// the **current in-progress segment**. Lets `/interim` append only the new
+    /// stabilized words (append-only — never rewrites/backspaces) and `/final`
+    /// flush just the held-back tail. Reset on session start/end and per segment.
+    pub committed: Mutex<String>,
 }
 
 impl SidecarShared {
@@ -38,6 +43,7 @@ impl SidecarShared {
             silence_ms: AtomicU32::new(2000),
             port: AtomicU16::new(0),
             lang: Mutex::new("he-IL".into()),
+            committed: Mutex::new(String::new()),
         }
     }
 }
@@ -46,6 +52,7 @@ impl SidecarShared {
 pub fn request_start(shared: &SidecarShared, lang: String, silence_ms: u32) {
     *shared.lang.lock() = lang;
     shared.silence_ms.store(silence_ms.max(500), Ordering::SeqCst);
+    shared.committed.lock().clear();
     shared.seq.fetch_add(1, Ordering::SeqCst);
     shared.listening.store(true, Ordering::SeqCst);
 }
@@ -103,12 +110,15 @@ pub fn start_server(app: AppHandle, shared: Arc<SidecarShared>) {
                 }
                 (tiny_http::Method::Post, "/interim") => {
                     let body = read_body(&mut req);
-                    let _ = app.emit_to("mic", "speakly://interim", body);
+                    // Bubble shows the full live preview (instant)…
+                    let _ = app.emit_to("mic", "speakly://interim", body.clone());
+                    // …while the field receives only the stabilized words.
+                    stream_stable(&app, &shared, &body);
                     let _ = req.respond(ok_resp());
                 }
                 (tiny_http::Method::Post, "/final") => {
                     let body = read_body(&mut req);
-                    inject_final(&app, &body);
+                    inject_final(&app, &shared, &body);
                     let _ = req.respond(ok_resp());
                 }
                 (tiny_http::Method::Post, "/ended") => {
@@ -146,8 +156,10 @@ fn read_body(req: &mut tiny_http::Request) -> String {
     s
 }
 
-fn inject_final(app: &AppHandle, text: &str) {
+fn inject_final(app: &AppHandle, shared: &SidecarShared, text: &str) {
     if text.trim().is_empty() {
+        // Still close the segment so the next one streams fresh.
+        shared.committed.lock().clear();
         return;
     }
     #[cfg(target_os = "windows")]
@@ -155,15 +167,94 @@ fn inject_final(app: &AppHandle, text: &str) {
         let state = app.state::<AppState>();
         let hwnd = *state.target_hwnd.lock();
         if let Some(h) = hwnd {
-            if let Err(e) = crate::text_injection::inject(h, text) {
+            let mut committed = shared.committed.lock();
+            let result = if committed.is_empty() {
+                // Nothing streamed for this segment (short phrase, or the browser
+                // finalized in one shot): inject the whole thing via the normal
+                // path (clipboard-capable for long text) — identical to the old
+                // behavior, no regression.
+                crate::text_injection::inject(h, text)
+            } else {
+                // We already streamed stabilized words; append only what the
+                // final adds beyond what's committed, word-aligned so a revised
+                // word isn't re-typed mid-word.
+                let cut = common_word_prefix_len(committed.as_str(), text);
+                crate::text_injection::inject_append(h, &text[cut..])
+            };
+            committed.clear();
+            if let Err(e) = result {
                 log::warn!("chrome sidecar: inject failed: {e}");
                 let _ = app.emit_to("settings", "speakly://error", e);
             }
+        } else {
+            shared.committed.lock().clear();
         }
     }
     #[cfg(not(target_os = "windows"))]
     {
         let _ = (app, text);
+        shared.committed.lock().clear();
+    }
+}
+
+/// Byte length of the longest common prefix of `committed` and `text` that ends
+/// on a word boundary — so a `/final` flush never re-types a partial word.
+/// Returns `committed.len()` when `committed` is a full prefix of `text` (the
+/// common case: the final just extends what we already streamed).
+fn common_word_prefix_len(committed: &str, text: &str) -> usize {
+    let cb = committed.as_bytes();
+    let tb = text.as_bytes();
+    let max = cb.len().min(tb.len());
+    let mut i = 0;
+    let mut last_boundary = 0;
+    while i < max && cb[i] == tb[i] {
+        i += 1;
+        // ASCII space is single-byte and never a UTF-8 continuation byte, so a
+        // byte-level boundary check is safe for Hebrew text.
+        if cb[i - 1] == b' ' {
+            last_boundary = i;
+        }
+    }
+    if i == cb.len() {
+        cb.len()
+    } else {
+        last_boundary
+    }
+}
+
+/// Inject the newly-stabilized words from an interim result, append-only. Holds
+/// back the last 2 words (the tail Google most often revises) and only ever
+/// appends text that extends what's already committed — never backspaces, so it
+/// can't corrupt pre-existing field content.
+#[allow(unused_variables)]
+fn stream_stable(app: &AppHandle, shared: &SidecarShared, interim: &str) {
+    let words: Vec<&str> = interim.split_whitespace().collect();
+    if words.len() < 3 {
+        return; // too little to trust yet — wait for more
+    }
+    let mut stable = words[..words.len() - 2].join(" ");
+    stable.push(' ');
+
+    #[cfg(target_os = "windows")]
+    {
+        let mut committed = shared.committed.lock();
+        if !stable.starts_with(committed.as_str()) {
+            // A previously-committed word got revised. Stay append-only: don't
+            // rewrite it; wait for the stream to converge again.
+            return;
+        }
+        let delta: String = stable[committed.len()..].to_string();
+        if delta.is_empty() {
+            return;
+        }
+        let state = app.state::<AppState>();
+        let hwnd = *state.target_hwnd.lock();
+        if let Some(h) = hwnd {
+            match crate::text_injection::inject_append(h, &delta) {
+                Ok(()) => *committed = stable,
+                Err(e) => log::warn!("chrome sidecar: stream inject failed: {e}"),
+            }
+        }
     }
 }
 
@@ -173,6 +264,7 @@ fn on_ended(app: &AppHandle, shared: &SidecarShared, body: &str) {
     let finished_seq: u64 = body.trim().parse().unwrap_or(0);
     if finished_seq == shared.seq.load(Ordering::SeqCst) {
         shared.listening.store(false, Ordering::SeqCst);
+        shared.committed.lock().clear();
         let state = app.state::<AppState>();
         *state.is_listening.lock() = false;
         let _ = app.emit_to("mic", "speakly://state-changed", "idle");
@@ -184,6 +276,7 @@ fn on_ended(app: &AppHandle, shared: &SidecarShared, body: &str) {
 
 fn on_error(app: &AppHandle, shared: &SidecarShared, body: &str) {
     shared.listening.store(false, Ordering::SeqCst);
+    shared.committed.lock().clear();
     let state = app.state::<AppState>();
     *state.is_listening.lock() = false;
     let _ = app.emit_to("mic", "speakly://state-changed", "error");
@@ -343,7 +436,10 @@ let userRequestedStop = false;
 let runStartedAt = 0;
 let silenceTimer = null, initialTimer = null, quickStopTimer = null;
 const INITIAL_NO_SPEECH_MS = 10000;
-const QUICK_STOP_MS = 1500;
+// How long after speech ends we force-finalize (rec.stop()), which is what makes
+// the recognized tail land in the field. Derived from silenceMs on every poll
+// (~half of it) so the field catches up fast without cutting off normal pauses.
+let quickStopMs = 750;
 
 function post(path, body) { try { fetch(path, { method: 'POST', body: body == null ? '' : body }); } catch (e) {} }
 function clearTimers() {
@@ -380,7 +476,7 @@ function startRec() {
   };
   rec.onspeechend = () => {
     if (quickStopTimer) clearTimeout(quickStopTimer);
-    quickStopTimer = setTimeout(() => { if (rec && running) { userRequestedStop = true; try { rec.stop(); } catch (e) {} } }, QUICK_STOP_MS);
+    quickStopTimer = setTimeout(() => { if (rec && running) { userRequestedStop = true; try { rec.stop(); } catch (e) {} } }, quickStopMs);
   };
   rec.onresult = (event) => {
     if (initialTimer) { clearTimeout(initialTimer); initialTimer = null; }
@@ -424,6 +520,7 @@ async function poll() {
     desired = !!s.listening;
     if (s.lang) lang = s.lang;
     if (s.silenceMs) silenceMs = s.silenceMs;
+    quickStopMs = Math.max(400, Math.round(silenceMs * 0.5));
     if (s.listening) {
       if (s.seq !== mySeq && !running) { mySeq = s.seq; startRec(); }
     } else {

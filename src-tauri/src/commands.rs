@@ -57,10 +57,14 @@ pub(crate) fn sync_side_panel_mic(app: &AppHandle, state: &str) {
                     return;
                 }
                 let pos = if dock_to_field {
-                    // Side-panel: dock to the field being dictated into.
+                    // Side-panel: dock to the field being dictated into. The mic
+                    // is centered in its (now 240px) window, so shift the top-left
+                    // up-left by half the size growth to keep the visible disc snug
+                    // to the field — same docked spot as the old 160px window.
                     const PAD: i32 = 8;
+                    let d = (40.0 * mic.scale_factor().unwrap_or(1.0)).round() as i32;
                     crate::field_tracker::focused_field_rect(app)
-                        .map(|(top, right)| (right + PAD, top))
+                        .map(|(top, right)| (right + PAD - d, top - d))
                         .or_else(|| crate::panel::default_mic_pos(app))
                 } else {
                     // Hidden mode: appear at the user's saved floating position.

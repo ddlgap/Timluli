@@ -234,8 +234,12 @@ fn apply_rect(app: &AppHandle, rect: FieldRect, auto_hide: bool) {
         return;
     };
     const PAD: i32 = 8;
-    let x = rect.right + PAD;
-    let y = rect.top;
+    // Mic is centered in its (now 240px) window; shift the top-left up-left by
+    // half the size growth so the visible disc docks snug to the field, matching
+    // the old 160px window's position.
+    let d = (40.0 * mic.scale_factor().unwrap_or(1.0)).round() as i32;
+    let x = rect.right + PAD - d;
+    let y = rect.top - d;
     let _ = mic.set_position(Position::Physical(PhysicalPosition::new(x, y)));
     // In side-panel (auto-hide) mode the mic starts hidden; reveal it on the
     // field it just docked to, and keep it on top without stealing focus.

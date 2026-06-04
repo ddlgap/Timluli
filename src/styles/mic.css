@@ -233,33 +233,46 @@ body[data-size="large"]  .mic > svg { width: 36px; height: 36px; }
 }
 
 /* ─── Bubble (interim text tooltip) ───────────────────────────────────── */
+/* Neumorphic live-text bubble: light interior, black text, soft peripheral
+   ring. Self-contained light palette (intentionally inverts the dark shared.css
+   tokens). Lives inside the 240px mic window — keep width inside the frame so
+   the soft shadow doesn't clip. */
 .bubble {
   position: absolute;
   bottom: calc(50% + var(--size, 64px) / 2 + 10px);
   left: 50%;
   transform: translateX(-50%);
-  background: rgba(15, 17, 21, 0.95);
-  color: #e5e7eb;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 8px;
-  padding: 6px 10px;
-  font-size: 13px;
-  line-height: 1.35;
-  /* Window is 160px wide — keep bubble inside with breathing room. */
-  max-width: 142px;
+  background: #f5f7fb;
+  color: #0b0d12;
+  border: none;
+  border-radius: 16px;
+  padding: 8px 14px;
+  font-size: 14px;
+  line-height: 1.4;
+  font-weight: 500;
+  /* Window is 240px wide — leave ~20px each side so the neumorphic ring
+     doesn't clip at the window edge. */
+  max-width: 200px;
   width: max-content;
   white-space: normal;
   word-wrap: break-word;
   word-break: break-word;
-  /* Cap visible height to ~3 lines so the bubble doesn't push out of frame.
-     Pair with JS truncation that surfaces the most-recent words. */
-  max-height: calc(1.35em * 3);
+  /* Cap visible height to ~3 lines — the room above a centered mic in a 240px
+     window is ~78px, which fits 3 lines at 14px/1.4 + padding. Pair with JS
+     truncation that surfaces the most-recent words. */
+  max-height: calc(1.4em * 3);
   overflow: hidden;
   text-align: start;
   direction: rtl;
   display: none;
   pointer-events: none;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+  /* Dual light/dark drop = raised neumorphic ring; faint insets round the
+     interior. Modest blur to limit clipping inside the window. */
+  box-shadow:
+    6px 6px 14px rgba(13, 17, 28, 0.20),
+    -6px -6px 12px rgba(255, 255, 255, 0.85),
+    inset 1px 1px 2px rgba(255, 255, 255, 0.7),
+    inset -1px -1px 3px rgba(13, 17, 28, 0.06);
   z-index: 10;
 }
 

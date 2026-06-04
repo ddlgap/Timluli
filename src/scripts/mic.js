@@ -45,10 +45,10 @@ function setState(state) {
   mic.dataset.state = state;
 }
 
-// Bubble fits ~3 lines × ~22 Hebrew chars in the 142px-wide bubble. When
+// Bubble fits ~3 lines × ~26 Hebrew chars in the 200px-wide bubble. When
 // interim text grows past that, surface the most-recent words instead of the
 // first ones — that's what the user is currently saying.
-const BUBBLE_MAX_CHARS = 70;
+const BUBBLE_MAX_CHARS = 78;
 
 function truncateForBubble(text) {
   if (!text || text.length <= BUBBLE_MAX_CHARS) return text;
@@ -67,7 +67,7 @@ function showBubble(text) {
   bubbleTimer = setTimeout(() => {
     bubble.classList.remove('show');
     updateMicRegion(); // re-clip to the circle
-  }, 1500);
+  }, 2500);
 }
 
 mic.addEventListener('click', async (event) => {

@@ -23,13 +23,14 @@ permissions:
 jobs:
   release:
     runs-on: windows-latest
-    # The GPU release links whisper.cpp's Vulkan backend. Build whisper.cpp with
-    # the Ninja CMake generator: MSBuild's FileTracker writes very deep .tlog
-    # paths for the ggml-vulkan shader build that overrun Windows MAX_PATH
-    # (error FTK1011). Ninja doesn't create those, so the default target dir works
-    # and tauri-action still finds the bundle. See docs/gpu-acceleration.md.
+    # The GPU release links whisper.cpp's Vulkan backend with the default MSVC/VS
+    # CMake generator. The ggml-vulkan shader build nests very deep, so MSBuild's
+    # FileTracker overruns Windows MAX_PATH (error FTK1011) under the normal target
+    # dir — so build into a SHORT CARGO_TARGET_DIR to stay under 260 chars. (This
+    # exact combo is verified locally; Ninja was avoided because its bare-cl
+    # TryCompile hits "C1083: ... ''" with -Brepro.) See docs/gpu-acceleration.md.
     env:
-      CMAKE_GENERATOR: Ninja
+      CARGO_TARGET_DIR: 'C:\t'
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -92,12 +93,6 @@ jobs:
           if (-not (Test-Path $p)) { throw "Sidecar missing: $p" }
           "Sidecar OK: {0:N1} MB" -f ((Get-Item $p).Length / 1MB)
 
-      # Ninja drives the C/C++ compiler directly, so cl.exe and the MSVC headers/
-      # libs must be on the environment. This exports the x64 dev env to the
-      # build step below.
-      - name: Set up MSVC environment (for the Ninja Vulkan build)
-        uses: ilammy/msvc-dev-cmd@v1
-
       # whisper.cpp/ggml (C++) is statically linked into timluli.exe, so the exe
       # depends on the Visual C++ runtime (MSVCP140.dll & friends). Fresh user
       # machines often lack it → the exe fails to start with
@@ -140,20 +135,6 @@ jobs:
           }
           if (-not (Test-Path (Join-Path $dest 'MSVCP140.dll'))) { throw "MSVCP140.dll missing from $dest after copy" }
           Get-ChildItem $dest -Filter *.dll | ForEach-Object { '{0,-32} {1,8:N0} bytes' -f $_.Name, $_.Length }
-
-      # ggml wraps cl.exe with ccache when it's on PATH (Ninja build), but
-      # ccache + MSVC breaks the vulkan-shaders-gen sub-project's CMake compiler
-      # check ("fatal error C1083: Cannot open compiler generated file: ''").
-      # Neutralise ccache so the build uses plain cl.exe.
-      - name: Disable ccache (incompatible with ggml-vulkan's MSVC compiler check)
-        shell: pwsh
-        run: |
-          $found = $false
-          Get-Command ccache -All -ErrorAction SilentlyContinue | ForEach-Object {
-            try { Rename-Item -LiteralPath $_.Source "$($_.Source).disabled" -Force; Write-Output "disabled: $($_.Source)"; $found = $true }
-            catch { Write-Output "could not rename $($_.Source): $_" }
-          }
-          if (-not $found) { Write-Output "no ccache on PATH (nothing to do)" }
 
       - name: Build, sign and publish
         uses: tauri-apps/tauri-action@v0

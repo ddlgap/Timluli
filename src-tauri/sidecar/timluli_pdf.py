@@ -544,16 +544,31 @@ def _html_with_icons(text, archive, font_size, _added, lead_html=""):
         toks.append(('i', m.group(0)))
         pos = m.end()
     toks.append(('t', text[pos:]))
-
-    if not any(k == 'i' for k, _ in toks):           # no icon → no compensation
-        return lead_html + "".join(_html.escape(v) for _, v in toks)
-
     n = len(toks)
+
+    # Escape text tokens; a regular space directly ADJACENT to an icon collapses/trims at
+    # the inline-<img> boundary ("לחץ[✱]"), so convert just those boundary spaces to nbsp
+    # ("לחץ [✱]"). Spaces that were already trimmed before punctuation stay tight ("[✱],").
+    esc = []
+    for i, (k, v) in enumerate(toks):
+        if k == 'i':
+            esc.append(('i', v))
+            continue
+        s = _html.escape(v)
+        if i > 0 and toks[i - 1][0] == 'i' and s[:1] == ' ':
+            s = '&#160;' + s[1:]
+        if i < n - 1 and toks[i + 1][0] == 'i' and s[-1:] == ' ':
+            s = s[:-1] + '&#160;'
+        esc.append(('t', s))
+
+    if not any(k == 'i' for k, _ in esc):            # no icon → no compensation
+        return lead_html + "".join(v for _, v in esc)
+
+    # Compensation: emit tokens REVERSED so MuPDF's <img> swap restores correct RTL order.
     out = []
-    for j, (k, v) in enumerate(reversed(toks)):
+    for j, (k, v) in enumerate(reversed(esc)):
         if k == 't':
-            seg = _html.escape(v)
-            out.append(lead_html + seg if j == n - 1 else seg)  # last = logical-first
+            out.append(lead_html + v if j == n - 1 else v)  # last = logical-first
         else:
             out.append(_icon_img_tag(v, archive, font_size, _added))
     return "".join(out)

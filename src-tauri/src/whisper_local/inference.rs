@@ -2,6 +2,23 @@ use std::path::Path;
 use thiserror::Error;
 use whisper_rs::{FullParams, SamplingStrategy, WhisperContext, WhisperContextParameters};
 
+/// Whether the Vulkan runtime loader (vulkan-1.dll) can be loaded on this
+/// machine. Used (with the `gpu` feature) to avoid faulting on the delay-loaded
+/// import when GPU support is compiled in but no Vulkan loader is installed.
+#[cfg(all(feature = "gpu", windows))]
+fn vulkan_loader_available() -> bool {
+    use windows::core::s;
+    use windows::Win32::System::LibraryLoader::LoadLibraryA;
+    // Safe: loading a system DLL by name; the handle is intentionally leaked
+    // (process-lifetime) since whisper.cpp will use the same loader if present.
+    unsafe { LoadLibraryA(s!("vulkan-1.dll")).is_ok() }
+}
+
+#[cfg(all(feature = "gpu", not(windows)))]
+fn vulkan_loader_available() -> bool {
+    true
+}
+
 #[derive(Debug, Error)]
 pub enum EngineError {
     #[error("שגיאה בטעינת המודל: {0}")]
@@ -21,11 +38,18 @@ unsafe impl Sync for WhisperEngine {}
 
 impl WhisperEngine {
     pub fn load(model_path: &Path, model_id: String) -> Result<Self, EngineError> {
-        let ctx = WhisperContext::new_with_params(
-            model_path,
-            WhisperContextParameters::default(),
-        )
-        .map_err(|e| EngineError::Load(e.to_string()))?;
+        #[allow(unused_mut)]
+        let mut cparams = WhisperContextParameters::default();
+        // With the `gpu` feature, whisper.cpp defaults to a Vulkan device. If the
+        // Vulkan loader (vulkan-1.dll) isn't present, force CPU so we never trigger
+        // the delay-loaded import (which would otherwise fault). When the loader is
+        // present but exposes no device, whisper.cpp itself falls back to CPU.
+        #[cfg(feature = "gpu")]
+        if !vulkan_loader_available() {
+            cparams.use_gpu(false);
+        }
+        let ctx = WhisperContext::new_with_params(model_path, cparams)
+            .map_err(|e| EngineError::Load(e.to_string()))?;
         Ok(Self { ctx, model_id })
     }
 

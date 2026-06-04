@@ -3,8 +3,15 @@ import { listen } from '@tauri-apps/api/event';
 import { Channel } from '@tauri-apps/api/core';
 import { open } from '@tauri-apps/plugin-dialog';
 import { getVersion } from '@tauri-apps/api/app';
+import { getCurrentWindow } from '@tauri-apps/api/window';
 
 const $ = (id) => document.getElementById(id);
+
+// ---- Custom title-bar controls (decorations:false) ----
+// Close hides the window (lib.rs intercepts CloseRequested for settings).
+const appWindow = getCurrentWindow();
+$('tb-min')?.addEventListener('click', () => appWindow.minimize());
+$('tb-close')?.addEventListener('click', () => appWindow.close());
 
 // ---- Tabs (ARIA tablist with roving tabindex + arrow-key navigation) ----
 const tabs = Array.from(document.querySelectorAll('nav.tabs [role="tab"]'));
@@ -246,7 +253,8 @@ async function loadSettings() {
   }
   applyShortcutType(shortcutType.value);
   $('activation_mode').value = stg.activation_mode || 'toggle';
-  $('display_mode').value = stg.display_mode || 'floating-mic';
+  $('display_mode').value = stg.display_mode || 'side-panel';
+  applyDisplayModeVisibility($('display_mode').value);
   $('mic_size').value = stg.mic_size || 'medium';
   const op = Math.round((stg.mic_opacity ?? 0.95) * 100);
   opacity.value = String(op);
@@ -402,12 +410,14 @@ async function populateModels(provider, selected) {
   } catch (e) {
     /* no key yet, or fetch failed — leave only "automatic" */
   }
-  for (const m of models) {
+  // Models arrive quality-ranked from the backend (best first), so the first entry
+  // is the recommended pick — flag it in the label (value stays the bare id).
+  models.forEach((m, i) => {
     const opt = document.createElement('option');
     opt.value = m.id;
-    opt.textContent = m.id;
+    opt.textContent = i === 0 ? `${m.id} — מומלץ` : m.id;
     sel.appendChild(opt);
-  }
+  });
   const want = selected || '';
   // If a previously-saved model isn't in the fetched list, keep it selectable.
   if (want && !Array.from(sel.options).some((o) => o.value === want)) {
@@ -565,7 +575,7 @@ $('save').addEventListener('click', saveSettings);
 $('reset').addEventListener('click', async () => {
   if (!confirm('לשחזר הגדרות ברירת מחדל?')) return;
   await invoke('set_field_docking', { enabled: false });
-  await invoke('set_display_mode', { mode: 'floating-mic' }).catch(() => {});
+  await invoke('set_display_mode', { mode: 'side-panel' }).catch(() => {});
   await invoke('update_shortcut', { combo: 'Ctrl+Ctrl' }).catch(() => {});
   await invoke('save_settings', {
     newSettings: {
@@ -677,12 +687,28 @@ await listen('speakly://engine-changed', (e) => {
 
 // ── Display mode (floating mic ⇄ side panel) ──────────────────────────────────
 // Mirrors the engine picker: apply immediately on change, no Save needed.
+
+// Mic-appearance settings (size/opacity/theme/field-docking) only affect the
+// floating-mic mode — in side-panel mode the mic is hidden at rest, so changing
+// them appears to do nothing. Hide that group in side-panel mode to avoid the
+// confusion (mirrors the onboarding, which only reveals the theme strip for the
+// floating mic). Called on load and whenever the mode changes.
+function applyDisplayModeVisibility(mode) {
+  const box = $('mic-only-settings');
+  // The mic appears — and its size/opacity/theme apply — in both floating-mic and
+  // hidden modes; only side-panel hides the mic entirely, so hide the group there.
+  if (box) box.style.display = mode === 'side-panel' ? 'none' : 'flex';
+}
+
 $('display_mode')?.addEventListener('change', async () => {
   const mode = $('display_mode').value;
+  applyDisplayModeVisibility(mode);
   try {
     await invoke('set_display_mode', { mode });
     showToast(
-      mode === 'side-panel' ? 'עברת לתפריט צד' : 'עברת למיקרופון מרחף',
+      mode === 'side-panel' ? 'עברת לתפריט צד'
+        : mode === 'hidden-mic' ? 'עברת למצב מוסתר'
+        : 'עברת למיקרופון מרחף',
       'ok'
     );
   } catch (e) {
@@ -693,6 +719,7 @@ $('display_mode')?.addEventListener('change', async () => {
 await listen('speakly://display-mode-changed', (e) => {
   const mode = typeof e?.payload === 'string' ? e.payload : 'floating-mic';
   if ($('display_mode')) $('display_mode').value = mode;
+  applyDisplayModeVisibility(mode);
 });
 
 // Listen for model install / delete to refresh list

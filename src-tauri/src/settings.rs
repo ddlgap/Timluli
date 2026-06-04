@@ -79,9 +79,9 @@ pub struct Settings {
     /// `engine_id`, which only governs live dictation.
     #[serde(default = "default_audio_file_engine")]
     pub audio_file_engine: String,
-    /// UI display mode: `"floating-mic"` (default, the draggable mic button) or
-    /// `"side-panel"` (a vertical handle docked to the right screen edge that
-    /// expands into a 3-button panel). Mutually exclusive — only one window is
+    /// UI display mode: `"side-panel"` (default — a vertical handle docked to the
+    /// right screen edge that expands into a 3-button panel) or `"floating-mic"`
+    /// (the draggable mic button). Mutually exclusive — only one window is
     /// shown at a time.
     #[serde(default = "default_display_mode")]
     pub display_mode: String,
@@ -130,7 +130,7 @@ fn default_mic_theme() -> String { "graphite".into() }
 fn default_translate_target_language() -> String { "Hebrew".into() }
 fn default_pdf_rtl_layout() -> String { "same-box".into() }
 fn default_audio_file_engine() -> String { "groq".into() }
-fn default_display_mode() -> String { "floating-mic".into() }
+fn default_display_mode() -> String { "side-panel".into() }
 
 pub fn settings_dir(app: &AppHandle) -> PathBuf {
     app.path()

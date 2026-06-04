@@ -55,10 +55,22 @@ Write-Host "Installing build dependencies..."
 & $python -m pip install --quiet pymupdf python-bidi requests pyinstaller
 
 Write-Host "Building timluli-pdf.exe (this can take a minute)..."
+# --add-data "glossaries;glossaries": bundle the curated telecom glossary so the
+# frozen exe can load it via sys._MEIPASS (see _resource_path in timluli_pdf.py).
+# On Windows the PyInstaller --add-data separator is ';'.
+$addData = @("glossaries;glossaries")
+# Bundle a Hebrew font only if one was dropped into fonts/ (else the renderer falls
+# back to system Arial — see _resolve_hebrew_font). Avoids shipping an empty dir.
+if (Test-Path ".\fonts\*.ttf") {
+    $addData += "fonts;fonts"
+    Write-Host "  bundling fonts/ (found .ttf)"
+}
+$dataArgs = $addData | ForEach-Object { @("--add-data", $_) }
 & $python -m PyInstaller --noconfirm --onefile `
     --name timluli-pdf `
     --collect-all pymupdf `
     --hidden-import fitz `
+    @dataArgs `
     timluli_pdf.py
 
 $built = ".\dist\timluli-pdf.exe"

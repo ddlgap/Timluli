@@ -176,6 +176,7 @@ fn on_ended(app: &AppHandle, shared: &SidecarShared, body: &str) {
         let state = app.state::<AppState>();
         *state.is_listening.lock() = false;
         let _ = app.emit_to("mic", "speakly://state-changed", "idle");
+        let _ = app.emit_to("panel", "speakly://state-changed", "idle");
         // Side-panel mode: recording ended → hide the docked mic again.
         crate::commands::sync_side_panel_mic(app, "idle");
     }
@@ -186,6 +187,7 @@ fn on_error(app: &AppHandle, shared: &SidecarShared, body: &str) {
     let state = app.state::<AppState>();
     *state.is_listening.lock() = false;
     let _ = app.emit_to("mic", "speakly://state-changed", "error");
+    let _ = app.emit_to("panel", "speakly://state-changed", "error");
     // Side-panel mode: recording errored out → hide the docked mic again.
     crate::commands::sync_side_panel_mic(app, "error");
     let msg = if body.contains("network") {

@@ -10,6 +10,16 @@ rust-version = "1.77"
 name = "timluli_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
+[features]
+# GPU-accelerated local inference via Vulkan. Opt-in: the default build stays
+# CPU-only and needs no extra tooling. Enabling `gpu` requires the Vulkan SDK at
+# build time (VULKAN_SDK + glslc) and a SHORT build path on Windows — the
+# ggml-vulkan shader build overruns MAX_PATH under deep target dirs, so build
+# with a short CARGO_TARGET_DIR (e.g. C:\tl). At runtime it auto-detects a Vulkan
+# device and falls back to CPU when none is present (or the loader is missing).
+# Release builds enable this in CI; see docs/gpu-acceleration.md.
+gpu = ["whisper-rs/vulkan"]
+
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
 
@@ -38,7 +48,7 @@ tiny_http = "0.12"
 num_cpus = "1"
 rubato = "0.15"
 symphonia = { version = "0.5", default-features = false, features = ["mp3", "aac", "isomp4", "alac", "flac", "wav", "pcm", "adpcm", "ogg", "vorbis"] }
-whisper-rs = "0.16"
+whisper-rs = "0.16" # Vulkan GPU backend is opt-in via the `gpu` feature (see [features]).
 pdf-extract = "0.10.0"
 docx-rust = "0.1.11"
 
@@ -49,6 +59,7 @@ windows = { version = "0.58", features = [
     "Win32_Security_Cryptography",
     "Win32_Storage_FileSystem",
     "Win32_System_DataExchange",
+    "Win32_System_LibraryLoader",
     "Win32_System_Memory",
     "Win32_System_Ole",
     "Win32_System_Threading",

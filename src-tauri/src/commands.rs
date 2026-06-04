@@ -25,37 +25,49 @@ fn emit_state(app: &AppHandle, state: &str) {
     sync_side_panel_mic(app, state);
 }
 
-/// Shows/hides + docks the floating mic for side-panel mode based on the dictation
-/// state. No-op unless `display_mode == "side-panel"`. Callable from any thread
-/// (also invoked by the Chrome sidecar's HTTP handler on `idle`/`error`).
+/// Shows/hides the floating mic for the "transient" display modes — `side-panel`
+/// and `hidden-mic` — based on the dictation state. In both, the mic is hidden at
+/// rest and revealed only while recording (`listening`/`processing`), then hidden
+/// on `idle`/`error`. `side-panel` docks it to the active dictation field;
+/// `hidden-mic` shows it at the user's saved position. No-op in `floating-mic`
+/// (the mic is always visible there). Callable from any thread (also invoked by
+/// the Chrome sidecar's HTTP handler on `idle`/`error`).
 pub(crate) fn sync_side_panel_mic(app: &AppHandle, state: &str) {
     #[cfg(target_os = "windows")]
     {
-        let side_panel = settings::load_or_init(app)
-            .map(|s| s.display_mode == "side-panel")
-            .unwrap_or(false);
-        if !side_panel {
+        let Ok(stg) = settings::load_or_init(app) else {
+            return;
+        };
+        let dock_to_field = stg.display_mode == "side-panel";
+        let transient = dock_to_field || stg.display_mode == "hidden-mic";
+        if !transient {
             return;
         }
         let Some(mic) = app.get_webview_window("mic") else {
             return;
         };
         match state {
-            // Recording just started: dock the mic to the field being dictated
-            // into (exactly like the old auto-hide tracker), then reveal it.
+            // Recording just started: position the mic, then reveal it.
             "listening" => {
-                // The dock happens once, on the transition into recording. Both
-                // the command and (for the local engine) the renderer report
-                // "listening"; if the mic is already shown, don't re-run the UIA
-                // lookup or re-dock to a possibly-stale field (the old tracker also
-                // froze the mic's position for the duration of a recording).
+                // The positioning happens once, on the transition into recording.
+                // Both the command and (for the local engine) the renderer report
+                // "listening"; if the mic is already shown, don't re-position it
+                // (the position is frozen for the duration of a recording).
                 if mic.is_visible().unwrap_or(false) {
                     return;
                 }
-                const PAD: i32 = 8;
-                let pos = crate::field_tracker::focused_field_rect(app)
-                    .map(|(top, right)| (right + PAD, top))
-                    .or_else(|| crate::panel::default_mic_pos(app));
+                let pos = if dock_to_field {
+                    // Side-panel: dock to the field being dictated into.
+                    const PAD: i32 = 8;
+                    crate::field_tracker::focused_field_rect(app)
+                        .map(|(top, right)| (right + PAD, top))
+                        .or_else(|| crate::panel::default_mic_pos(app))
+                } else {
+                    // Hidden mode: appear at the user's saved floating position.
+                    stg.mic_position
+                        .map(|p| (p.x, p.y))
+                        .or_else(|| crate::panel::default_mic_pos(app))
+                };
                 if let Some((x, y)) = pos {
                     let _ = mic.set_position(tauri::Position::Physical(
                         tauri::PhysicalPosition::new(x, y),
@@ -365,12 +377,12 @@ pub fn set_field_docking(
 ) -> Result<(), String> {
     #[cfg(target_os = "windows")]
     {
-        // In side-panel mode there is no follow tracker (the mic only appears while
-        // recording, docked by sync_side_panel_mic), so this toggle does nothing
-        // now. The preference is still persisted (for when the user returns to
-        // floating-mic) by the regular settings save.
+        // In side-panel and hidden modes there is no follow tracker (the mic only
+        // appears while recording, via sync_side_panel_mic), so this toggle does
+        // nothing now. The preference is still persisted (for when the user returns
+        // to floating-mic) by the regular settings save.
         if settings::load_or_init(&app)
-            .map(|s| s.display_mode == "side-panel")
+            .map(|s| s.display_mode == "side-panel" || s.display_mode == "hidden-mic")
             .unwrap_or(false)
         {
             return Ok(());
@@ -477,7 +489,8 @@ pub async fn list_provider_models(
 
 /// Switches the UI display mode and swaps the visible window accordingly. Persists
 /// the choice and broadcasts `speakly://display-mode-changed` so other windows
-/// (e.g. settings) can sync. `mode` is `"floating-mic"` or `"side-panel"`.
+/// (e.g. settings) can sync. `mode` is `"side-panel"`, `"floating-mic"`, or
+/// `"hidden-mic"` (mic hidden at rest, shown only while recording).
 #[tauri::command]
 pub fn set_display_mode(app: AppHandle, state: State<AppState>, mode: String) -> Result<(), String> {
     let mut stg = settings::load_or_init(&app)?;
@@ -492,6 +505,17 @@ pub fn set_display_mode(app: AppHandle, state: State<AppState>, mode: String) ->
         // No follow tracker in side-panel mode: the mic is hidden at rest and only
         // appears (docked to the active field) while recording — see
         // sync_side_panel_mic. Drop any floating-mic field-docking tracker.
+        #[cfg(target_os = "windows")]
+        {
+            *state.field_tracker.lock() = None;
+        }
+    } else if mode == "hidden-mic" {
+        // Hidden mode: no panel, mic hidden at rest. It appears only while recording
+        // (sync_side_panel_mic on the listening transition) and hides on idle.
+        crate::panel::hide_panel(&app);
+        if let Some(mic) = app.get_webview_window("mic") {
+            let _ = mic.hide();
+        }
         #[cfg(target_os = "windows")]
         {
             *state.field_tracker.lock() = None;

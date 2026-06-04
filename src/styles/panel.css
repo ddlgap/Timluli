@@ -113,6 +113,51 @@ body[data-expanded="true"] .closed {
   filter: drop-shadow(0 0 6px rgba(32, 241, 253, 0.85));
 }
 
+/* ── Recording indicator on the collapsed strip ── */
+/* While dictating (the menu is folded away), the strip turns red and pulses so the
+   user can tell recording is live; clicking it then stops (panel.js). Not
+   colour-only — the pulse animation carries the meaning too. A static red glow sits
+   on the base rule so motion-reduced users still get a clear indicator. Glow
+   magnitudes mirror the cyan trigger so the red never over-bleeds past the window's
+   collapsed clip region. */
+body[data-recording="true"] .closed .trigger {
+  background:
+    radial-gradient(120% 100% at 100% 50%,
+      rgba(255, 64, 64, 0.55) 0%,
+      rgba(40, 4, 4, 0.92) 70%);
+  box-shadow:
+    inset 2px 0 0 rgba(255, 90, 90, 0.18),
+    0 0 18px 3px rgba(255, 64, 64, 0.55),
+    0 0 34px 5px rgba(255, 0, 0, 0.32);
+  animation: rec-pulse 1.4s ease-in-out infinite;
+}
+body[data-recording="true"] .closed .trigger::before {
+  border-left-color: #ff5a5a;
+  border-top-color: rgba(255, 90, 90, 0.40);
+  border-bottom-color: rgba(255, 90, 90, 0.40);
+}
+body[data-recording="true"] .closed .chevron {
+  stroke: #ff7a7a;
+  filter: drop-shadow(0 0 6px rgba(255, 90, 90, 0.85));
+}
+@keyframes rec-pulse {
+  0%, 100% {
+    box-shadow:
+      inset 2px 0 0 rgba(255, 90, 90, 0.15),
+      0 0 14px 2px rgba(255, 64, 64, 0.45),
+      0 0 30px 4px rgba(255, 0, 0, 0.25);
+  }
+  50% {
+    box-shadow:
+      inset 2px 0 0 rgba(255, 90, 90, 0.20),
+      0 0 20px 3px rgba(255, 64, 64, 0.65),
+      0 0 38px 6px rgba(255, 0, 0, 0.38);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  body[data-recording="true"] .closed .trigger { animation: none; }
+}
+
 /* ─────────────────────────── OPEN STATE ─────────────────────────── */
 /* `.open` is a STATIC clip wrapper pinned to the wall. Its job is to define the
    straight right edge *intentionally*: `clip-path` cuts exactly at the right
@@ -264,13 +309,63 @@ body[data-expanded="true"] .menu-inner {
   white-space: nowrap;
 }
 
-/* Highlight the live-transcription wedge while recognizing. */
+/* ── Live-transcription indicator: light up the top wedge + sector while
+   recognizing, swap the label to a blinking "מאזין…", and pulse it all so it's
+   unmistakable that dictation is active. ────────────────────────────────────── */
+.radial .sector#sector-top.listening {
+  fill: rgba(32, 241, 253, 0.34);
+  filter: drop-shadow(0 0 16px rgba(32, 241, 253, 0.8));
+  animation: live-pulse 1.3s ease-in-out infinite;
+}
 .wedge[data-sector="top"].listening .wedge-icon svg {
   stroke: #fff;
-  filter: drop-shadow(0 0 12px rgba(32, 241, 253, 0.9));
+  filter: drop-shadow(0 0 14px rgba(32, 241, 253, 0.95));
+  animation: live-pulse 1.3s ease-in-out infinite;
 }
 .wedge[data-sector="top"].listening .wedge-label {
-  text-shadow: 0 0 12px rgba(32, 241, 253, 0.95);
+  color: var(--panel-edge-hot);
+  text-shadow: 0 0 14px rgba(32, 241, 253, 0.95);
+}
+
+/* Default: show the idle label, hide the live one. Swap on `.listening`. */
+.wedge-label .label-live { display: none; }
+.wedge[data-sector="top"].listening .label-idle { display: none; }
+.wedge[data-sector="top"].listening .label-live {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+/* Blinking red record dot beside "מאזין…". */
+.wedge-label .label-live::before {
+  content: "";
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #ff4d5e;
+  box-shadow: 0 0 8px rgba(255, 77, 94, 0.95);
+  animation: rec-blink 1s steps(1, end) infinite;
+}
+
+@keyframes live-pulse {
+  0%, 100% { opacity: 1; }
+  50%      { opacity: 0.5; }
+}
+@keyframes rec-blink {
+  0%, 50%   { opacity: 1; }
+  51%, 100% { opacity: 0.2; }
+}
+
+/* ── Drag-and-drop affordance: when a file hovers the panel, pulse the two file
+   wedges (translate / transcribe) so the drop target is obvious. ───────────── */
+body.drag-over .radial #sector-middle,
+body.drag-over .radial #sector-bottom {
+  fill: rgba(32, 241, 253, 0.32);
+  filter: drop-shadow(0 0 14px rgba(32, 241, 253, 0.7));
+  animation: live-pulse 1.1s ease-in-out infinite;
+}
+body.drag-over .wedge[data-sector="middle"] .wedge-icon svg,
+body.drag-over .wedge[data-sector="bottom"] .wedge-icon svg {
+  stroke: #fff;
 }
 
 .close-arrow {
@@ -292,15 +387,30 @@ body[data-expanded="true"] .menu-inner {
   transform: rotate(180deg);
 }
 
-/* Generic feedback line, near the inner control. */
+/* Feedback line near the inner control: spinner + text. Spinner shows only while
+   a file op is in flight (`.busy`); text carries the live "מתרגם… 3/12" / result. */
 .status {
   position: absolute;
   top: 62%;
   left: 80%;
   transform: translate(-50%, -50%);
+  display: flex;
+  align-items: center;
+  gap: 6px;
   font-size: clamp(10px, 1.2vh, 13px);
   color: #9fd9ec;
   text-shadow: 0 0 6px rgba(32, 241, 253, 0.4);
   white-space: nowrap;
   pointer-events: none;
 }
+.status-spinner {
+  display: none;
+  width: 12px;
+  height: 12px;
+  border: 2px solid rgba(32, 241, 253, 0.25);
+  border-top-color: var(--panel-edge-hot);
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+}
+.status.busy .status-spinner { display: inline-block; }
+@keyframes spin { to { transform: rotate(360deg); } }

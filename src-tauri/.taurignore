@@ -1,0 +1,9 @@
+# Files the `tauri dev` watcher should ignore (gitignore syntax). The Python PDF
+# sidecar creates these at build/run time; without ignoring them, each write
+# retriggers an endless rebuild → restart loop in `tauri dev`.
+__pycache__/
+*.pyc
+*.pyo
+# Python build virtualenv for the PDF sidecar (pip writes into it during builds).
+.build-venv/
+sidecar/.build-venv/

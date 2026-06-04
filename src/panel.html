@@ -8,7 +8,7 @@
 <body data-expanded="false">
   <!-- ════════════════ CLOSED: vertical tab + half-circle trigger ════════════════ -->
   <div id="closed" class="closed">
-    <button id="trigger" class="trigger" type="button" aria-label="פתח תפריט">
+    <button id="trigger" class="trigger" type="button" aria-label="פתח תפריט" title="Timluli — פתח תפריט (תמלול ותרגום)">
       <svg class="chevron" viewBox="0 0 128 128" aria-hidden="true">
         <path d="M78 32L42 64l36 32" />
       </svg>
@@ -73,7 +73,10 @@
             <path d="M102 101c-15 14-15 40 0 54M87 86c-26 26-26 68 0 94M154 101c15 14 15 40 0 54M169 86c26 26 26 68 0 94"/>
           </svg>
         </span>
-        <span class="wedge-label">תמלול לייב</span>
+        <span class="wedge-label">
+          <span class="label-idle">תמלול לייב</span>
+          <span class="label-live">מאזין…</span>
+        </span>
       </div>
 
       <!-- MIDDLE — file translation -->
@@ -112,8 +115,11 @@
         </svg>
       </span>
 
-      <!-- Generic status line (spinner-free feedback for file ops). -->
-      <div id="status" class="status"></div>
+      <!-- Live status for file ops: animated spinner + Hebrew text. -->
+      <div id="status" class="status">
+        <span class="status-spinner" aria-hidden="true"></span>
+        <span class="status-text"></span>
+      </div>
     </div>
    </div>
   </div>

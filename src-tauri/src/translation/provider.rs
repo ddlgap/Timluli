@@ -136,8 +136,47 @@ pub async fn fetch_models(
         })
         .collect();
 
-    models.sort_by(|a, b| a.id.cmp(&b.id));
+    // Quality-first ordering so the best model is the top dropdown choice (the
+    // "automatic" option still leads). Ties break alphabetically.
+    models.sort_by(|a, b| {
+        model_rank(&a.id)
+            .cmp(&model_rank(&b.id))
+            .then_with(|| a.id.cmp(&b.id))
+    });
     Ok(models)
+}
+
+/// Hebrew-translation quality rank for the settings dropdown (lower = better, shown
+/// first). Derived from a live benchmark of both providers' models. Unknown models
+/// sort in the middle (after proven-good, before known-poor for Hebrew).
+fn model_rank(id: &str) -> u8 {
+    let l = id.to_lowercase();
+    if l.contains("gpt-oss-120b") {
+        0
+    } else if l.contains("llama-4-scout") {
+        1
+    } else if l.contains("llama-3.3-70b") {
+        2
+    } else if l.contains("qwen-3-235b") {
+        3
+    } else if l.contains("gpt-oss-20b") {
+        4
+    } else if l.contains("llama-3.1-8b") || l.contains("llama3.1-8b") {
+        5
+    } else if l.contains("zai-glm") || l.contains("glm-4") {
+        6
+    } else if l.contains("qwen3-32b") || l.contains("qwen-3-32b") {
+        // reasoning leaks into the translation output — avoid for Hebrew
+        90
+    } else if l.contains("compound") {
+        // agentic system: slow, 413s on normal inputs
+        91
+    } else if l.contains("allam") {
+        // Arabic-focused: produces garbled/looping Hebrew
+        92
+    } else {
+        40
+    }
 }
 
 /// Heuristic: keep only text-generation chat models. The `/models` payload has no

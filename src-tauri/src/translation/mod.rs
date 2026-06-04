@@ -20,16 +20,22 @@ use tauri::{AppHandle, Emitter};
 
 pub use provider::ModelInfo;
 
-/// Default fallback order: **Cerebras first** (much faster — 2,000–3,000 tok/s,
-/// and on a paid key ~1,000 rpm / 1M tpm / no daily cap), then **Groq as backup**.
-/// If Cerebras's daily quota runs out mid-document, the failing segment re-walks
-/// the chain onto Groq and finishes there (see `run_batch` + `classify`).
+/// Default fallback order, **quality-first**. Ordered by a live Hebrew-translation
+/// benchmark of every Groq/Cerebras model (see the QA report): `gpt-oss-120b` is the
+/// most accurate, `llama-4-scout` is nearly as good and the fastest, then
+/// `llama-3.3-70b`. Groq leads because it is the reliably-available provider; the
+/// Cerebras entries (same top model — faster when that key is active) follow as
+/// backup and are skipped cheaply when the key is out of quota. `qwen3-32b`
+/// (leaks chain-of-thought into the output) and `allam-2-7b` (garbled Hebrew) are
+/// deliberately excluded. A failing model re-walks the chain (see `run_batch` +
+/// `classify`).
 const FALLBACK_CHAIN: &[(&str, &str)] = &[
-    ("cerebras", "qwen-3-235b-a22b-instruct-2507"),
-    ("cerebras", "gpt-oss-120b"),
-    ("cerebras", "llama3.1-8b"),
-    ("groq", "llama-3.3-70b-versatile"),
     ("groq", "openai/gpt-oss-120b"),
+    ("groq", "meta-llama/llama-4-scout-17b-16e-instruct"),
+    ("groq", "llama-3.3-70b-versatile"),
+    ("cerebras", "gpt-oss-120b"),
+    ("cerebras", "qwen-3-235b-a22b-instruct-2507"),
+    ("groq", "openai/gpt-oss-20b"),
     ("groq", "llama-3.1-8b-instant"),
 ];
 
@@ -420,11 +426,9 @@ pub(crate) async fn translate_units(
                 )
                 .await;
                 let done = completed.fetch_add(1, Ordering::Relaxed) + 1;
-                let _ = app.emit_to(
-                    "mic",
-                    "speakly://translate-progress",
-                    serde_json::json!({ "batch": done, "total": total_batches }),
-                );
+                let progress = serde_json::json!({ "batch": done, "total": total_batches });
+                let _ = app.emit_to("mic", "speakly://translate-progress", progress.clone());
+                let _ = app.emit_to("panel", "speakly://translate-progress", progress);
                 outcome
             }
         });
@@ -440,11 +444,9 @@ pub(crate) async fn translate_units(
         // Conservative free-tier path: strictly sequential with a fixed sleep
         // between batches to stay under the per-minute limits.
         for (bi, batch) in units.chunks(batch_size).enumerate() {
-            let _ = app.emit_to(
-                "mic",
-                "speakly://translate-progress",
-                serde_json::json!({ "batch": bi + 1, "total": total_batches }),
-            );
+            let progress = serde_json::json!({ "batch": bi + 1, "total": total_batches });
+            let _ = app.emit_to("mic", "speakly://translate-progress", progress.clone());
+            let _ = app.emit_to("panel", "speakly://translate-progress", progress);
             let pairs: Vec<(usize, &str)> = batch.iter().map(|(id, t)| (*id, t.as_str())).collect();
             let outcome = run_batch(
                 &client,

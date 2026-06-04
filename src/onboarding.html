@@ -6,49 +6,182 @@
   <link rel="stylesheet" href="./styles/onboarding.css" />
 </head>
 <body>
+  <p class="sr-only" id="stepAnnounce" aria-live="polite"></p>
+
+  <div class="titlebar" data-tauri-drag-region>
+    <div class="titlebar-controls">
+      <button type="button" class="tb-btn tb-close" id="tb-close" aria-label="סגור חלון" title="סגור">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+      </button>
+    </div>
+    <div class="titlebar-title">
+      <svg class="tb-logo" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 14a3 3 0 0 0 3-3V6a3 3 0 1 0-6 0v5a3 3 0 0 0 3 3zm5-3a5 5 0 0 1-10 0H5a7 7 0 0 0 6 6.92V21h2v-3.08A7 7 0 0 0 19 11h-2z" fill="currentColor"/></svg>
+      <span class="tb-name">Timluli</span>
+    </div>
+  </div>
+
   <div class="wizard">
-    <div class="steps-bar">
+    <div class="steps-bar" aria-hidden="true">
       <div class="step-dot active" id="dot1"></div>
       <div class="step-line"></div>
       <div class="step-dot" id="dot2"></div>
       <div class="step-line"></div>
       <div class="step-dot" id="dot3"></div>
+      <div class="step-line"></div>
+      <div class="step-dot" id="dot4"></div>
+      <div class="step-line"></div>
+      <div class="step-dot" id="dot5"></div>
     </div>
 
+    <!-- ── Step 1 — Welcome ── -->
     <section id="step1" class="step active">
-      <div class="step-icon">🎨</div>
-      <h1 class="title">ברוך הבא ל-Timluli</h1>
-      <p class="subtitle">בחר ערכת צבע למיקרופון המרחף</p>
-      <div class="theme-grid" id="themeGrid"></div>
+      <div class="step-icon step-icon-hero">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <rect x="9.5" y="2.5" width="5" height="10" rx="2.5"/>
+          <path d="M6.5 10.5a5.5 5.5 0 0 0 11 0"/>
+          <path d="M12 16v3.5M9 19.5h6"/>
+          <path d="M3.6 8.6c-.8 1.8-.8 4.2 0 6M20.4 8.6c.8 1.8.8 4.2 0 6"/>
+        </svg>
+      </div>
+      <h1 class="title" tabindex="-1">ברוך הבא ל-Timluli</h1>
+      <p class="subtitle">תמלול ותרגום בעברית — בכל תוכנה במחשב</p>
+
+      <div class="how-row">
+        <div class="how-item">
+          <span class="how-chip">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <rect x="2.5" y="6.5" width="19" height="11" rx="2.2"/>
+              <path d="M6 10h.01M9.5 10h.01M13 10h.01M16.5 10h.01M8 13.5h8"/>
+            </svg>
+          </span>
+          <span class="how-label">לחיצה</span>
+        </div>
+
+        <svg class="flow-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14.5 6l-6 6 6 6"/></svg>
+
+        <div class="how-item">
+          <span class="how-chip">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <rect x="9" y="2.5" width="6" height="11" rx="3"/>
+              <path d="M5.5 11a6.5 6.5 0 0 0 13 0"/>
+              <path d="M12 17.5v3M8.5 20.5h7"/>
+            </svg>
+          </span>
+          <span class="how-label">דיבור</span>
+        </div>
+
+        <svg class="flow-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14.5 6l-6 6 6 6"/></svg>
+
+        <div class="how-item">
+          <span class="how-chip">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M4 6.5h16M4 11h13M4 15.5h9"/>
+              <path d="M19 13.5v7M17 13.5h4M17 20.5h4"/>
+            </svg>
+          </span>
+          <span class="how-label">הטקסט מוקלד לבד</span>
+        </div>
+      </div>
+
+      <p class="hint">כמה שאלות קצרות ואתם מוכנים. אפשר לשנות הכול אחר כך בהגדרות.</p>
     </section>
 
+    <!-- ── Step 2 — Engine (privacy) ── -->
     <section id="step2" class="step">
+      <div class="step-icon">🌐</div>
+      <h1 class="title" tabindex="-1">איפה לתמלל את הדיבור שלכם?</h1>
+      <p class="subtitle">כשמדברים — איך ההקלטה הופכת לטקסט</p>
+      <div class="choice-grid" id="engineGroup" role="radiogroup" aria-label="מנוע תמלול">
+        <button type="button" class="choice-card selected" data-engine="web-speech" role="radio" aria-checked="true">
+          <span class="choice-head">
+            <span class="choice-radio"></span>
+            <span class="choice-title">דרך האינטרנט (גוגל)</span>
+            <span class="choice-tag">מומלץ</span>
+          </span>
+          <span class="choice-desc">המדויק והמהיר ביותר · צריך חיבור לאינטרנט · ההקלטה נשלחת לגוגל לתמלול בלבד ואינה נשמרת.</span>
+        </button>
+        <button type="button" class="choice-card" data-engine="whisper-local" role="radio" aria-checked="false">
+          <span class="choice-head">
+            <span class="choice-radio"></span>
+            <span class="choice-title">במחשב שלכם (בלי אינטרנט)</span>
+          </span>
+          <span class="choice-desc">פרטיות מלאה — שום דבר לא יוצא מהמחשב · עובד גם בלי רשת · הורדה חד-פעמית של כ-700MB.</span>
+          <span class="choice-note">⚡ המהירות תלויה בעוצמת המחשב — במחשב חזק התמלול מהיר, ובמחשב חלש הוא עשוי לקחת מספר עשרות שניות.</span>
+        </button>
+      </div>
+      <p class="hint dim" id="engineScope">ההגדרה הזו חלה על תמלול דיבור חי בלבד · תרגום מסמכים פועל בנפרד ואינו מושפע מכאן.</p>
+      <p class="note" id="engineNote" hidden>אפשר להתחיל עכשיו עם „דרך האינטרנט” ולעבור לתמלול במחשב בכל רגע — בהגדרות ‹ מנוע תמלול.</p>
+    </section>
+
+    <!-- ── Step 3 — Display mode (+ conditional theme) ── -->
+    <section id="step3" class="step">
+      <div class="step-icon">🖥️</div>
+      <h1 class="title" tabindex="-1">איך Timluli יופיע על המסך?</h1>
+      <p class="subtitle">אפשר לשנות בכל רגע בהגדרות</p>
+      <div class="choice-grid choice-grid-2" id="displayGroup" role="radiogroup" aria-label="מצב תצוגה">
+        <button type="button" class="choice-card selected" data-display="side-panel" role="radio" aria-checked="true">
+          <span class="preview preview-panel" aria-hidden="true"></span>
+          <span class="choice-head">
+            <span class="choice-radio"></span>
+            <span class="choice-title">תפריט צד</span>
+            <span class="choice-tag">מומלץ</span>
+          </span>
+          <span class="choice-desc">ידית דקה בקצה המסך, נפתחת ל-3 פעולות מהירות.</span>
+        </button>
+        <button type="button" class="choice-card" data-display="floating-mic" role="radio" aria-checked="false">
+          <span class="preview preview-mic" aria-hidden="true"></span>
+          <span class="choice-head">
+            <span class="choice-radio"></span>
+            <span class="choice-title">מיקרופון מרחף</span>
+          </span>
+          <span class="choice-desc">כדור שאפשר לגרור לכל מקום במסך.</span>
+        </button>
+        <button type="button" class="choice-card" data-display="hidden-mic" role="radio" aria-checked="false">
+          <span class="preview preview-hidden" aria-hidden="true"></span>
+          <span class="choice-head">
+            <span class="choice-radio"></span>
+            <span class="choice-title">מצב מוסתר</span>
+          </span>
+          <span class="choice-desc">חבוי; מופיע בלחיצה על קיצור ההפעלה (נקבע בשלב הבא) ונעלם בסיום.</span>
+        </button>
+      </div>
+
+      <div class="theme-reveal" id="themeReveal" hidden>
+        <span class="theme-reveal-label">צבע הכדור</span>
+        <div class="theme-grid" id="themeGrid" role="radiogroup" aria-label="ערכת צבע למיקרופון"></div>
+      </div>
+    </section>
+
+    <!-- ── Step 4 — Shortcut ── -->
+    <section id="step4" class="step">
       <div class="step-icon">⌨️</div>
-      <h1 class="title">קיצור מקלדת</h1>
-      <p class="subtitle">ברירת המחדל: הקשה כפולה על Ctrl להפעלה/עצירה</p>
-      <button class="shortcut-btn" id="shortcutBtn" type="button">Ctrl+Ctrl</button>
+      <h1 class="title" tabindex="-1">איך מפעילים?</h1>
+      <p class="subtitle">ברירת המחדל: הקשה כפולה על Ctrl</p>
+      <button class="shortcut-btn" id="shortcutBtn" type="button">הקשה כפולה על Ctrl</button>
       <p class="hint">אפשר להשאיר כך, או ללחוץ ולהקליט צירוף מקשים אחר</p>
       <p class="hint dim" id="shortcutStatus"></p>
     </section>
 
-    <section id="step3" class="step">
-      <div class="step-icon">🎙️</div>
-      <h1 class="title">מוכן לתמלל!</h1>
-      <div class="tips">
-        <div class="tip">
-          <span class="tip-num">1</span>
-          <span>לחץ על קיצור המקלדת שהגדרת כדי להתחיל הקלטה</span>
-        </div>
-        <div class="tip">
-          <span class="tip-num">2</span>
-          <span>לחץ-ימני על כדור המיקרופון לאפשרויות — השתקה, הגדרות, הסתרה</span>
-        </div>
-        <div class="tip">
-          <span class="tip-num">3</span>
-          <span>ניתן לגשת להגדרות המלאות בכל עת דרך תפריט מגש המערכת</span>
-        </div>
+    <!-- ── Step 5 — Ready + mic test + creator seal ── -->
+    <section id="step5" class="step">
+      <div class="step-icon">🎉</div>
+      <h1 class="title" tabindex="-1">מוכן לתמלל!</h1>
+
+      <div class="mic-test">
+        <button type="button" class="mic-test-btn" id="micTestBtn">🎤 בדוק מיקרופון</button>
+        <div class="mic-meter" id="micMeter" hidden aria-hidden="true"><div class="mic-meter-fill" id="micMeterFill"></div></div>
+        <p class="mic-test-status" id="micTestStatus" role="status" aria-live="polite"></p>
       </div>
+
+      <div class="tips" id="tips"></div>
+
       <button class="start-btn" id="startBtn" type="button">התחל שימוש</button>
+
+      <div class="creator-seal">
+        <img class="seal-logo" src="/logo3.png" alt="Daniel Daloya — The Future Is Now" />
+        <p class="seal-line">נבנה באהבה על־ידי דניאל דלויה</p>
+        <a class="seal-email" href="mailto:ddlgap@gmail.com">יש רעיון או משוב? ddlgap@gmail.com</a>
+      </div>
     </section>
 
     <div class="nav-row">

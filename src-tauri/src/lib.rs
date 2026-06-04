@@ -152,6 +152,9 @@ pub fn run() {
             }
 
             let side_panel = stg.display_mode == "side-panel";
+            // Hidden mode: no panel, mic invisible at rest — it appears only while
+            // recording (revealed by sync_side_panel_mic on the listening transition).
+            let hidden_mic = stg.display_mode == "hidden-mic";
 
             #[cfg(target_os = "windows")]
             {
@@ -164,12 +167,10 @@ pub fn run() {
                     let _ = mic.set_background_color(Some(tauri::webview::Color(0, 0, 0, 0)));
                     win_util::make_topmost_noactivate(&mic);
                 }
-                if !side_panel && stg.field_docking_enabled {
-                    // Floating-mic mode: classic opt-in field-docking (reposition
-                    // the always-visible mic; no auto-hide).
-                    // Side-panel mode runs no follow tracker — the mic stays hidden
-                    // and only appears (docked to the active field) while recording,
-                    // handled in commands::sync_side_panel_mic.
+                // The follow tracker runs only in floating-mic mode. Side-panel and
+                // hidden modes keep the mic hidden at rest and reveal it on demand,
+                // handled in commands::sync_side_panel_mic.
+                if !side_panel && !hidden_mic && stg.field_docking_enabled {
                     let handle =
                         field_tracker::FieldTrackerHandle::start(app.handle().clone(), false);
                     *app.state::<AppState>().field_tracker.lock() = Some(handle);
@@ -182,6 +183,12 @@ pub fn run() {
                     let _ = mic.hide();
                 }
                 panel::show_panel(app.handle());
+            } else if hidden_mic {
+                // Hidden mode: keep the mic hidden at rest (it appears only while
+                // recording); no panel.
+                if let Some(mic) = app.get_webview_window("mic") {
+                    let _ = mic.hide();
+                }
             } else if let Some(mic) = app.get_webview_window("mic") {
                 if let Some(pos) = stg.mic_position.as_ref() {
                     let _ = mic.set_position(tauri::Position::Physical(

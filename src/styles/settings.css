@@ -57,6 +57,16 @@ main {
   gap: 6px;
 }
 
+/* Mic-appearance settings group (size/opacity/theme/field-docking). Only relevant
+   in floating-mic mode — hidden in side-panel mode by settings.js. Mirrors the
+   section's own column layout + 14px gap so wrapping the fields doesn't change
+   their spacing. */
+.mic-only-settings {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
 .field-row {
   display: flex;
   align-items: center;

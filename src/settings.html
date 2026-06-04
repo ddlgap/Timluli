@@ -7,8 +7,23 @@
   <link rel="stylesheet" href="./styles/settings.css" />
 </head>
 <body>
+  <div class="titlebar" data-tauri-drag-region>
+    <div class="titlebar-controls">
+      <button type="button" class="tb-btn" id="tb-min" aria-label="מזער חלון" title="מזער">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 12h12" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+      </button>
+      <button type="button" class="tb-btn tb-close" id="tb-close" aria-label="סגור חלון" title="סגור">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+      </button>
+    </div>
+    <div class="titlebar-title">
+      <svg class="tb-logo" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 14a3 3 0 0 0 3-3V6a3 3 0 1 0-6 0v5a3 3 0 0 0 3 3zm5-3a5 5 0 0 1-10 0H5a7 7 0 0 0 6 6.92V21h2v-3.08A7 7 0 0 0 19 11h-2z" fill="currentColor"/></svg>
+      <span class="tb-name">Timluli</span>
+    </div>
+  </div>
+
   <header>
-    <h1>הגדרות Timluli</h1>
+    <h1>הגדרות</h1>
     <span class="muted" id="version">v1.8.0</span>
   </header>
 
@@ -79,16 +94,20 @@
 
     <section id="display" class="section" role="tabpanel" aria-labelledby="tab-display">
       <div class="field">
-        <label for="display_mode">
-          מצב תצוגה
-          <span class="badge-experimental">ניסיוני</span>
-        </label>
+        <label for="display_mode">מצב תצוגה</label>
         <select id="display_mode">
-          <option value="floating-mic">מיקרופון מרחף</option>
           <option value="side-panel">תפריט צד</option>
+          <option value="floating-mic">מיקרופון מרחף</option>
+          <option value="hidden-mic">מצב מוסתר</option>
         </select>
-        <small class="muted">"תפריט צד" מציג ידית נשלפת בקצה הימני של המסך עם שלושה כפתורים (תמלול לייב, תרגום קובץ, תמלול קובץ). המעבר חזרה למיקרופון נעשה כאן או דרך אייקון ה-tray.</small>
+        <small class="muted">"תפריט צד" (ברירת מחדל, מומלץ) מציג ידית נשלפת בקצה הימני של המסך שנפתחת לשלוש פעולות: תמלול לייב, תרגום קובץ ותמלול קובץ. "מיקרופון מרחף" מציג כדור שאפשר לגרור לכל מקום במסך. "מצב מוסתר" — המיקרופון חבוי כל הזמן ומופיע רק בזמן הקלטה (בלחיצה על קיצור המקלדת), ונעלם אוטומטית כשהתמלול מסתיים. אפשר להחליף מצב כאן בכל רגע; האפליקציה תמיד נגישה דרך האייקון של Timluli בשורת המשימות.</small>
       </div>
+
+      <!-- Mic-appearance settings only apply to the floating-mic display mode. In
+           side-panel mode the mic is hidden at rest, so changing size/opacity/theme
+           appears to "do nothing" — hide the whole group there to avoid that
+           confusion. Toggled by applyDisplayModeVisibility() in settings.js. -->
+      <div id="mic-only-settings" class="mic-only-settings">
       <div class="field">
         <label>גודל המיקרופון</label>
         <select id="mic_size">
@@ -147,6 +166,7 @@
         </div>
         <small class="muted">המיקרופון יקפוץ אוטומטית לצד שדה ההקלדה שתבחר ברוב התוכנות (Notepad, Office, Chrome/Edge, VS Code, Terminal). לא יעבוד ב-Java, משחקים, ותוכנות ללא תמיכה בנגישות. בזמן הכתבה המיקרופון מוקפא במקומו.</small>
       </div>
+      </div><!-- /mic-only-settings -->
     </section>
 
     <section id="behavior" class="section" role="tabpanel" aria-labelledby="tab-behavior">

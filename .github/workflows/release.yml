@@ -23,6 +23,13 @@ permissions:
 jobs:
   release:
     runs-on: windows-latest
+    # The GPU release links whisper.cpp's Vulkan backend. Build whisper.cpp with
+    # the Ninja CMake generator: MSBuild's FileTracker writes very deep .tlog
+    # paths for the ggml-vulkan shader build that overrun Windows MAX_PATH
+    # (error FTK1011). Ninja doesn't create those, so the default target dir works
+    # and tauri-action still finds the bundle. See docs/gpu-acceleration.md.
+    env:
+      CMAKE_GENERATOR: Ninja
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -45,6 +52,22 @@ jobs:
       # install LLVM and point LIBCLANG_PATH at it.
       - name: Install LLVM
         run: choco install llvm --yes --no-progress
+
+      # GPU build prereq: the Vulkan SDK provides glslc, which whisper.cpp's
+      # ggml-vulkan backend uses to compile its SPIR-V shaders. Export VULKAN_SDK
+      # and put glslc on PATH for the build step (via $GITHUB_ENV/$GITHUB_PATH so
+      # later steps inherit them). If the choco package is stale, swap this for a
+      # dedicated action (e.g. jakoch/install-vulkan-sdk-action) or the LunarG
+      # installer — see docs/gpu-acceleration.md.
+      - name: Install Vulkan SDK
+        shell: pwsh
+        run: |
+          choco install vulkan-sdk --yes --no-progress
+          $sdk = (Get-ChildItem 'C:\VulkanSDK' -Directory -ErrorAction SilentlyContinue | Sort-Object Name -Descending | Select-Object -First 1).FullName
+          if (-not $sdk) { throw 'Vulkan SDK not found under C:\VulkanSDK after install' }
+          "VULKAN_SDK=$sdk" | Out-File -FilePath $env:GITHUB_ENV  -Append -Encoding utf8
+          "$sdk\Bin"        | Out-File -FilePath $env:GITHUB_PATH -Append -Encoding utf8
+          Write-Output "Vulkan SDK: $sdk"
 
       - name: Install frontend dependencies
         run: npm ci
@@ -69,6 +92,55 @@ jobs:
           if (-not (Test-Path $p)) { throw "Sidecar missing: $p" }
           "Sidecar OK: {0:N1} MB" -f ((Get-Item $p).Length / 1MB)
 
+      # Ninja drives the C/C++ compiler directly, so cl.exe and the MSVC headers/
+      # libs must be on the environment. This exports the x64 dev env to the
+      # build step below.
+      - name: Set up MSVC environment (for the Ninja Vulkan build)
+        uses: ilammy/msvc-dev-cmd@v1
+
+      # whisper.cpp/ggml (C++) is statically linked into timluli.exe, so the exe
+      # depends on the Visual C++ runtime (MSVCP140.dll & friends). Fresh user
+      # machines often lack it → the exe fails to start with
+      # "MSVCP140.dll was not found". We deploy the runtime APP-LOCALLY: the DLLs
+      # are bundled next to the exe via bundle.resources ("vcruntime/*.dll" → root).
+      # Refresh them here from THIS runner's redist so they match the toolset that
+      # compiled the binary (the committed vcruntime/ is only a local-build
+      # fallback). Must run before the bundle step below. See CLAUDE.md.
+      - name: Bundle Visual C++ runtime (app-local) matching the build toolset
+        shell: pwsh
+        run: |
+          $dest = "src-tauri/vcruntime"
+          New-Item -ItemType Directory -Force -Path $dest | Out-Null
+          $src = $null
+          if ($env:VCToolsRedistDir) {
+            $c = Join-Path $env:VCToolsRedistDir "x64\Microsoft.VC143.CRT"
+            if (Test-Path $c) { $src = $c }
+          }
+          if (-not $src) {
+            $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
+            if (Test-Path $vswhere) {
+              $inst = & $vswhere -latest -products '*' -property installationPath
+              if ($inst) {
+                $src = Get-ChildItem (Join-Path $inst 'VC\Redist\MSVC') -Directory -ErrorAction SilentlyContinue |
+                       Sort-Object Name -Descending |
+                       ForEach-Object { Join-Path $_.FullName 'x64\Microsoft.VC143.CRT' } |
+                       Where-Object { Test-Path $_ } | Select-Object -First 1
+              }
+            }
+          }
+          if ($src) {
+            Write-Output "Copying VC++ runtime from: $src"
+            Copy-Item (Join-Path $src '*.dll') $dest -Force
+          } else {
+            Write-Warning 'VC143 redist folder not found; falling back to System32 copies'
+            foreach ($d in 'MSVCP140.dll','MSVCP140_1.dll','MSVCP140_2.dll','MSVCP140_atomic_wait.dll','MSVCP140_codecvt_ids.dll','VCRUNTIME140.dll','VCRUNTIME140_1.dll','CONCRT140.dll','vcruntime140_threads.dll') {
+              $p = Join-Path $env:WINDIR "System32\$d"
+              if (Test-Path $p) { Copy-Item $p $dest -Force }
+            }
+          }
+          if (-not (Test-Path (Join-Path $dest 'MSVCP140.dll'))) { throw "MSVCP140.dll missing from $dest after copy" }
+          Get-ChildItem $dest -Filter *.dll | ForEach-Object { '{0,-32} {1,8:N0} bytes' -f $_.Name, $_.Length }
+
       - name: Build, sign and publish
         uses: tauri-apps/tauri-action@v0
         env:
@@ -77,8 +149,13 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
-          tagName: ${{ github.ref_name }}
-          releaseName: "Timluli ${{ github.ref_name }}"
+          # Build the local Whisper engine with the Vulkan GPU backend.
+          args: --features gpu
+          # Only publish a release on a v* tag push. On a manual workflow_dispatch
+          # these resolve to empty, so tauri-action just BUILDS (lets us test the
+          # GPU build without creating a junk release).
+          tagName: ${{ startsWith(github.ref, 'refs/tags/v') && github.ref_name || '' }}
+          releaseName: ${{ startsWith(github.ref, 'refs/tags/v') && format('Timluli {0}', github.ref_name) || '' }}
           releaseBody: "ראה את השינויים למטה. העדכון יותקן אוטומטית למשתמשים קיימים."
           releaseDraft: false
           prerelease: false

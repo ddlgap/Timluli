@@ -7,8 +7,8 @@
 **Timluli** הוא אפליקציית Tauri שמאפשרת תמלול קולי **בכל אפליקציה ובכל שדה טקסט בווינדוס** — מהטרמינל ועד Word, מ-VS Code ועד WhatsApp Web. הטקסט מוזרק כקלט מקלדת אמיתי באמצעות `SendInput`.
 
 האפליקציה תומכת בשני מנועי תמלול:
-- **Web Speech (מקוון)** — Google Web Speech API דרך WebView2, ללא התקנה נוספת
-- **Whisper Local (אופליין)** — מנוע Whisper.cpp מקומי עם מודל עברית של [ivrit-ai](https://huggingface.co/ivrit-ai), ללא שליחת אודיו לשרת
+- **Web Speech (מקוון)** — Google Web Speech API דרך מופע **Google Chrome נסתר** שהאפליקציה מפעילה ברקע (דורש Chrome מותקן)
+- **Whisper Local (אופליין)** — מנוע Whisper.cpp מקומי עם מודל עברית של [ivrit-ai](https://huggingface.co/ivrit-ai), ללא שליחת אודיו לשרת, עם **האצת GPU אופציונלית (Vulkan)**
 
 בנוסף, Timluli כולל **תרגום מסמכים** — גרור קובץ כתוביות, טקסט או מסמך (DOCX/DOC/PDF) על אייקון המיקרופון, והעותק המתורגם יישמר באותה תיקייה. התרגום מתבצע דרך Groq/Cerebras (מנועי ענן תואמי-OpenAI) עם שרשרת fallback אוטומטית ופלט RTL לעברית. **תרגום PDF לעברית שומר על הפריסה המקורית** — מיקום הטקסט, טבלאות, לוגואים ומשוואות — ומפיק PDF עברי שנראה כמו המקור.
 
@@ -24,8 +24,10 @@
 - 🔄 מצב Toggle (לחץ להתחיל / לחץ לסיים) — Push-to-Talk קיים בהגדרות אך טרם ממומש
 - 🔊 תמיכה בעברית (`he-IL`) ובאנגלית (`en-US`)
 - 📋 הזרקת טקסט יוניקוד מלאה דרך `SendInput` עם Clipboard fallback לטקסטים ארוכים
-- 🌐 מנוע מקוון: Google Web Speech API (ללא התקנה)
+- ⚡ **תמלול לייב בזרימה לשדה** — במנוע המקוון המילים מוקלדות לשדה היעד *תוך כדי הדיבור* (append-only, בלי דריסת טקסט קיים), לא רק בסיום המשפט; מעל המיקרופון מוצגת **בועת תצוגה חיה** מעוצבת (ניאומורפית, רקע לבן/טקסט שחור)
+- 🌐 מנוע מקוון: Google Web Speech API דרך Chrome נסתר (דורש Google Chrome מותקן)
 - 💾 מנוע אופליין: Whisper Local — הורדה חד-פעמית (~1.5 GB), עובד ללא אינטרנט
+- ⚡ **האצת GPU (Vulkan)** לתמלול Whisper המקומי — backend אופציונלי שמאיץ את ה-inference על כרטיסי מסך נתמכים
 - 🎨 ערכות עיצוב למיקרופון (graphite, כחול, אדום, ירוק, שקיעה, אוקיינוס, סגול, פלזמה, זוהר הצפון)
 - 📄 תרגום מסמכים בגרירה — כתוביות (SRT, VTT, SBV), טקסט (TXT, MD), ומסמכים (DOCX, DOC, PDF) דרך Groq/Cerebras, עם שמירת חותמות זמן ומבנה ופלט RTL לעברית
 - 🧩 תרגום PDF→PDF לעברית עם **שימור פריסה מלא** (טקסט, טבלאות, לוגואים, משוואות) — דרך מנוע PyMuPDF נלווה
@@ -57,9 +59,9 @@
 
 ### מנוע Web Speech (מקוון)
 
-Timluli משתמש ב-Web Speech API המובנה ב-WebView2 (מנוע Chromium של Microsoft Edge) לזיהוי דיבור.
+Timluli משתמש ב-Web Speech API של Google לזיהוי דיבור, דרך מופע **Google Chrome נסתר** שהאפליקציה מפעילה ברקע (Google מגישה את ה-Web Speech החינמי רק ל-Chrome אמיתי — WebView2 מקבל שגיאות `network`).
 
-- **האודיו נשלח לשירות חיצוני** — Web Speech API ב-WebView2 מעביר את האודיו לשירות Google Speech. נדרש חיבור אינטרנט פעיל.
+- **האודיו נשלח לשירות חיצוני** — Chrome מעביר את האודיו לשירות Google Speech. נדרש חיבור אינטרנט פעיל ו-Google Chrome מותקן.
 - **Timluli עצמה אינה שומרת אודיו, תמלולים, או היסטוריה** — לא בדיסק המקומי ולא בענן.
 - **קובץ ההגדרות** (`%APPDATA%\studio.oliel.timluli\settings.json`) מכיל אך ורק העדפות משתמש.
 - **מדיניות הפרטיות של Google** חלה על האודיו שנשלח, ואינה בשליטת Timluli.
@@ -122,6 +124,7 @@ Timluli עושה שימוש ב-Web Speech API של הדפדפן באמצעות W
 
 - **מערכת הפעלה:** Windows 10/11 (64-bit)
 - **WebView2 Runtime** — מובנה ב-Windows 11; ב-Windows 10 מותקן אוטומטית עם ה-installer
+- **Google Chrome** — נדרש למנוע המקוון (Web Speech); מנוע Whisper Local אינו זקוק לו
 - **חיבור אינטרנט** — נדרש למנוע Web Speech; מנוע Whisper Local עובד אופליין לאחר הורדת המודל
 - **מיקרופון** מחובר ופועל
 
@@ -141,9 +144,11 @@ Timluli בנוי כתהליך Tauri יחיד (Rust) עם חמישה חלונות
 
 - **`mic`** — מיקרופון מרחף, frameless, transparent, תמיד מעל (NOACTIVATE — לא גונב פוקוס)
 - **`panel`** — תפריט הצד הרדיאלי (מצב "תפריט צד"), frameless, transparent, NOACTIVATE, צמוד לקצה הימני
-- **`speech`** — חלון נסתר המריץ את `webkitSpeechRecognition` (מנוע Google) ברקע
+- **`speech`** — חלון נסתר ללכידת אודיו מקומית (מנוע Whisper) — `getUserMedia` + AudioWorklet
 - **`settings`** — חלון הגדרות עם 6 טאבים, נפתח לפי דרישה
 - **`onboarding`** — אשף הגדרה ראשוני, מוצג בהפעלה הראשונה
+
+בנוסף, במנוע המקוון רץ **Chrome sidecar** — מופע Google Chrome נסתר (off-screen, פרופיל מבודד) שמריץ את `webkitSpeechRecognition` ומתקשר עם ה-Rust דרך שרת HTTP מקומי. אינו חלון WebView2 של האפליקציה.
 
 תקשורת פנימית: ~40 Tauri commands ו-events בין ה-frontend (JS) ל-backend (Rust). שכבת Win32 משתמשת ב-`SendInput`, `AttachThreadInput`, `SetForegroundWindow`, ו-`WS_EX_NOACTIVATE` לניהול פוקוס והזרקת טקסט, וב-DPAPI (`CryptProtectData`) לאחסון מוצפן של מפתחות התרגום. מנוע התרגום (`translation/`) מבצע את הקריאות ל-Groq/Cerebras דרך `reqwest`.
 
@@ -160,7 +165,7 @@ Timluli בנוי כתהליך Tauri יחיד (Rust) עם חמישה חלונות
     ┌──────────┴───────────┐
    כן                      לא (whisper-local)
     ↓                       ↓
-[Hidden WebView2]       [הקלטת אודיו]
+[Chrome נסתר (sidecar)] [הקלטת אודיו]
 webkitSpeechRecognition  whisper-rs (inference מקומי)
 → Google STT             ↓
     └──────────┬──────────┘
@@ -219,6 +224,8 @@ npm run tauri:build                    # בנייה ל-production
 - ✅ **תמלול מקומי (offline)** — ממומש עם whisper.cpp + whisper-rs + מודל ivrit-ai
 - ✅ **תרגום מסמכים** — גרירת כתוביות/טקסט/DOCX/DOC/PDF על המיקרופון, תרגום דרך Groq/Cerebras עם fallback ופלט RTL לעברית
 - ✅ **שימור פריסת PDF** — תרגום PDF→PDF לעברית עם שימור פריסה מלא (טקסט, טבלאות, לוגואים, משוואות) דרך מנוע PyMuPDF נלווה
+- ✅ **האצת GPU (Vulkan)** — backend Vulkan ל-whisper.cpp לתמלול מקומי מהיר יותר (נבחר בזמן build)
+- ✅ **תמלול לייב בזרימה לשדה** — הזרקת מילים לשדה היעד תוך כדי דיבור (append-only) במנוע המקוון
 - 🔲 **Voice Activity Detection (VAD)** — זיהוי דיבור מקומי (silero-vad) לשיפור חיסכון סוללה ודיוק
 - 🔲 **Push-to-Talk** — מימוש מצב "לחץ-והחזק"
 - 🔲 **גיבוי ושחזור לוח הגזרים** — שמירה ושחזור תוכן ה-Clipboard סביב פעולות הזרקה
@@ -238,7 +245,8 @@ npm run tauri:build                    # בנייה ל-production
 - [ivrit-ai](https://huggingface.co/ivrit-ai) — מודל Whisper לעברית
 - [whisper.cpp](https://github.com/ggerganov/whisper.cpp) — מנוע inference מקומי
 - [whisper-rs](https://github.com/tazz4843/whisper-rs) — ממשק Rust ל-whisper.cpp
-- [WebView2](https://developer.microsoft.com/microsoft-edge/webview2/) — Google Web Speech API
+- [WebView2](https://developer.microsoft.com/microsoft-edge/webview2/) — runtime להצגת חלונות ה-UI
+- [Google Chrome](https://www.google.com/chrome/) — מריץ את מנוע Web Speech המקוון (sidecar נסתר)
 - [Groq](https://groq.com) · [Cerebras](https://cerebras.ai) — מנועי תרגום מסמכים (endpoints תואמי-OpenAI)
 
 ---

@@ -141,6 +141,20 @@ jobs:
           if (-not (Test-Path (Join-Path $dest 'MSVCP140.dll'))) { throw "MSVCP140.dll missing from $dest after copy" }
           Get-ChildItem $dest -Filter *.dll | ForEach-Object { '{0,-32} {1,8:N0} bytes' -f $_.Name, $_.Length }
 
+      # ggml wraps cl.exe with ccache when it's on PATH (Ninja build), but
+      # ccache + MSVC breaks the vulkan-shaders-gen sub-project's CMake compiler
+      # check ("fatal error C1083: Cannot open compiler generated file: ''").
+      # Neutralise ccache so the build uses plain cl.exe.
+      - name: Disable ccache (incompatible with ggml-vulkan's MSVC compiler check)
+        shell: pwsh
+        run: |
+          $found = $false
+          Get-Command ccache -All -ErrorAction SilentlyContinue | ForEach-Object {
+            try { Rename-Item -LiteralPath $_.Source "$($_.Source).disabled" -Force; Write-Output "disabled: $($_.Source)"; $found = $true }
+            catch { Write-Output "could not rename $($_.Source): $_" }
+          }
+          if (-not $found) { Write-Output "no ccache on PATH (nothing to do)" }
+
       - name: Build, sign and publish
         uses: tauri-apps/tauri-action@v0
         env:

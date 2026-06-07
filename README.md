@@ -269,7 +269,7 @@ npm run tauri:build                    # בנייה ל-production
 
 ## קרדיט
 
-Daniel Oliel / Oliel Studio · 2026
+דניאל דלויה / Oliel Studio · 2026
 
 ## License
 

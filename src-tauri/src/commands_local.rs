@@ -270,6 +270,14 @@ pub async fn transcribe_local(
         return Ok(());
     }
 
+    // Hebrew auto-punctuation (no-op if disabled / model not loaded). The local
+    // engine yields the whole utterance at once, so this is the clean interception
+    // point; ensure_terminal=true because each finalized utterance is a full segment.
+    let newlines = crate::settings::load_or_init(&app)
+        .map(|s| s.punctuation_newline)
+        .unwrap_or(false);
+    let text = crate::commands_punct::punctuate_if_ready(state.inner(), text, true, newlines).await;
+
     #[cfg(target_os = "windows")]
     {
         if let Some(hwnd) = hwnd_opt {

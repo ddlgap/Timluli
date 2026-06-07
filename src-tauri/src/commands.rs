@@ -64,10 +64,19 @@ pub(crate) fn sync_side_panel_mic(app: &AppHandle, state: &str) {
                     const PAD: i32 = 8;
                     let d = (40.0 * mic.scale_factor().unwrap_or(1.0)).round() as i32;
                     crate::field_tracker::focused_field_rect(app)
-                        .map(|(top, right)| (right + PAD - d, top - d))
+                        .map(|r| (r.right + PAD - d, r.top - d))
+                        .or_else(|| crate::panel::default_mic_pos(app))
+                } else if stg.field_docking_enabled {
+                    // Hidden mode + field-docking on: dock centered above the focused
+                    // field (same placement as the floating-mic tracker), so it honors
+                    // "attach the mic to the active field" like the other modes. Fall
+                    // back to the saved floating position when no editable field is found.
+                    crate::field_tracker::focused_field_rect(app)
+                        .map(|r| crate::field_tracker::dock_position(&mic, r))
+                        .or_else(|| stg.mic_position.map(|p| (p.x, p.y)))
                         .or_else(|| crate::panel::default_mic_pos(app))
                 } else {
-                    // Hidden mode: appear at the user's saved floating position.
+                    // Hidden mode, docking off: appear at the user's saved floating position.
                     stg.mic_position
                         .map(|p| (p.x, p.y))
                         .or_else(|| crate::panel::default_mic_pos(app))
@@ -508,10 +517,12 @@ pub fn set_display_mode(app: AppHandle, state: State<AppState>, mode: String) ->
         crate::panel::show_panel(&app);
         // No follow tracker in side-panel mode: the mic is hidden at rest and only
         // appears (docked to the active field) while recording — see
-        // sync_side_panel_mic. Drop any floating-mic field-docking tracker.
+        // sync_side_panel_mic. Drop any floating-mic field-docking tracker and the
+        // topmost keeper (the mic is hidden at rest; nothing to keep on top).
         #[cfg(target_os = "windows")]
         {
             *state.field_tracker.lock() = None;
+            *state.topmost_keeper.lock() = None;
         }
     } else if mode == "hidden-mic" {
         // Hidden mode: no panel, mic hidden at rest. It appears only while recording
@@ -523,6 +534,7 @@ pub fn set_display_mode(app: AppHandle, state: State<AppState>, mode: String) ->
         #[cfg(target_os = "windows")]
         {
             *state.field_tracker.lock() = None;
+            *state.topmost_keeper.lock() = None;
         }
     } else {
         crate::panel::hide_panel(&app);
@@ -540,6 +552,11 @@ pub fn set_display_mode(app: AppHandle, state: State<AppState>, mode: String) ->
                 *state.field_tracker.lock() =
                     Some(crate::field_tracker::FieldTrackerHandle::start(app.clone(), false));
             }
+            // Floating-mic is the only always-visible mode: keep it reliably on top
+            // by re-asserting topmost periodically. Overwriting drops any previous
+            // keeper (clean shutdown via Drop).
+            *state.topmost_keeper.lock() =
+                Some(crate::topmost_keeper::TopmostKeeperHandle::start(app.clone()));
         }
     }
 

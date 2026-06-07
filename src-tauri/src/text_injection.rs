@@ -31,7 +31,9 @@ pub fn inject(target_hwnd: isize, text: &str) -> Result<(), String> {
         sleep(Duration::from_millis(10));
     }
 
-    if text.chars().count() > 30 {
+    // Newline-containing text always goes via the clipboard: pasting a literal line
+    // break inserts a new line WITHOUT "sending" in chat apps (unlike pressing Enter).
+    if text.chars().count() > 30 || text.contains('\n') {
         inject_via_paste(text)?;
     } else {
         inject_unicode_string(text)?;
@@ -92,7 +94,9 @@ fn inject_via_paste(text: &str) -> Result<(), String> {
     use windows::Win32::System::Memory::{GlobalAlloc, GlobalLock, GlobalUnlock, GMEM_MOVEABLE};
     use windows::Win32::System::Ole::CF_UNICODETEXT;
 
-    let mut units: Vec<u16> = text.encode_utf16().collect();
+    // Windows clipboard expects CRLF line breaks; our punctuation layer emits "\n".
+    let normalized = text.replace("\r\n", "\n").replace('\n', "\r\n");
+    let mut units: Vec<u16> = normalized.encode_utf16().collect();
     units.push(0); // null terminator
     let bytes = units.len() * std::mem::size_of::<u16>();
 

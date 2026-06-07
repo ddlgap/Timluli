@@ -136,6 +136,28 @@ jobs:
           if (-not (Test-Path (Join-Path $dest 'MSVCP140.dll'))) { throw "MSVCP140.dll missing from $dest after copy" }
           Get-ChildItem $dest -Filter *.dll | ForEach-Object { '{0,-32} {1,8:N0} bytes' -f $_.Name, $_.Length }
 
+      # The Hebrew auto-punctuation engine loads onnxruntime.dll at runtime (the `ort`
+      # crate, load-dynamic — NOT statically linked). Bundle it APP-LOCALLY next to the
+      # exe via bundle.resources ("onnxruntime/*.dll" → root). It MUST be 1.22.x to match
+      # ort rc.10. The committed src-tauri/onnxruntime/onnxruntime.dll is a local-build
+      # fallback; refresh it from the official release so the shipped DLL is a clean build.
+      - name: Bundle ONNX Runtime (app-local) for punctuation
+        shell: pwsh
+        run: |
+          $ver = "1.22.1"
+          $dest = "src-tauri/onnxruntime"
+          New-Item -ItemType Directory -Force -Path $dest | Out-Null
+          $zip = Join-Path $env:RUNNER_TEMP 'ort.zip'
+          $url = "https://github.com/microsoft/onnxruntime/releases/download/v$ver/onnxruntime-win-x64-$ver.zip"
+          Write-Output "Downloading $url"
+          Invoke-WebRequest -Uri $url -OutFile $zip
+          $ex = Join-Path $env:RUNNER_TEMP 'ort'
+          Expand-Archive -Path $zip -DestinationPath $ex -Force
+          $dll = Get-ChildItem $ex -Recurse -Filter onnxruntime.dll | Select-Object -First 1
+          if (-not $dll) { throw "onnxruntime.dll not found in the release zip" }
+          Copy-Item $dll.FullName (Join-Path $dest 'onnxruntime.dll') -Force
+          '{0,-20} {1,12:N0} bytes' -f 'onnxruntime.dll', (Get-Item (Join-Path $dest 'onnxruntime.dll')).Length
+
       - name: Build, sign and publish
         uses: tauri-apps/tauri-action@v0
         env:

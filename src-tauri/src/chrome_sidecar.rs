@@ -156,6 +156,30 @@ fn read_body(req: &mut tiny_http::Request) -> String {
     s
 }
 
+/// Punctuate a finalized segment if the engine is loaded; else return it unchanged.
+/// Runs synchronously on this HTTP thread (~26 ms, infrequent — only on `/final`).
+/// `newlines` = start a new line after each sentence.
+#[cfg(target_os = "windows")]
+fn maybe_punctuate(app: &AppHandle, text: &str, newlines: bool) -> String {
+    let handle = app
+        .state::<AppState>()
+        .punct_engine
+        .lock()
+        .as_ref()
+        .map(std::sync::Arc::clone);
+    match handle {
+        Some(h) => {
+            let out = h.punctuate_blocking(text, true);
+            if newlines {
+                crate::commands_punct::to_line_per_sentence(&out)
+            } else {
+                out
+            }
+        }
+        None => text.to_string(),
+    }
+}
+
 fn inject_final(app: &AppHandle, shared: &SidecarShared, text: &str) {
     if text.trim().is_empty() {
         // Still close the segment so the next one streams fresh.
@@ -169,11 +193,16 @@ fn inject_final(app: &AppHandle, shared: &SidecarShared, text: &str) {
         if let Some(h) = hwnd {
             let mut committed = shared.committed.lock();
             let result = if committed.is_empty() {
-                // Nothing streamed for this segment (short phrase, or the browser
-                // finalized in one shot): inject the whole thing via the normal
-                // path (clipboard-capable for long text) — identical to the old
-                // behavior, no regression.
-                crate::text_injection::inject(h, text)
+                // Nothing streamed for this segment (short phrase, the browser
+                // finalized in one shot, or auto-punctuation suppressed streaming):
+                // inject the whole thing via the normal path (clipboard-capable for
+                // long text). When punctuation is active this is where the full
+                // sentence gets its marks before injection.
+                let newlines = crate::settings::load_or_init(app)
+                    .map(|s| s.punctuation_newline)
+                    .unwrap_or(false);
+                let punctuated = maybe_punctuate(app, text, newlines);
+                crate::text_injection::inject(h, &punctuated)
             } else {
                 // We already streamed stabilized words; append only what the
                 // final adds beyond what's committed, word-aligned so a revised
@@ -237,6 +266,13 @@ fn stream_stable(app: &AppHandle, shared: &SidecarShared, interim: &str) {
 
     #[cfg(target_os = "windows")]
     {
+        // When auto-punctuation is active, don't stream words into the field live —
+        // the whole sentence is punctuated and injected at /final instead (the mic
+        // bubble still shows the live interim). Leaving `committed` empty routes
+        // /final through the whole-segment punctuated path in inject_final.
+        if app.state::<AppState>().punct_engine.lock().is_some() {
+            return;
+        }
         let mut committed = shared.committed.lock();
         if !stable.starts_with(committed.as_str()) {
             // A previously-committed word got revised. Stay append-only: don't

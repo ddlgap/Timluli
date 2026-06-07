@@ -6,8 +6,10 @@ use tauri::Manager;
 mod chrome_sidecar;
 mod commands;
 mod commands_local;
+mod commands_punct;
 mod models;
 mod panel;
+mod punctuation;
 mod secrets;
 mod settings;
 mod shortcut;
@@ -19,6 +21,8 @@ mod whisper_local;
 
 #[cfg(target_os = "windows")]
 mod field_tracker;
+#[cfg(target_os = "windows")]
+mod topmost_keeper;
 #[cfg(target_os = "windows")]
 mod text_injection;
 #[cfg(target_os = "windows")]
@@ -33,6 +37,9 @@ pub struct AppState {
     /// Loaded local whisper engine (None until user loads a model).
     /// Arc allows cloning the handle out of the Mutex before awaiting.
     pub local_engine: Mutex<Option<Arc<whisper_local::LocalEngineHandle>>>,
+    /// Loaded Hebrew punctuation engine (None until enabled + model present).
+    /// Arc allows cloning the handle out of the Mutex before awaiting.
+    pub punct_engine: Mutex<Option<Arc<punctuation::PunctuationEngineHandle>>>,
     /// Active download cancellation tokens, keyed by model id.
     pub active_downloads: Mutex<HashMap<String, tokio_util::sync::CancellationToken>>,
     /// Shared state driving the hidden Chrome speech sidecar (online engine).
@@ -42,6 +49,10 @@ pub struct AppState {
     /// Experimental dynamic field-docking tracker. Some when enabled.
     #[cfg(target_os = "windows")]
     pub field_tracker: Mutex<Option<field_tracker::FieldTrackerHandle>>,
+    /// Periodic topmost re-assertion for the floating mic. Some only in
+    /// floating-mic mode (started/stopped with the display mode).
+    #[cfg(target_os = "windows")]
+    pub topmost_keeper: Mutex<Option<topmost_keeper::TopmostKeeperHandle>>,
 }
 
 impl AppState {
@@ -51,11 +62,14 @@ impl AppState {
             is_listening: Mutex::new(false),
             muted: Mutex::new(false),
             local_engine: Mutex::new(None),
+            punct_engine: Mutex::new(None),
             active_downloads: Mutex::new(HashMap::new()),
             sidecar: Arc::new(chrome_sidecar::SidecarShared::new()),
             chrome_child: Mutex::new(None),
             #[cfg(target_os = "windows")]
             field_tracker: Mutex::new(None),
+            #[cfg(target_os = "windows")]
+            topmost_keeper: Mutex::new(None),
         }
     }
 }
@@ -122,6 +136,11 @@ pub fn run() {
             commands_local::load_local_model,
             commands_local::unload_local_model,
             commands_local::transcribe_local,
+            // ── Hebrew auto-punctuation commands ──
+            commands_punct::get_punctuation_status,
+            commands_punct::set_punctuation_enabled,
+            commands_punct::download_punctuation_model,
+            commands_punct::cancel_punctuation_download,
         ])
         .setup(|app| {
             let mut stg = settings::load_or_init(app.handle())
@@ -162,6 +181,15 @@ pub fn run() {
                 }
             }
 
+            // Auto-load the Hebrew punctuation model if enabled + installed, so the
+            // first dictation has no warm-up.
+            if stg.punctuation_enabled {
+                let handle = app.handle().clone();
+                tauri::async_runtime::spawn(async move {
+                    commands_punct::autoload_punctuation(&handle).await;
+                });
+            }
+
             let side_panel = stg.display_mode == "side-panel";
             // Hidden mode: no panel, mic invisible at rest — it appears only while
             // recording (revealed by sync_side_panel_mic on the listening transition).
@@ -185,6 +213,13 @@ pub fn run() {
                     let handle =
                         field_tracker::FieldTrackerHandle::start(app.handle().clone(), false);
                     *app.state::<AppState>().field_tracker.lock() = Some(handle);
+                }
+                // Floating-mic mode only: keep the always-visible mic reliably on
+                // top by periodically re-asserting topmost (Windows demotes it out
+                // of the topmost band when other apps go fullscreen, etc.).
+                if !side_panel && !hidden_mic {
+                    let keeper = topmost_keeper::TopmostKeeperHandle::start(app.handle().clone());
+                    *app.state::<AppState>().topmost_keeper.lock() = Some(keeper);
                 }
             }
 

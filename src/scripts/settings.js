@@ -62,7 +62,7 @@ function setDirty(v) {
 }
 
 // Controls that persist on change (so they must NOT mark the form dirty).
-const INSTANT_IDS = new Set(['display_mode']);
+const INSTANT_IDS = new Set(['display_mode', 'punctuation_enabled', 'punctuation_newline']);
 const INSTANT_NAMES = new Set(['engine_id', 'audio_file_engine']);
 document.querySelector('main')?.addEventListener('change', (e) => {
   const t = e.target;
@@ -242,6 +242,7 @@ async function loadSettings() {
   // mute_during_fullscreen / mute_during_calls are disabled (feature not live yet) —
   // they stay visibly off rather than showing a stored value behind a dead control.
   setToggle('field_docking_enabled', stg.field_docking_enabled);
+  setToggle('punctuation_newline', stg.punctuation_newline);
   const sc = stg.shortcut || 'Ctrl+Ctrl';
   const dtMod = doubleTapModifierOf(sc);
   if (dtMod) {
@@ -684,6 +685,111 @@ document.querySelectorAll('input[name="engine_id"]').forEach((radio) => {
 await listen('speakly://engine-changed', (e) => {
   setEngineRadio(e?.payload?.engineId || 'web-speech');
 });
+
+// ── Hebrew auto-punctuation ───────────────────────────────────────────────────
+// Applies immediately (like the engine picker). Enabling requires the ~283 MB model
+// to be downloaded first; if it isn't, the toggle bounces back and offers to fetch it.
+const punctToggle = $('punctuation_enabled');
+const punctStatusLabel = $('punct-status-label');
+const punctProgress = $('punct-progress');
+const punctFill = $('punct-fill');
+const punctPlabel = $('punct-plabel');
+const punctDownloadBtn = $('punct-download-btn');
+const punctCancelBtn = $('punct-cancel-btn');
+let punctDownloading = false;
+
+async function refreshPunctStatus() {
+  try {
+    const s = await invoke('get_punctuation_status');
+    setToggle('punctuation_enabled', s.enabled);
+    punctDownloading = s.downloading;
+    if (s.installed) {
+      punctStatusLabel.textContent = s.loaded ? 'מודל הפיסוק מותקן ומוכן ✓' : 'מודל הפיסוק מותקן';
+    } else {
+      punctStatusLabel.textContent = 'מודל הפיסוק אינו מותקן';
+    }
+    punctDownloadBtn.style.display = !s.installed && !punctDownloading ? '' : 'none';
+    punctCancelBtn.style.display = punctDownloading ? '' : 'none';
+    if (!punctDownloading) punctProgress.style.display = 'none';
+  } catch (_) {}
+}
+
+async function startPunctDownload() {
+  if (punctDownloading) return;
+  punctDownloading = true;
+  punctProgress.style.display = 'flex';
+  punctDownloadBtn.style.display = 'none';
+  punctCancelBtn.style.display = '';
+  punctPlabel.textContent = 'מתחיל הורדה…';
+  const channel = new Channel();
+  channel.onmessage = (p) => {
+    const pct = p.totalBytes > 0 ? Math.round((p.downloadedBytes / p.totalBytes) * 100) : 0;
+    if (punctFill) punctFill.style.width = `${pct}%`;
+    const mbDone = Math.round(p.downloadedBytes / 1_000_000);
+    const mbTotal = Math.round(p.totalBytes / 1_000_000);
+    const kbps = Math.round(p.speedBps / 1000);
+    if (punctPlabel) punctPlabel.textContent = `${pct}% · ${mbDone}/${mbTotal} MB · ${kbps} KB/s`;
+  };
+  try {
+    await invoke('download_punctuation_model', { onProgress: channel });
+  } catch (e) {
+    punctDownloading = false;
+    showToast(`שגיאה בהורדת מודל הפיסוק: ${e}`, 'err');
+    refreshPunctStatus();
+  }
+}
+
+punctToggle?.addEventListener('change', async () => {
+  const enabled = punctToggle.checked;
+  if (enabled) {
+    const s = await invoke('get_punctuation_status').catch(() => null);
+    if (s && !s.installed) {
+      setToggle('punctuation_enabled', false);
+      showToast('יש להוריד תחילה את מודל הפיסוק', 'err');
+      startPunctDownload();
+      return;
+    }
+  }
+  try {
+    await invoke('set_punctuation_enabled', { enabled });
+    showToast(enabled ? 'פיסוק אוטומטי הופעל' : 'פיסוק אוטומטי כובה', 'ok');
+  } catch (e) {
+    setToggle('punctuation_enabled', !enabled);
+    showToast(`שגיאה: ${e}`, 'err');
+  }
+  refreshPunctStatus();
+});
+
+// "New line after each sentence" — applies immediately (no Rust command; just a flag
+// read at injection time).
+const punctNewline = $('punctuation_newline');
+punctNewline?.addEventListener('change', async () => {
+  try {
+    const previous = await invoke('get_settings');
+    await invoke('save_settings', {
+      newSettings: { ...previous, punctuation_newline: punctNewline.checked },
+    });
+    showToast(punctNewline.checked ? 'שורה חדשה אחרי כל משפט: פעיל' : 'שורה חדשה: כבוי', 'ok');
+  } catch (e) {
+    setToggle('punctuation_newline', !punctNewline.checked);
+    showToast(`שגיאה: ${e}`, 'err');
+  }
+});
+
+punctDownloadBtn?.addEventListener('click', startPunctDownload);
+punctCancelBtn?.addEventListener('click', async () => {
+  await invoke('cancel_punctuation_download').catch(() => {});
+  punctDownloading = false;
+  refreshPunctStatus();
+});
+
+await listen('speakly://punct-model-installed', () => {
+  punctDownloading = false;
+  showToast('מודל הפיסוק הותקן ✓', 'ok');
+  refreshPunctStatus();
+});
+
+refreshPunctStatus();
 
 // ── Display mode (floating mic ⇄ side panel) ──────────────────────────────────
 // Mirrors the engine picker: apply immediately on change, no Save needed.

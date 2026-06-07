@@ -1,6 +1,6 @@
 [package]
 name = "timluli"
-version = "1.10.1"
+version = "1.11.0"
 description = "Hebrew speech-to-text system-wide for Windows"
 authors = ["Daniel Oliel <ddlgap@gmail.com>"]
 edition = "2021"
@@ -51,6 +51,13 @@ symphonia = { version = "0.5", default-features = false, features = ["mp3", "aac
 whisper-rs = "0.16" # Vulkan GPU backend is opt-in via the `gpu` feature (see [features]).
 pdf-extract = "0.10.0"
 docx-rust = "0.1.11"
+# Hebrew auto-punctuation: in-process ONNX (load-dynamic → bundled onnxruntime.dll,
+# NOT statically linked) + HF tokenizers. See src/punctuation/. onnxruntime.dll must
+# be 1.22.x to match ort rc.10 and is bundled app-locally like the vcruntime DLLs.
+ort = { version = "=2.0.0-rc.10", default-features = false, features = ["load-dynamic", "ndarray"] }
+# default-features off drops `esaxx_fast` (a C++ dep built with /MT static-CRT, which
+# clashes with whisper-rs-sys's /MD → LNK2038). We only do inference; keep just `onig`.
+tokenizers = { version = "0.20", default-features = false, features = ["onig"] }
 
 [target.'cfg(windows)'.dependencies]
 windows = { version = "0.58", features = [

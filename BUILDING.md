@@ -104,6 +104,27 @@ src-tauri\sidecar\build_sidecar.ps1
 If the exe is missing at runtime, Hebrew PDF translation returns a clear error
 ("מנוע ה-PDF ... לא נמצא"); other formats are unaffected.
 
+### 7. ONNX Runtime DLL (for Hebrew auto-punctuation)
+
+The optional auto-punctuation engine runs an ONNX model in-process via the `ort`
+crate in **load-dynamic** mode — it is **not** statically linked, so it needs
+`onnxruntime.dll` at runtime, bundled app-locally next to the exe (via
+`bundle.resources` `"onnxruntime/*.dll" → root`, exactly like `vcruntime/`).
+
+The DLL **must be 1.22.x** to match `ort` 2.0.0-rc.10. A working copy is committed at
+`src-tauri/onnxruntime/onnxruntime.dll` (local-build fallback); CI overwrites it from
+the official `microsoft/onnxruntime` v1.22.1 release so the shipped DLL is a clean
+build (see release.yml step "Bundle ONNX Runtime"). For local `tauri:dev`, the DLL is
+picked up from next to the dev exe — copy it into `src-tauri/target/debug/` if a fresh
+checkout lacks it.
+
+> Note: `tokenizers` is built with `default-features = false, features = ["onig"]` on
+> purpose — the default `esaxx_fast` feature pulls a C++ dep compiled with the static
+> CRT (/MT) that clashes with whisper-rs-sys's dynamic CRT (/MD) → `LNK2038`.
+
+The punctuation **model** itself (~280 MB ONNX + tokenizer) is downloaded on demand at
+runtime from the GitHub release; it is never bundled in the installer.
+
 ---
 
 ## Build Steps

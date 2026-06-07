@@ -255,6 +255,34 @@
           כשמודל פעיל הוא תופס בזיכרון (RAM) מקום כגודל הקובץ.
         </small>
       </div>
+
+      <!-- ── פיסוק אוטומטי ── -->
+      <div class="field" style="margin-top:18px; padding-top:16px; border-top:1px solid var(--border, #2a2a2a)">
+        <div class="field-row">
+          <label for="punctuation_enabled">פיסוק אוטומטי (עברית)</label>
+          <div class="toggle" data-key="punctuation_enabled"><input type="checkbox" id="punctuation_enabled" /></div>
+        </div>
+        <small class="muted">
+          מוסיף נקודות, פסיקים וסימני שאלה לתמלול — אוטומטית, בלי שתצטרך לומר אותם. רץ במחשב (לא נשלח לאינטרנט)
+          ומוסיף השהיה זניחה. דורש הורדה חד־פעמית של מודל (~283MB).
+        </small>
+        <div class="field-row" style="margin-top:10px">
+          <label for="punctuation_newline">שורה חדשה אחרי כל משפט (. ? !)</label>
+          <div class="toggle" data-key="punctuation_newline"><input type="checkbox" id="punctuation_newline" /></div>
+        </div>
+        <small class="muted">כל משפט בשורה משלו. נכנס כשבירת-שורה רגילה (לא "שליחה") — בטוח גם בצ'אטים.</small>
+        <div id="punct-row" class="engine-guidance" style="display:flex; align-items:center; gap:12px; margin-top:10px">
+          <div style="flex:1; min-width:0">
+            <div id="punct-status-label" class="muted">בודק…</div>
+            <div class="model-card-progress" id="punct-progress" style="display:none; margin-top:6px">
+              <div class="progress-bar"><div class="progress-fill" id="punct-fill"></div></div>
+              <span class="progress-label" id="punct-plabel">0%</span>
+            </div>
+          </div>
+          <button class="model-btn primary-sm" id="punct-download-btn" style="display:none">הורד מודל (~283MB)</button>
+          <button class="model-btn danger-btn" id="punct-cancel-btn" style="display:none">ביטול</button>
+        </div>
+      </div>
     </section>
 
     <!-- ── תרגום מסמכים ── -->

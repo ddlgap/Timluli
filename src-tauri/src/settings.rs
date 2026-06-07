@@ -97,6 +97,16 @@ pub struct Settings {
     /// being applied twice. See `migrate_mic_window_v2`.
     #[serde(default)]
     pub mic_window_v2: bool,
+    /// Hebrew auto-punctuation: when on (and the model is downloaded + loaded),
+    /// final transcripts get `. , ?` restored before injection. Opt-in, default
+    /// off (requires a one-time ~283 MB model download). See `src/punctuation/`.
+    #[serde(default)]
+    pub punctuation_enabled: bool,
+    /// When punctuation is on, start a new line after every sentence-ending mark
+    /// (`. ? !`). Injected as a literal line break via clipboard paste, so it does
+    /// not send in chat apps. Opt-in, default off.
+    #[serde(default)]
+    pub punctuation_newline: bool,
 }
 
 impl Default for Settings {
@@ -128,6 +138,8 @@ impl Default for Settings {
             display_mode: default_display_mode(),
             panel_offset_y: None,
             mic_window_v2: false,
+            punctuation_enabled: false,
+            punctuation_newline: false,
         }
     }
 }

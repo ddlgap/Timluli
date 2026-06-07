@@ -18,7 +18,7 @@ use std::sync::mpsc::{channel, Receiver, Sender};
 use std::sync::Arc;
 use std::thread::{self, JoinHandle};
 use std::time::Duration;
-use tauri::{AppHandle, Manager, PhysicalPosition, Position};
+use tauri::{AppHandle, Manager, PhysicalPosition, Position, WebviewWindow};
 use uiautomation::events::{CustomFocusChangedEventHandler, UIFocusChangedEventHandler};
 use uiautomation::patterns::UITextPattern;
 use uiautomation::types::ControlType;
@@ -68,9 +68,31 @@ impl Drop for FieldTrackerHandle {
 }
 
 #[derive(Debug, Clone, Copy)]
-struct FieldRect {
-    top: i32,
-    right: i32,
+pub struct FieldRect {
+    pub top: i32,
+    pub bottom: i32,
+    pub left: i32,
+    pub right: i32,
+}
+
+/// Computes the mic window's top-left so its centered disc sits horizontally
+/// centered over `rect` and snug just above the field's top edge (flipping to
+/// just below when the field hugs the screen top). The disc is centered in the
+/// 240px window, so placing the *window centre* at the desired disc spot is
+/// independent of the disc diameter. Shared by the floating-mic follow tracker
+/// (`apply_rect`) and the hidden-mic docking path (`commands::sync_side_panel_mic`).
+/// UIA rects are physical screen px; the window half-size and clearance are
+/// scaled by the mic window's DPI to match.
+pub fn dock_position(mic: &WebviewWindow, rect: FieldRect) -> (i32, i32) {
+    let scale = mic.scale_factor().unwrap_or(1.0);
+    let half = (120.0 * scale).round() as i32; // half the 240px window (centre offset)
+    let clear = (44.0 * scale).round() as i32; // disc-centre clearance above the top edge
+    let cx = (rect.left + rect.right) / 2;
+    let mut cy = rect.top - clear;
+    if cy < clear {
+        cy = rect.bottom + clear;
+    }
+    (cx - half, cy - half)
 }
 
 /// What the focus landed on. `Other` (a non-editable, non-own element) is only
@@ -114,6 +136,8 @@ impl CustomFocusChangedEventHandler for FocusHandler {
         };
         let _ = self.tx.lock().send(FocusEvent::Field(FieldRect {
             top: rect.get_top(),
+            bottom: rect.get_bottom(),
+            left: rect.get_left(),
             right: rect.get_right(),
         }));
         Ok(())
@@ -131,28 +155,29 @@ fn is_editable(elem: &UIElement) -> bool {
 }
 
 /// One-shot lookup of the currently focused editable element's bounding box,
-/// returning `(top, right)` in physical screen coords — the same anchor the
-/// auto-hide tracker used in `apply_rect`. Returns `None` when focus isn't on an
-/// editable field, when it's one of our own windows, or when UIA can't resolve it.
+/// returning its full `FieldRect` in physical screen coords. Returns `None` when
+/// focus isn't on an editable field, when it's one of our own windows, or when
+/// UIA can't resolve it. Callers pick the anchor: side-panel keeps a top-right
+/// anchor; hidden-mic feeds it through `dock_position` (centered-above).
 ///
-/// Used by side-panel mode to dock the mic next to the dictation area *only while
-/// recording* (no background follow tracker). Runs UIA on a short-lived thread so
-/// it owns its own COM apartment and never disturbs the caller's. The lookup is
-/// bounded by a timeout (via a channel, not `join`) so an unresponsive target app
-/// can't stall the caller — which is an async command worker — for more than a
-/// blink; on timeout we return `None` and the caller falls back to a default spot.
-pub fn focused_field_rect(app: &AppHandle) -> Option<(i32, i32)> {
+/// Used by the transient display modes to dock the mic next to the dictation area
+/// *only while recording* (no background follow tracker). Runs UIA on a short-lived
+/// thread so it owns its own COM apartment and never disturbs the caller's. The
+/// lookup is bounded by a timeout (via a channel, not `join`) so an unresponsive
+/// target app can't stall the caller — which is an async command worker — for more
+/// than a blink; on timeout we return `None` and the caller falls back to a default.
+pub fn focused_field_rect(app: &AppHandle) -> Option<FieldRect> {
     let own: Vec<isize> = ["mic", "panel", "settings", "onboarding", "speech"]
         .iter()
         .filter_map(|label| app.get_webview_window(label))
         .filter_map(|w| w.hwnd().ok().map(|h| h.0 as isize))
         .collect();
 
-    let (tx, rx) = channel::<Option<(i32, i32)>>();
+    let (tx, rx) = channel::<Option<FieldRect>>();
     thread::Builder::new()
         .name("focused-field".into())
         .spawn(move || {
-            let rect = (|| -> Option<(i32, i32)> {
+            let rect = (|| -> Option<FieldRect> {
                 let automation = UIAutomation::new().ok()?;
                 let el = automation.get_focused_element().ok()?;
                 // Never anchor to our own (NOACTIVATE) windows.
@@ -166,7 +191,12 @@ pub fn focused_field_rect(app: &AppHandle) -> Option<(i32, i32)> {
                     return None;
                 }
                 let rect = el.get_bounding_rectangle().ok()?;
-                Some((rect.get_top(), rect.get_right()))
+                Some(FieldRect {
+                    top: rect.get_top(),
+                    bottom: rect.get_bottom(),
+                    left: rect.get_left(),
+                    right: rect.get_right(),
+                })
             })();
             // If we already timed out, the receiver is gone — that's fine, the
             // worker thread just exits (it never holds any of our locks).
@@ -233,20 +263,17 @@ fn apply_rect(app: &AppHandle, rect: FieldRect, auto_hide: bool) {
     let Some(mic) = app.get_webview_window("mic") else {
         return;
     };
-    const PAD: i32 = 8;
-    // Mic is centered in its (now 240px) window; shift the top-left up-left by
-    // half the size growth so the visible disc docks snug to the field, matching
-    // the old 160px window's position.
-    let d = (40.0 * mic.scale_factor().unwrap_or(1.0)).round() as i32;
-    let x = rect.right + PAD - d;
-    let y = rect.top - d;
+    // Dock the disc horizontally centered over the field, snug above its top edge.
+    let (x, y) = dock_position(&mic, rect);
     let _ = mic.set_position(Position::Physical(PhysicalPosition::new(x, y)));
-    // In side-panel (auto-hide) mode the mic starts hidden; reveal it on the
-    // field it just docked to, and keep it on top without stealing focus.
+    // In side-panel (auto-hide) mode the mic starts hidden; reveal it on the field
+    // it just docked to. In floating mode it's already visible. Either way,
+    // re-assert topmost after the move so docking never leaves the mic demoted —
+    // otherwise the periodic keeper would take up to ~1s to bring it back on top.
     if auto_hide {
         let _ = mic.show();
-        crate::win_util::make_topmost_noactivate(&mic);
     }
+    crate::win_util::make_topmost_noactivate(&mic);
 }
 
 /// Hides the mic unless dictation is in progress (don't yank it away mid-speech).

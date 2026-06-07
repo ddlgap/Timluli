@@ -1,9 +1,8 @@
 import { invoke } from '@tauri-apps/api/core';
 import { emit } from '@tauri-apps/api/event';
 import { getCurrentWindow } from '@tauri-apps/api/window';
-
 const win = getCurrentWindow();
-const TOTAL_STEPS = 5;
+const TOTAL_STEPS = 6;
 
 // Custom title-bar close (decorations:false). Closing hides the window (lib.rs
 // intercepts CloseRequested); onboarding_done stays unset, so it reappears next
@@ -221,12 +220,39 @@ window.addEventListener('keydown', async (e) => {
   await stopRecording(true);
 });
 
-// ── Step 5 — mic test (level meter; verifies access without full transcription) ─
+// ── Shared mic analyser (used by the mic test AND the dictation demo) ──────────
+// Opens getUserMedia + an AnalyserNode and exposes a peak-level reader (0–100).
+async function openMicAnalyser() {
+  const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+  const ctx = new (window.AudioContext || window.webkitAudioContext)();
+  const src = ctx.createMediaStreamSource(stream);
+  const analyser = ctx.createAnalyser();
+  analyser.fftSize = 512;
+  src.connect(analyser);
+  const data = new Uint8Array(analyser.frequencyBinCount);
+  return {
+    level() {
+      analyser.getByteTimeDomainData(data);
+      let max = 0;
+      for (let i = 0; i < data.length; i++) {
+        const v = Math.abs(data[i] - 128);
+        if (v > max) max = v;
+      }
+      return Math.min(100, Math.round((max / 128) * 100 * 1.6));
+    },
+    stop() {
+      try { stream.getTracks().forEach((t) => t.stop()); } catch (_) {}
+      try { ctx.close(); } catch (_) {}
+    },
+  };
+}
+
+// ── Step 6 — mic test (level meter; verifies access without full transcription) ─
 const micTestBtn = document.getElementById('micTestBtn');
 const micMeter = document.getElementById('micMeter');
 const micMeterFill = document.getElementById('micMeterFill');
 const micTestStatus = document.getElementById('micTestStatus');
-let micStream = null, audioCtx = null, rafId = null, testActive = false;
+let micTest = null, micTestRaf = null, micTestActive = false;
 
 function setMicStatus(text, kind) {
   micTestStatus.textContent = text;
@@ -234,52 +260,39 @@ function setMicStatus(text, kind) {
 }
 
 function stopMicTest() {
-  testActive = false;
+  micTestActive = false;
   micTestBtn.disabled = false;
-  if (rafId) { cancelAnimationFrame(rafId); rafId = null; }
-  if (micStream) { micStream.getTracks().forEach((t) => t.stop()); micStream = null; }
-  if (audioCtx) { audioCtx.close().catch(() => {}); audioCtx = null; }
+  if (micTestRaf) { cancelAnimationFrame(micTestRaf); micTestRaf = null; }
+  if (micTest) { micTest.stop(); micTest = null; }
   micMeterFill.style.width = '0%';
 }
 
 async function startMicTest() {
-  if (testActive) return;
-  testActive = true;
+  if (micTestActive) return;
+  micTestActive = true;
   micTestBtn.disabled = true;
   setMicStatus('מבקש גישה למיקרופון…', '');
   try {
-    micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    micTest = await openMicAnalyser();
   } catch (e) {
-    testActive = false;
+    micTestActive = false;
     micTestBtn.disabled = false;
     micMeter.hidden = true;
     setMicStatus('לא הצלחנו לגשת למיקרופון. בדקו את הרשאות המיקרופון בהגדרות Windows.', 'err');
     return;
   }
   micMeter.hidden = false;
-  audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-  const srcNode = audioCtx.createMediaStreamSource(micStream);
-  const analyser = audioCtx.createAnalyser();
-  analyser.fftSize = 512;
-  srcNode.connect(analyser);
-  const data = new Uint8Array(analyser.frequencyBinCount);
   let peak = 0;
   const started = performance.now();
   setMicStatus('דברו עכשיו…', '');
 
   function loop() {
-    if (!testActive) return;
-    analyser.getByteTimeDomainData(data);
-    let max = 0;
-    for (let i = 0; i < data.length; i++) {
-      const v = Math.abs(data[i] - 128);
-      if (v > max) max = v;
-    }
-    const level = Math.min(100, Math.round((max / 128) * 100 * 1.6));
+    if (!micTestActive) return;
+    const level = micTest.level();
     micMeterFill.style.width = `${level}%`;
     if (level > 18) peak = Math.max(peak, level);
     if (performance.now() - started < 5000) {
-      rafId = requestAnimationFrame(loop);
+      micTestRaf = requestAnimationFrame(loop);
     } else {
       stopMicTest();
       if (peak > 18) setMicStatus('✓ המיקרופון עובד', 'ok');
@@ -290,7 +303,426 @@ async function startMicTest() {
 }
 micTestBtn.addEventListener('click', startMicTest);
 
-// ── Step 5 — tips (adapt to the chosen display mode + shortcut) ─────────────────
+// ══════════════════════════════════════════════════════════════════════════════
+// Step 5 — Hands-on missions. Each must be performed to advance.
+//   Mission 1 (dictation): REAL — the real shortcut/engine transcribes live into a
+//     focused textbox. Clear "speak now" overlay; skip if the mic/engine isn't ready.
+//   Missions 2-3 (audio / PDF): real gesture (drag OR file-picker), fast simulated
+//     result (no network/keys needed mid-onboarding).
+// ══════════════════════════════════════════════════════════════════════════════
+const extOf = (p) => { const m = /\.([^.\\/]+)$/.exec(p || ''); return m ? m[1].toLowerCase() : ''; };
+const stripExt = (n) => n.replace(/\.[^.]+$/, '');
+
+const MISSIONS = [
+  { badge: '1', title: 'דברו — וזה נכתב לבד' },
+  { badge: '2', title: 'תמלול קובץ אודיו' },
+  { badge: '3', title: 'תרגום מסמך' },
+];
+
+const demoEl = {
+  fill: document.getElementById('missionFill'),
+  steps: document.getElementById('missionSteps'),
+  badge: document.getElementById('missionBadge'),
+  title: document.getElementById('missionTitle'),
+  sub: document.getElementById('missionSub'),
+  windowTitle: document.getElementById('demoWindowTitle'),
+  doc: document.getElementById('demoDoc'),
+  files: document.getElementById('demoFiles'),
+  zone: document.getElementById('demoDropZone'),
+  keys: document.getElementById('demoKeys'),
+  mic: document.getElementById('demoMic'),
+  zoneHint: document.getElementById('demoZoneHint'),
+  result: document.getElementById('missionResult'),
+  resultText: document.getElementById('missionResultText'),
+  trigger: document.getElementById('demoTrigger'),
+  secondary: document.getElementById('demoSecondary'),
+  advance: document.getElementById('demoAdvance'),
+  speakOverlay: document.getElementById('speakOverlay'),
+  speakMic: document.getElementById('speakMic'),
+  speakHint: document.getElementById('speakHint'),
+  speakSkip: document.getElementById('speakSkip'),
+};
+
+const demo = {
+  active: 1,
+  done: [false, false, false],
+  phase: '',            // '', 'm1-idle', 'm1-listening', 'm1-done'
+  keyTimes: [],
+  listening: false,     // a real listening session is active
+  busy: false,          // a file is being processed
+  procTimer: null,
+  escTimer: null,
+  inputTimer: null,
+};
+
+const nextBtnEl = document.getElementById('nextBtn');
+const setSub = (html) => { demoEl.sub.innerHTML = html; };
+function showResult(html) { demoEl.resultText.innerHTML = html; demoEl.result.hidden = false; }
+function hideResult() { demoEl.result.hidden = true; demoEl.resultText.innerHTML = ''; }
+
+function initDemoMic() {
+  demoEl.mic.className = 'demo-mic mini-mic ' + (state.theme || 'graphite');
+  demoEl.mic.dataset.state = 'idle';
+  demoEl.mic.innerHTML = MIC_SVG;
+  demoEl.speakMic.className = 'speak-mic mini-mic ' + (state.theme || 'graphite');
+  demoEl.speakMic.innerHTML = MIC_SVG;
+}
+
+function clearDemoTimers() {
+  clearTimeout(demo.procTimer);
+  clearTimeout(demo.escTimer);
+  clearTimeout(demo.inputTimer);
+}
+
+function updateTrack() {
+  const doneCount = demo.done.filter(Boolean).length;
+  demoEl.fill.style.width = (doneCount / 3 * 100) + '%';
+  for (let i = 1; i <= 3; i++) {
+    const dot = demoEl.steps.querySelector(`.mtrack-dot[data-m="${i}"]`);
+    if (!dot) continue;
+    dot.classList.toggle('done', demo.done[i - 1]);
+    dot.classList.toggle('active', i === demo.active && !demo.done[i - 1]);
+  }
+}
+
+function setMissionHead(n) {
+  const m = MISSIONS[n - 1];
+  demoEl.badge.textContent = m.badge;
+  demoEl.title.textContent = m.title;
+}
+
+function showDocView(title) { demoEl.files.hidden = true; demoEl.doc.hidden = false; demoEl.windowTitle.textContent = title; }
+function showFilesView(title) { demoEl.doc.hidden = true; demoEl.files.hidden = false; demoEl.windowTitle.textContent = title; }
+
+function fileChipHTML(cls, ico, name, sub) {
+  return `<div class="file-chip ${cls}">
+      <span class="chip-ico">${ico}</span>
+      <span class="chip-meta"><span class="chip-name">${name}</span>${sub ? `<span class="chip-sub">${sub}</span>` : ''}</span>
+    </div>`;
+}
+const arrowHTML = () => '<div class="demo-files-arrow">↓ נשמר באותה תיקייה</div>';
+
+// ── Mission 1 — real dictation ────────────────────────────────────────────────
+function renderKeys() {
+  const mod = doubleTapModifierOf(state.shortcut);
+  if (mod) {
+    demoEl.keys.innerHTML = `<kbd class="demo-keycap" data-k="1">${mod}</kbd><span class="demo-keys-plus">‹‹</span><kbd class="demo-keycap" data-k="2">${mod}</kbd>`;
+  } else {
+    demoEl.keys.innerHTML = state.shortcut.split('+')
+      .map((k) => `<kbd class="demo-keycap">${k.trim()}</kbd>`)
+      .join('<span class="demo-keys-plus">+</span>');
+  }
+}
+function flashKey(idx) {
+  const ks = demoEl.keys.querySelectorAll('.demo-keycap');
+  const k = ks[idx - 1] || ks[ks.length - 1];
+  if (!k) return;
+  k.classList.remove('tap');
+  void k.offsetWidth;
+  k.classList.add('tap');
+}
+
+function startMission1() {
+  demo.phase = 'm1-idle';
+  demo.keyTimes = [];
+  showDocView('מסמך — Notepad');
+  demoEl.doc.value = '';
+  demoEl.zone.classList.remove('droppable', 'is-over');
+  demoEl.zoneHint.hidden = true;
+  demoEl.mic.dataset.state = 'idle';
+  renderKeys();
+  demoEl.keys.hidden = false;
+  const mod = doubleTapModifierOf(state.shortcut);
+  setSub(mod
+    ? `לחצו פעמיים על <span class="hl-key">${mod}</span> ואז דברו — מה שתגידו ייכתב לבד.`
+    : `לחצו <span class="hl-key">${state.shortcut}</span> ואז דברו — מה שתגידו ייכתב לבד.`);
+  demoEl.trigger.hidden = false;
+  demoEl.trigger.textContent = '🎤 התחילו הקלטה';
+  demoEl.secondary.hidden = true;
+  demoEl.advance.hidden = true;
+  setTimeout(() => { if (demo.active === 1) demoEl.doc.focus(); }, 60);
+}
+
+function modifierName(e) {
+  if (e.key === 'Control') return 'Ctrl';
+  if (e.key === 'Alt') return 'Alt';
+  if (e.key === 'Shift') return 'Shift';
+  if (e.key === 'Meta' || e.key === 'OS') return 'Win';
+  return null;
+}
+function comboOf(e) {
+  const parts = [];
+  if (e.ctrlKey) parts.push('Ctrl');
+  if (e.altKey) parts.push('Alt');
+  if (e.shiftKey) parts.push('Shift');
+  if (e.metaKey) parts.push('Super');
+  const key = e.key;
+  if (['Control', 'Alt', 'Shift', 'Meta', 'OS'].includes(key)) return null;
+  parts.push(key === ' ' ? 'Space' : key.length === 1 ? key.toUpperCase() : key);
+  return parts.length >= 2 ? parts.join('+') : null;
+}
+
+// Show the "speak now" overlay (UI only — the engine is started elsewhere).
+function showSpeakOverlay() {
+  if (demo.phase === 'm1-listening') return;
+  demo.phase = 'm1-listening';
+  demoEl.keys.hidden = true;
+  demoEl.mic.dataset.state = 'listening';
+  demoEl.doc.focus();
+  demoEl.speakOverlay.hidden = false;
+  demoEl.speakSkip.hidden = true;
+  demoEl.speakHint.textContent = 'אמרו משפט קצר — זה ייעצר לבד כשתסיימו';
+  clearTimeout(demo.escTimer);
+  demo.escTimer = setTimeout(() => {
+    demoEl.speakHint.textContent = 'לא קלטנו טקסט. נסו לדבר שוב — או דלגו.';
+    demoEl.speakSkip.hidden = false;
+  }, 13000);
+}
+
+// "Start recording" button — we toggle the real engine ourselves.
+async function triggerListen() {
+  if (demo.phase === 'm1-listening') return;
+  demoEl.doc.focus();
+  showSpeakOverlay();
+  try {
+    await invoke('toggle_listening');
+    demo.listening = true;
+  } catch (e) {
+    demoEl.speakHint.textContent = 'המנוע עדיין לא מוכן. אפשר לדלג ולהמשיך.';
+    demoEl.speakSkip.hidden = false;
+  }
+}
+
+function stopListening() {
+  if (demo.listening) {
+    invoke('toggle_listening').catch(() => {});
+    demo.listening = false;
+  }
+}
+
+function finishMission1() {
+  if (demo.phase === 'm1-done') return;
+  demo.phase = 'm1-done';
+  clearTimeout(demo.escTimer);
+  clearTimeout(demo.inputTimer);
+  stopListening();
+  demoEl.speakOverlay.hidden = true;
+  demoEl.mic.dataset.state = 'idle';
+  if (!demoEl.doc.value.trim()) demoEl.doc.value = 'שלום, זאת דוגמה להכתבה קולית.';
+  showResult('<b>מעולה!</b> מה שאמרתם נכתב אוטומטית. בדיוק כך זה יעבוד בכל תוכנה — וורד, וואטסאפ, דפדפן, הכול.');
+  completeMission(1);
+}
+
+// ── Missions 2 & 3 — drag a fake file onto the mic (pure on-screen simulation) ──
+function startFileMission(n) {
+  demo.busy = false;
+  const audio = n === 2;
+  const fname = audio ? 'הקלטה.mp3' : 'מסמך.pdf';
+  const ico = audio ? '🎵' : '📕';
+  showFilesView('סייר הקבצים');
+  demoEl.files.innerHTML =
+    '<p class="demo-drag-label">גררו את הקובץ אל המיקרופון:</p>' +
+    `<div class="file-chip draggable" data-fname="${fname}">
+       <span class="chip-ico">${ico}</span>
+       <span class="chip-meta"><span class="chip-name">${fname}</span><span class="chip-sub">גררו אותי ←</span></span>
+     </div>`;
+  demoEl.keys.hidden = true;
+  demoEl.mic.dataset.state = 'idle';
+  demoEl.zone.classList.add('droppable');
+  demoEl.zoneHint.hidden = false;
+  demoEl.zoneHint.textContent = 'שחררו כאן';
+  setSub(audio
+    ? 'גררו את <span class="hl">קובץ האודיו</span> אל המיקרופון כדי לתמלל אותו.'
+    : 'גררו את <span class="hl">קובץ ה-PDF</span> אל המיקרופון כדי לתרגם אותו.');
+  demoEl.trigger.hidden = true;
+  demoEl.secondary.hidden = true;
+  demoEl.advance.hidden = true;
+  wireChipDrag();
+}
+
+// Pointer-based drag of the fake file chip onto the mic (no real files involved).
+let chipDrag = null;
+function wireChipDrag() {
+  const chip = demoEl.files.querySelector('.file-chip.draggable');
+  if (!chip) return;
+  chip.addEventListener('pointerdown', (e) => {
+    if (chipDrag || demo.busy) return;
+    e.preventDefault();
+    const ghost = chip.cloneNode(true);
+    ghost.classList.remove('draggable');
+    ghost.classList.add('chip-ghost');
+    document.body.appendChild(ghost);
+    chip.classList.add('dragging-origin');
+    chipDrag = { ghost, chip, fname: chip.dataset.fname };
+    moveChipGhost(e);
+    window.addEventListener('pointermove', moveChipGhost);
+    window.addEventListener('pointerup', dropChip);
+  });
+}
+function overMic(e) {
+  const r = demoEl.zone.getBoundingClientRect();
+  return e.clientX >= r.left && e.clientX <= r.right && e.clientY >= r.top && e.clientY <= r.bottom;
+}
+function moveChipGhost(e) {
+  if (!chipDrag) return;
+  chipDrag.ghost.style.left = e.clientX + 'px';
+  chipDrag.ghost.style.top = e.clientY + 'px';
+  demoEl.zone.classList.toggle('is-over', overMic(e));
+}
+function dropChip(e) {
+  window.removeEventListener('pointermove', moveChipGhost);
+  window.removeEventListener('pointerup', dropChip);
+  const d = chipDrag;
+  chipDrag = null;
+  if (!d) return;
+  d.ghost.remove();
+  demoEl.zone.classList.remove('is-over');
+  if (overMic(e)) {
+    runFileSim(demo.active === 2 ? 'audio' : 'doc', d.fname);
+  } else {
+    d.chip.classList.remove('dragging-origin'); // not on the mic → snap back
+  }
+}
+
+function runFileSim(kind, name) {
+  demo.busy = true;
+  const audio = kind === 'audio';
+  demoEl.trigger.hidden = true;
+  demoEl.zoneHint.hidden = true;
+  demoEl.zone.classList.remove('droppable', 'is-over');
+  showFilesView(audio ? 'תיקיית האודיו' : 'תיקיית המסמכים');
+  demoEl.files.innerHTML = fileChipHTML(audio ? 'audio' : 'doc', audio ? '🎵' : '📕', name, 'הקובץ שלכם');
+  demoEl.mic.dataset.state = 'processing';
+  const steps = audio
+    ? ['מתמלל…', 'מתמלל… חצי הדרך', 'כמעט סיימנו…']
+    : ['מתרגם…', 'מתרגם… 2/5', 'מתרגם… 4/5'];
+  setSub(steps[0]);
+  let i = 0;
+  const tick = () => {
+    if (currentStep !== 5) return;
+    i++;
+    if (i < steps.length) { setSub(steps[i]); demo.procTimer = setTimeout(tick, 760); }
+    else finishFileSim(kind, name);
+  };
+  demo.procTimer = setTimeout(tick, 760);
+}
+
+function finishFileSim(kind, name) {
+  demoEl.mic.dataset.state = 'idle';
+  setSub('');
+  if (kind === 'audio') {
+    const out = stripExt(name) + '.txt';
+    demoEl.files.innerHTML += arrowHTML() + fileChipHTML('result', '📄', out, 'קובץ התמלול');
+    showResult(`<b>הצלחתם!</b> קובץ התמלול <code>${out}</code> נשמר באותה תיקייה, ממש ליד הקובץ המקורי.`);
+    completeMission(2);
+  } else {
+    const ext = extOf(name);
+    const outExt = (ext === 'pdf' || ext === 'doc') ? 'docx' : ext;
+    const out = stripExt(name) + '.he.' + outExt;
+    demoEl.files.innerHTML += arrowHTML() + fileChipHTML('result', '📘', out, 'הקובץ המתורגם');
+    showResult(`<b>הצלחתם!</b> הקובץ המתורגם <code>${out}</code> נשמר באותה תיקייה. הקובץ המקורי נשאר כמו שהוא.`);
+    completeMission(3);
+  }
+}
+
+// ── Lifecycle / gating ────────────────────────────────────────────────────────
+function startMission(n) {
+  demo.active = n;
+  clearDemoTimers();
+  hideResult();
+  demoEl.speakOverlay.hidden = true;
+  demoEl.advance.hidden = true;
+  setMissionHead(n);
+  updateTrack();
+  if (n === 1) startMission1();
+  else startFileMission(n);
+}
+
+function completeMission(n) {
+  demo.done[n - 1] = true;
+  demo.busy = false;
+  updateTrack();
+  demoEl.trigger.hidden = true;
+  demoEl.secondary.hidden = true;
+  if (n < 3) {
+    demoEl.advance.hidden = false;
+    demoEl.advance.textContent = 'המשך →';
+    demoEl.advance.dataset.next = String(n + 1);
+  } else {
+    demoEl.advance.hidden = true;
+    setSub('סיימתם את כל המשימות 🎉  לחצו „הבא” כדי להמשיך.');
+  }
+  if (demo.done.every(Boolean)) nextBtnEl.disabled = false;
+}
+
+function firstIncompleteMission() {
+  const idx = demo.done.findIndex((d) => !d);
+  return idx === -1 ? 0 : idx + 1;
+}
+
+function enterDemo() {
+  initDemoMic();
+  updateTrack();
+  const next = firstIncompleteMission();
+  if (next === 0) {
+    setMissionHead(3);
+    setSub('סיימתם את כל המשימות 🎉');
+    demoEl.advance.hidden = true;
+    nextBtnEl.disabled = false;
+  } else {
+    nextBtnEl.disabled = true;
+    startMission(next);
+  }
+}
+
+function leaveDemo() {
+  clearDemoTimers();
+  demoEl.speakOverlay.hidden = true;
+  stopListening();
+  demoEl.mic.dataset.state = 'idle';
+}
+
+// Mission 1 — detect the real double-tap / chord to surface the "speak now" overlay.
+// The OS global shortcut already started the real engine; we only mirror the UI.
+window.addEventListener('keydown', (e) => {
+  if (currentStep !== 5 || demo.active !== 1 || demo.phase !== 'm1-idle') return;
+  if (e.repeat) return;
+  const mod = doubleTapModifierOf(state.shortcut);
+  if (mod) {
+    if (modifierName(e) !== mod) return;
+    demo.keyTimes = demo.keyTimes.concat(performance.now()).slice(-2);
+    flashKey(Math.min(demo.keyTimes.length, 2));
+    if (demo.keyTimes.length === 2 && demo.keyTimes[1] - demo.keyTimes[0] <= 600) {
+      demo.keyTimes = [];
+      showSpeakOverlay();
+      demo.listening = true;
+    }
+  } else if (comboOf(e) === state.shortcut) {
+    showSpeakOverlay();
+    demo.listening = true;
+  }
+});
+
+// Mission 1 — the real transcript is injected into this focused textbox.
+demoEl.doc.addEventListener('input', () => {
+  if (currentStep !== 5 || demo.active !== 1 || demo.phase !== 'm1-listening') return;
+  if (!demoEl.doc.value.trim()) return;
+  clearTimeout(demo.inputTimer);
+  demo.inputTimer = setTimeout(finishMission1, 650); // let the full sentence land
+});
+
+demoEl.trigger.addEventListener('click', () => {
+  if (demo.active === 1) triggerListen();
+});
+
+demoEl.speakSkip.addEventListener('click', finishMission1);
+
+demoEl.advance.addEventListener('click', () => {
+  const n = Number(demoEl.advance.dataset.next || 0);
+  if (n) startMission(n);
+});
+
+// ── Step 6 — tips (adapt to the chosen display mode + shortcut) ─────────────────
 function renderTips() {
   const tips = document.getElementById('tips');
   const mod = doubleTapModifierOf(state.shortcut);
@@ -318,7 +750,8 @@ const stepAnnounce = document.getElementById('stepAnnounce');
 
 function goTo(n) {
   if (recording) stopRecording(true);
-  if (currentStep === 5 && n !== 5) stopMicTest();
+  if (currentStep === 5 && n !== 5) leaveDemo();
+  if (currentStep === 6 && n !== 6) stopMicTest();
 
   document.querySelectorAll('.step').forEach((s, i) => s.classList.toggle('active', i + 1 === n));
   for (let i = 1; i <= TOTAL_STEPS; i++) {
@@ -331,9 +764,12 @@ function goTo(n) {
   const nextBtn = document.getElementById('nextBtn');
   prevBtn.style.visibility = n > 1 ? 'visible' : 'hidden';
   nextBtn.style.display = n < TOTAL_STEPS ? '' : 'none';
+  nextBtn.disabled = false; // reset the demo gate; enterDemo() re-locks it if needed
 
-  if (n === 5) renderTips();
   currentStep = n;
+
+  if (n === 5) enterDemo();
+  if (n === 6) renderTips();
   stepAnnounce.textContent = `שלב ${n} מתוך ${TOTAL_STEPS}`;
 
   // Move focus to the step heading for screen-reader + keyboard users.

@@ -31,6 +31,8 @@
       <div class="step-dot" id="dot4"></div>
       <div class="step-line"></div>
       <div class="step-dot" id="dot5"></div>
+      <div class="step-line"></div>
+      <div class="step-dot" id="dot6"></div>
     </div>
 
     <!-- ── Step 1 — Welcome ── -->
@@ -162,8 +164,79 @@
       <p class="hint dim" id="shortcutStatus"></p>
     </section>
 
-    <!-- ── Step 5 — Ready + mic test + creator seal ── -->
-    <section id="step5" class="step">
+    <!-- ── Step 5 — Hands-on missions (perform each to advance) ── -->
+    <section id="step5" class="step demo-step">
+      <h1 class="title" tabindex="-1">בואו ננסה — 3 דברים פשוטים</h1>
+
+      <!-- Mission progress -->
+      <div class="mission-track" aria-hidden="true">
+        <div class="mission-track-bar"><div class="mission-track-fill" id="missionFill"></div></div>
+        <div class="mission-track-steps" id="missionSteps">
+          <span class="mtrack-dot active" data-m="1">דיבור</span>
+          <span class="mtrack-dot" data-m="2">אודיו</span>
+          <span class="mtrack-dot" data-m="3">תרגום</span>
+        </div>
+      </div>
+
+      <!-- Mission heading -->
+      <div class="mission-head">
+        <span class="mission-badge" id="missionBadge">1</span>
+        <div class="mission-head-text">
+          <h2 class="mission-title" id="missionTitle"></h2>
+          <p class="mission-sub" id="missionSub" role="status" aria-live="polite"></p>
+        </div>
+      </div>
+
+      <!-- The scene: a mock app window + the mic / drop zone -->
+      <div class="demo-stage" id="demoStage">
+        <div class="demo-window" id="demoWindow">
+          <div class="demo-window-bar">
+            <span class="win-dot"></span><span class="win-dot"></span><span class="win-dot"></span>
+            <span class="demo-window-title" id="demoWindowTitle"></span>
+          </div>
+          <div class="demo-window-body" id="demoWindowBody">
+            <textarea class="demo-doc" id="demoDoc" dir="rtl" placeholder="כאן יופיע מה שתגידו…" spellcheck="false"></textarea>
+            <div class="demo-files" id="demoFiles" hidden></div>
+          </div>
+        </div>
+
+        <div class="demo-mic-zone" id="demoDropZone">
+          <div class="demo-keys" id="demoKeys" hidden>
+            <kbd class="demo-keycap" data-k="1">Ctrl</kbd>
+            <span class="demo-keys-plus">+</span>
+            <kbd class="demo-keycap" data-k="2">Ctrl</kbd>
+          </div>
+          <div class="demo-mic mini-mic graphite" id="demoMic" data-state="idle"></div>
+          <div class="demo-zone-hint" id="demoZoneHint"></div>
+        </div>
+      </div>
+
+      <!-- Result explanation (where the output lands) -->
+      <div class="mission-result" id="missionResult" hidden>
+        <span class="mission-result-ico">✓</span>
+        <p class="mission-result-text" id="missionResultText"></p>
+      </div>
+
+      <div class="demo-actions">
+        <button type="button" class="demo-primary-btn" id="demoTrigger" hidden></button>
+        <button type="button" class="demo-link-btn" id="demoSecondary" hidden></button>
+        <button type="button" class="demo-advance" id="demoAdvance" hidden>המשך →</button>
+      </div>
+
+      <!-- "Speak now" overlay (mission 1) -->
+      <div class="speak-overlay" id="speakOverlay" hidden>
+        <div class="speak-card">
+          <div class="speak-mic mini-mic graphite" id="speakMic"></div>
+          <div class="speak-title">🎤 דברו עכשיו</div>
+          <div class="speak-wave" id="speakWave"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></div>
+          <p class="speak-hint" id="speakHint">אמרו משפט קצר — זה ייעצר לבד כשתסיימו</p>
+          <button type="button" class="speak-skip" id="speakSkip" hidden>דלגו</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ── Step 6 — Ready + mic test + creator seal ── -->
+    <section id="step6" class="step">
       <div class="step-icon">🎉</div>
       <h1 class="title" tabindex="-1">מוכן לתמלל!</h1>
 

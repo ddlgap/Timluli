@@ -89,18 +89,33 @@ await listen('speakly://state-changed', (e) => {
 // ── File pipelines (click → native picker, drag → route by extension) ────────
 const TRANSLATE_EXTS = ['srt', 'vtt', 'sbv', 'txt', 'md', 'markdown', 'docx', 'doc', 'pdf'];
 const AUDIO_EXTS = ['mp3', 'wav', 'm4a', 'aac', 'flac', 'ogg', 'oga', 'opus', 'wma', 'webm', 'mp4', 'mpeg', 'mpga'];
+// Video containers → <stem>.srt (when video_subtitles_enabled). Checked BEFORE
+// AUDIO_EXTS, so mp4/webm/mpeg (which also appear there) route to subtitles; with the
+// setting off the video branch is skipped and they fall through to the audio path.
+const VIDEO_EXTS = ['mp4', 'mkv', 'mov', 'webm', 'avi', 'm4v', 'mpg', 'mpeg', 'wmv', 'flv'];
 const extOf = (p) => {
   const m = /\.([^.\\/]+)$/.exec(p);
   return m ? m[1].toLowerCase() : '';
 };
 const isTranslatable = (p) => TRANSLATE_EXTS.includes(extOf(p));
 const isAudio = (p) => AUDIO_EXTS.includes(extOf(p));
+const isVideo = (p) => VIDEO_EXTS.includes(extOf(p));
+async function videoSubtitlesEnabled() {
+  try {
+    const stg = await invoke('get_settings');
+    return stg?.video_subtitles_enabled !== false;
+  } catch {
+    return true;
+  }
+}
 
 async function pickAndRun(kind) {
+  const videoOn = kind === 'transcribe' && (await videoSubtitlesEnabled());
+  const transcribeExts = videoOn ? [...new Set([...AUDIO_EXTS, ...VIDEO_EXTS])] : AUDIO_EXTS;
   const filters =
     kind === 'translate'
       ? [{ name: 'מסמכים', extensions: TRANSLATE_EXTS }]
-      : [{ name: 'אודיו', extensions: AUDIO_EXTS }];
+      : [{ name: videoOn ? 'אודיו ווידאו' : 'אודיו', extensions: transcribeExts }];
   let selected;
   try {
     selected = await open({ multiple: false, directory: false, filters });
@@ -110,7 +125,11 @@ async function pickAndRun(kind) {
   }
   if (!selected) return; // user cancelled
   const path = typeof selected === 'string' ? selected : selected.path || selected;
-  await runFile(kind === 'translate' ? 'translate_file' : 'transcribe_audio_file', path);
+  let command;
+  if (kind === 'translate') command = 'translate_file';
+  else if (videoOn && isVideo(path)) command = 'transcribe_video_to_srt';
+  else command = 'transcribe_audio_file';
+  await runFile(command, path);
 }
 
 async function runFile(command, path) {
@@ -129,11 +148,17 @@ async function runFile(command, path) {
 // dynamic "מתרגם… 3/12" status, mirroring the floating mic's bubble.
 await listen('speakly://translate-progress', (e) => {
   const { batch, total } = e.payload || {};
-  if (batch && total) showStatus(`מתרגם… ${batch}/${total}`, { busy: true });
+  if (batch && total) showStatus(total > 1 ? `מתרגם… ${batch}/${total}` : 'מתרגם…', { busy: true });
 });
 await listen('speakly://transcribe-progress', (e) => {
-  const { chunk, total } = e.payload || {};
-  if (chunk && total > 1) showStatus(`מתמלל… ${chunk}/${total}`, { busy: true });
+  const { chunk, total, phase } = e.payload || {};
+  if (phase === 'extract') {
+    showStatus('מחלץ אודיו מהסרטון…', { busy: true });
+    return;
+  }
+  // Video subtitles emit phase="transcribe"; plain audio→txt has no phase.
+  const label = phase === 'transcribe' ? 'יוצר כתוביות' : 'מתמלל';
+  showStatus(chunk && total > 1 ? `${label}… ${chunk}/${total}` : `${label}…`, { busy: true });
 });
 
 // ── Drag-and-drop onto the panel ─────────────────────────────────────────────
@@ -169,12 +194,21 @@ async function handleDrag(event) {
   openedForDrag = false; // keep the menu open to show progress + result
 
   const paths = event.payload.paths || [];
-  const audioPaths = paths.filter(isAudio);
-  const docPaths = paths.filter(isTranslatable);
-  if (audioPaths.length === 0 && docPaths.length === 0) {
+  // Classify with video precedence (some video exts also live in AUDIO_EXTS).
+  const videoOn = await videoSubtitlesEnabled();
+  const videoPaths = [];
+  const audioPaths = [];
+  const docPaths = [];
+  for (const p of paths) {
+    if (videoOn && isVideo(p)) videoPaths.push(p);
+    else if (isAudio(p)) audioPaths.push(p);
+    else if (isTranslatable(p)) docPaths.push(p);
+  }
+  if (!videoPaths.length && !audioPaths.length && !docPaths.length) {
     showStatus('פורמט לא נתמך');
     return;
   }
+  for (const p of videoPaths) await runFile('transcribe_video_to_srt', p);
   for (const p of audioPaths) await runFile('transcribe_audio_file', p);
   for (const p of docPaths) await runFile('translate_file', p);
 }

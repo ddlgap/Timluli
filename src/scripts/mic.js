@@ -70,6 +70,19 @@ function showBubble(text) {
   }, 2500);
 }
 
+// Sticky status for file operations (transcription / subtitles / translation):
+// stays visible — NO auto-hide — so the user sees the current stage during long
+// processing (e.g. local CPU transcription that can take ~a minute), until the
+// operation finishes and a transient ✓/error (via showBubble) replaces it. Distinct
+// from showBubble, which auto-hides after 2.5s and is used for live interim text.
+function showProgress(text) {
+  if (!text) return;
+  clearTimeout(bubbleTimer);
+  bubble.textContent = truncateForBubble(text);
+  bubble.classList.add('show');
+  updateMicRegion();
+}
+
 mic.addEventListener('click', async (event) => {
   // Drag area swallows mousedown; click still fires when no drag actually happened.
   event.preventDefault();
@@ -100,31 +113,59 @@ await listen('speakly://settings-changed', (e) => {
   applySettings(e.payload);
 });
 
-// --- File drag-drop onto the mic: document translation + audio transcription ---
+// --- File drag-drop onto the mic: video subtitles + document translation + audio transcription ---
 const TRANSLATE_EXTS = ['srt', 'vtt', 'sbv', 'txt', 'md', 'markdown', 'docx', 'doc', 'pdf'];
 const AUDIO_EXTS = ['mp3', 'wav', 'm4a', 'aac', 'flac', 'ogg', 'oga', 'opus', 'wma', 'webm', 'mp4', 'mpeg', 'mpga'];
+// Video containers → <stem>.srt (when video_subtitles_enabled). Checked BEFORE
+// AUDIO_EXTS, so mp4/webm/mpeg (which also appear there) route to subtitles; with the
+// setting off the video branch is skipped and they fall through to the audio path.
+const VIDEO_EXTS = ['mp4', 'mkv', 'mov', 'webm', 'avi', 'm4v', 'mpg', 'mpeg', 'wmv', 'flv'];
 const extOf = (p) => {
   const m = /\.([^.\\/]+)$/.exec(p);
   return m ? m[1].toLowerCase() : '';
 };
 const isTranslatable = (p) => TRANSLATE_EXTS.includes(extOf(p));
 const isAudio = (p) => AUDIO_EXTS.includes(extOf(p));
+const isVideo = (p) => VIDEO_EXTS.includes(extOf(p));
+// Read fresh each drop (cheap, infrequent); default-on if the field is unset.
+async function videoSubtitlesEnabled() {
+  try {
+    const stg = await invoke('get_settings');
+    return stg?.video_subtitles_enabled !== false;
+  } catch {
+    return true;
+  }
+}
 
 await listen('speakly://translate-progress', (e) => {
   const { batch, total } = e.payload || {};
-  if (batch && total) showBubble(`מתרגם… ${batch}/${total}`);
+  if (batch && total) showProgress(total > 1 ? `מתרגם… ${batch}/${total}` : 'מתרגם…');
 });
 
 await listen('speakly://transcribe-progress', (e) => {
-  const { chunk, total } = e.payload || {};
-  if (chunk && total > 1) showBubble(`מתמלל… ${chunk}/${total}`);
+  const { chunk, total, phase } = e.payload || {};
+  if (phase === 'extract') {
+    showProgress('מחלץ אודיו מהסרטון…');
+    return;
+  }
+  // Video subtitles emit phase="transcribe"; plain audio→txt has no phase.
+  const label = phase === 'transcribe' ? 'יוצר כתוביות' : 'מתמלל';
+  showProgress(chunk && total > 1 ? `${label}… ${chunk}/${total}` : `${label}…`);
 });
 
 await getCurrentWebview().onDragDropEvent(async (event) => {
   if (event.payload.type !== 'drop' || !event.payload.paths?.length) return;
-  const audioPaths = event.payload.paths.filter(isAudio);
-  const docPaths = event.payload.paths.filter(isTranslatable);
-  if (audioPaths.length === 0 && docPaths.length === 0) {
+  // Classify with video precedence (some video exts also live in AUDIO_EXTS).
+  const videoOn = await videoSubtitlesEnabled();
+  const videoPaths = [];
+  const audioPaths = [];
+  const docPaths = [];
+  for (const p of event.payload.paths) {
+    if (videoOn && isVideo(p)) videoPaths.push(p);
+    else if (isAudio(p)) audioPaths.push(p);
+    else if (isTranslatable(p)) docPaths.push(p);
+  }
+  if (!videoPaths.length && !audioPaths.length && !docPaths.length) {
     showBubble('פורמט לא נתמך');
     return;
   }
@@ -133,8 +174,21 @@ await getCurrentWebview().onDragDropEvent(async (event) => {
   let ok = 0;
   let fail = 0;
 
+  if (videoPaths.length) {
+    showProgress('מחלץ אודיו מהסרטון…');
+    for (const p of videoPaths) {
+      try {
+        await invoke('transcribe_video_to_srt', { path: p });
+        ok++;
+      } catch (err) {
+        fail++;
+        console.warn('transcribe_video_to_srt failed:', err);
+      }
+    }
+  }
+
   if (audioPaths.length) {
-    showBubble('מתמלל…');
+    showProgress('מתמלל…');
     for (const p of audioPaths) {
       try {
         await invoke('transcribe_audio_file', { path: p });
@@ -147,7 +201,7 @@ await getCurrentWebview().onDragDropEvent(async (event) => {
   }
 
   if (docPaths.length) {
-    showBubble('מתרגם…');
+    showProgress('מתרגם…');
     for (const p of docPaths) {
       try {
         await invoke('translate_file', { path: p });

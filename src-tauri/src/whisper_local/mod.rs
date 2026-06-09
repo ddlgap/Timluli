@@ -1,7 +1,7 @@
 pub mod audio;
 pub mod inference;
 
-use inference::{EngineError, WhisperEngine};
+use inference::{EngineError, Segment, WhisperEngine};
 use std::sync::Arc;
 use tokio::sync::Mutex;
 
@@ -32,6 +32,19 @@ impl LocalEngineHandle {
         // Acquire an owned guard so it can be moved into spawn_blocking.
         let guard = Arc::clone(&self.engine).lock_owned().await;
         tokio::task::spawn_blocking(move || guard.transcribe(&samples, lang))
+            .await
+            .map_err(|e| EngineError::Transcribe(e.to_string()))?
+    }
+
+    /// Like [`Self::transcribe`], but returns timed [`Segment`]s for the video→SRT
+    /// pipeline. Serializes on the same inference lock; `lang` must be "he".
+    pub async fn transcribe_segments(
+        &self,
+        samples: Vec<f32>,
+        lang: &'static str,
+    ) -> Result<Vec<Segment>, EngineError> {
+        let guard = Arc::clone(&self.engine).lock_owned().await;
+        tokio::task::spawn_blocking(move || guard.transcribe_segments(&samples, lang))
             .await
             .map_err(|e| EngineError::Transcribe(e.to_string()))?
     }

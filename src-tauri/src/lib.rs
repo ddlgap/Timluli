@@ -7,6 +7,7 @@ mod chrome_sidecar;
 mod commands;
 mod commands_local;
 mod commands_punct;
+mod commands_video;
 mod models;
 mod panel;
 mod punctuation;
@@ -17,6 +18,7 @@ mod transcription;
 mod translation;
 mod tray;
 mod updater;
+mod video_transcription;
 mod whisper_local;
 
 #[cfg(target_os = "windows")]
@@ -141,6 +143,11 @@ pub fn run() {
             commands_punct::set_punctuation_enabled,
             commands_punct::download_punctuation_model,
             commands_punct::cancel_punctuation_download,
+            // ── video → SRT subtitle commands ──
+            commands_video::transcribe_video_to_srt,
+            commands_video::download_ffmpeg,
+            commands_video::cancel_ffmpeg_download,
+            commands_video::get_ffmpeg_status,
         ])
         .setup(|app| {
             let mut stg = settings::load_or_init(app.handle())

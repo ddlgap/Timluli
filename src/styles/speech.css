@@ -1,0 +1,30 @@
+/* Styles for the hidden background "engine" window (speech.html).
+ * Externalized from an inline <style> block: a vite 5.x multi-page build hits
+ * `[vite:html-inline-proxy] No matching HTML proxy module found` on inline CSS,
+ * which breaks `npm run build`. Linking an external sheet sidesteps that bug. */
+body {
+  padding: 12px;
+  font-size: 13px;
+  line-height: 1.5;
+}
+.pill {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--surface-2);
+  color: var(--text-dim);
+  font-size: 12px;
+}
+.pill[data-state="listening"] { background: rgba(239, 68, 68, 0.18); color: #fca5a5; }
+.pill[data-state="error"]     { background: rgba(239, 68, 68, 0.25); color: #fecaca; }
+#log {
+  margin-top: 10px;
+  padding: 8px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  max-height: 160px;
+  overflow: auto;
+  font-family: Consolas, "Cascadia Mono", monospace;
+  font-size: 11px;
+}

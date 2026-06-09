@@ -107,6 +107,13 @@ pub struct Settings {
     /// not send in chat apps. Opt-in, default off.
     #[serde(default)]
     pub punctuation_newline: bool,
+    /// Video → SRT subtitles: when on, dragging a video file produces a
+    /// `<stem>.he.srt` next to it (via ffmpeg + the chosen STT engine) instead of
+    /// the plain `.txt` audio path. Default on; `default_true` so existing
+    /// settings.json files get it too. Off = today's behavior exactly (videos fall
+    /// through to the audio→txt path). Requires a one-time ffmpeg download.
+    #[serde(default = "default_true")]
+    pub video_subtitles_enabled: bool,
 }
 
 impl Default for Settings {
@@ -140,6 +147,7 @@ impl Default for Settings {
             mic_window_v2: false,
             punctuation_enabled: false,
             punctuation_newline: false,
+            video_subtitles_enabled: true,
         }
     }
 }
@@ -151,6 +159,7 @@ fn default_translate_target_language() -> String { "Hebrew".into() }
 fn default_pdf_rtl_layout() -> String { "same-box".into() }
 fn default_audio_file_engine() -> String { "groq".into() }
 fn default_display_mode() -> String { "side-panel".into() }
+fn default_true() -> bool { true }
 
 pub fn settings_dir(app: &AppHandle) -> PathBuf {
     app.path()

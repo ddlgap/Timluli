@@ -1,0 +1,44 @@
+{
+  "_comment": "Regression oracle for the settings-window design migration. Captured from the CURRENT working code (src/settings.html + src/scripts/settings.js, v1.12.0) via the smoke harness. After EACH migration step, re-run the harness and assert: (a) every interaction fires the SAME command set, (b) the boot set is unchanged — NO command dropped (note get_ffmpeg_status, easy to miss), (c) errors === [].",
+  "capturedFrom": "src/settings.html + src/scripts/settings.js @ v1.12.0",
+  "boot": [
+    "plugin:event|listen",
+    "get_punctuation_status",
+    "get_ffmpeg_status",
+    "plugin:app|version",
+    "get_settings",
+    "get_translation_keys_status",
+    "list_provider_models",
+    "list_models"
+  ],
+  "interactions": {
+    "engine -> whisper-local": ["set_active_engine"],
+    "engine -> web-speech": ["set_active_engine", "unload_local_model"],
+    "audio_file_engine -> whisper-local": ["set_audio_file_engine"],
+    "display_mode -> hidden-mic": ["set_display_mode"],
+    "theme swatch click": ["get_settings", "save_settings"],
+    "punctuation toggle ON (model installed)": ["get_punctuation_status", "set_punctuation_enabled", "get_punctuation_status"],
+    "punctuation_newline toggle": ["get_settings", "save_settings"],
+    "shortcut recorder start": ["pause_global_shortcut"],
+    "Save button (no staged changes)": ["get_settings", "save_settings"],
+    "Reset defaults": ["set_field_docking", "set_display_mode", "update_shortcut", "save_settings", "get_settings", "get_translation_keys_status", "list_provider_models", "list_provider_models"]
+  },
+  "notLoadDriven_butMustSurvive": {
+    "Save with staged changes": "adds update_shortcut / set_autostart_enabled / set_field_docking only when those fields differ from previous",
+    "translation wizard validate": ["list_provider_models"],
+    "translation wizard save": ["save_translation_keys"],
+    "model download/activate/delete/import": ["download_model", "cancel_download", "load_local_model", "unload_local_model", "delete_model", "import_model_manual"],
+    "punctuation download": ["download_punctuation_model", "cancel_punctuation_download"],
+    "external links": ["open_external"],
+    "shortcut recorder end": ["resume_global_shortcut", "update_shortcut (on Save)"]
+  },
+  "eventsListened": [
+    "speakly://shortcut-conflict",
+    "speakly://error",
+    "speakly://engine-changed",
+    "speakly://display-mode-changed",
+    "speakly://model-installed",
+    "speakly://model-deleted",
+    "speakly://punct-model-installed"
+  ]
+}

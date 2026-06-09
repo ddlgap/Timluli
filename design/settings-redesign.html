@@ -1,0 +1,894 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Timluli — הגדרות · מוקאפ עיצוב מחדש</title>
+<style>
+/* ════════════════════════════════════════════════════════════════════════
+   Timluli — Settings redesign mockup (standalone, no backend)
+   Reuses the real product design tokens + onboarding component language.
+   Everything here is client-side and uses MOCK data.
+   ════════════════════════════════════════════════════════════════════════ */
+:root{
+  --bg:#0f1115; --surface:#1b1f27; --surface-2:#242a35; --border:#2e3542;
+  --text:#ecedee; --text-dim:#9aa0aa; --accent:#4ade80; --accent-2:#22d3ee;
+  --danger:#ef4444; --warning:#f59e0b; --radius:10px;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{
+  height:100%;
+  font-family:"Segoe UI",system-ui,-apple-system,"Noto Sans Hebrew","Arial Hebrew",Arial,sans-serif;
+  direction:rtl;
+}
+body{
+  background:radial-gradient(120% 100% at 50% 0%,#161a22,#0a0b0e 70%);
+  color:var(--text);
+  display:grid; place-items:center; padding:24px;
+}
+
+/* ── Simulated app window ─────────────────────────────────────────────── */
+.window{
+  width:860px; height:640px;
+  background:var(--bg);
+  border:1px solid var(--border);
+  border-radius:14px;
+  overflow:hidden;
+  display:flex; flex-direction:column;
+  box-shadow:0 30px 90px rgba(0,0,0,.6);
+  position:relative;
+}
+
+/* ── Title bar (mirrors the real custom chrome) ── */
+.titlebar{
+  height:38px; flex-shrink:0;
+  display:flex; align-items:center; justify-content:space-between;
+  background:var(--surface); border-bottom:1px solid var(--border);
+  user-select:none;
+}
+.titlebar-title{display:flex;align-items:center;gap:7px;direction:ltr;padding-inline:13px}
+.tb-logo{width:16px;height:16px;color:var(--accent)}
+.tb-name{font-size:12.5px;font-weight:600;color:var(--text-dim);letter-spacing:.4px}
+.titlebar-controls{display:flex;direction:ltr;height:100%}
+.tb-btn{width:44px;height:100%;display:grid;place-items:center;background:transparent;border:none;color:var(--text-dim);cursor:pointer;transition:background .12s,color .12s}
+.tb-btn svg{width:15px;height:15px}
+.tb-btn:hover{background:var(--surface-2);color:var(--text)}
+.tb-close:hover{background:#e81123;color:#fff}
+
+/* ── App body: right-rail nav + content ── */
+.app{flex:1;display:flex;min-height:0}
+
+/* Right-rail navigation (RTL → sits on the right) */
+.nav{
+  width:194px; flex-shrink:0;
+  background:var(--surface);
+  border-inline-start:1px solid var(--border);
+  display:flex; flex-direction:column;
+  padding:16px 12px;
+}
+.nav-brand{display:flex;align-items:center;gap:9px;padding:6px 8px 14px}
+.nav-brand h1{font-size:16px;font-weight:700}
+.nav-brand .dot{width:9px;height:9px;border-radius:50%;background:var(--accent);box-shadow:0 0 9px rgba(74,222,128,.6)}
+.nav-list{display:flex;flex-direction:column;gap:3px}
+.nav-item{
+  display:flex;align-items:center;gap:11px;
+  padding:10px 11px;border-radius:10px;
+  background:transparent;border:none;color:var(--text-dim);
+  font-family:inherit;font-size:14px;font-weight:600;cursor:pointer;
+  text-align:start;width:100%;position:relative;
+  transition:background .12s,color .12s;
+}
+.nav-item svg{width:18px;height:18px;flex-shrink:0}
+.nav-item:hover{background:var(--surface-2);color:var(--text)}
+.nav-item.active{background:rgba(74,222,128,.10);color:var(--text)}
+.nav-item.active::before{
+  content:'';position:absolute;inset-inline-start:-12px;top:50%;transform:translateY(-50%);
+  width:3px;height:20px;border-radius:0 3px 3px 0;background:var(--accent);
+}
+.nav-item.active svg{color:var(--accent)}
+.nav-foot{margin-top:auto;padding:10px 8px 2px;border-top:1px solid var(--border)}
+.nav-version{font-size:11.5px;color:var(--text-dim);opacity:.8}
+.nav-reset{display:block;margin-top:7px;background:none;border:none;color:var(--text-dim);font-family:inherit;font-size:12px;cursor:pointer;text-decoration:underline dotted;padding:0}
+.nav-reset:hover{color:var(--accent-2)}
+
+/* Content area */
+.content{flex:1;min-width:0;overflow-y:auto;padding:22px 26px 30px}
+.section{display:none;flex-direction:column;gap:16px;animation:fade .2s ease}
+.section.active{display:flex}
+@keyframes fade{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
+.section-head{margin-bottom:-2px}
+.section-head h2{font-size:20px;font-weight:700}
+.section-head p{font-size:13px;color:var(--text-dim);margin-top:3px}
+
+/* ── Setting card (grouped block) ── */
+.scard{
+  background:var(--surface); border:1px solid var(--border);
+  border-radius:14px; padding:4px 16px;
+}
+.scard-title{
+  font-size:12px;font-weight:700;letter-spacing:.4px;text-transform:uppercase;
+  color:var(--text-dim);padding:14px 0 4px;
+}
+.srow{
+  display:flex;align-items:center;justify-content:space-between;gap:16px;
+  padding:13px 0;border-top:1px solid var(--border);
+}
+.scard-title + .srow{border-top:none}
+.srow:first-child{border-top:none}
+.srow-main{min-width:0;flex:1}
+.srow-label{font-size:14px;font-weight:600;color:var(--text);display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.srow-help{font-size:12px;color:var(--text-dim);margin-top:4px;line-height:1.55;max-width:62ch}
+.srow-control{flex-shrink:0;display:flex;align-items:center;gap:10px}
+.srow.col{flex-direction:column;align-items:stretch}
+.srow.col .srow-control{margin-top:12px}
+
+/* Inputs */
+select{
+  font-family:inherit;font-size:13.5px;background:var(--surface-2);color:var(--text);
+  border:1px solid var(--border);border-radius:9px;padding:9px 12px;min-width:150px;cursor:pointer;
+}
+select:focus{outline:none;border-color:var(--accent)}
+input[type=range]{width:230px;accent-color:var(--accent);cursor:pointer}
+.range-val{font-family:Consolas,monospace;font-size:12px;color:var(--accent-2);min-width:62px;text-align:start;direction:ltr}
+
+/* Toggle pill */
+.toggle{position:relative;width:42px;height:24px;background:#3a4150;border-radius:999px;cursor:pointer;flex-shrink:0;transition:background .15s}
+.toggle::after{content:'';position:absolute;top:3px;right:3px;width:18px;height:18px;background:#fff;border-radius:50%;transition:right .15s}
+.toggle.on{background:var(--accent)}
+.toggle.on::after{right:21px}
+
+/* Segmented control */
+.seg{display:inline-flex;gap:3px;padding:3px;background:var(--surface-2);border:1px solid var(--border);border-radius:10px}
+.seg button{
+  font-family:inherit;font-size:12.5px;font-weight:600;padding:7px 13px;border:none;border-radius:7px;
+  background:transparent;color:var(--text-dim);cursor:pointer;transition:background .12s,color .12s;white-space:nowrap;
+}
+.seg button:hover{color:var(--text)}
+.seg button.on{background:var(--accent);color:#0b0d10}
+
+/* Badges */
+.badge{display:inline-block;font-size:10px;font-weight:700;padding:1px 7px;border-radius:6px;vertical-align:middle}
+.badge.exp{background:#f0a020;color:#1a1a1a}
+.badge.rec{background:var(--accent);color:#0b0d10}
+
+/* Choice cards (engine / display) — reused from onboarding */
+.choice-grid{display:flex;flex-direction:column;gap:10px}
+.choice-grid.cols3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px}
+.choice-card{
+  text-align:start;background:var(--surface-2);border:2px solid var(--border);border-radius:12px;
+  padding:13px 14px;cursor:pointer;color:var(--text);display:flex;flex-direction:column;gap:7px;
+  font-family:inherit;transition:border-color .15s,background .15s;
+}
+.choice-card:hover:not(.selected){border-color:#4a4f5e}
+.choice-card.selected{border-color:var(--accent);background:rgba(74,222,128,.06)}
+.choice-head{display:flex;align-items:center;gap:8px}
+.choice-radio{width:16px;height:16px;border-radius:50%;border:2px solid var(--text-dim);flex:none;position:relative;transition:border-color .15s}
+.choice-card.selected .choice-radio{border-color:var(--accent)}
+.choice-card.selected .choice-radio::after{content:'';position:absolute;inset:3px;border-radius:50%;background:var(--accent)}
+.choice-title{font-size:14.5px;font-weight:700}
+.choice-card.selected .choice-title{color:var(--accent)}
+.choice-tag{margin-inline-start:auto;font-size:10px;font-weight:700;color:#0b0d10;background:var(--accent);padding:1px 7px;border-radius:99px}
+.choice-desc{font-size:12px;color:var(--text-dim);line-height:1.5}
+.choice-note{font-size:11.5px;color:var(--warning);line-height:1.5}
+
+/* Display previews */
+.preview{display:block;position:relative;width:100%;height:70px;border:1px solid var(--border);border-radius:8px;background:#12151c;overflow:hidden}
+.preview-panel::after{content:'';position:absolute;top:50%;right:0;transform:translateY(-50%);width:13px;height:32px;border-radius:13px 0 0 13px;background:linear-gradient(90deg,rgba(22,214,243,.25),rgba(22,214,243,.75));box-shadow:0 0 8px rgba(22,214,243,.6)}
+.preview-mic::after{content:'';position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:24px;height:24px;border-radius:50%;background:rgba(27,31,39,.95);border:1px solid rgba(255,255,255,.15);box-shadow:0 0 10px rgba(0,0,0,.5)}
+.preview-hidden::after{content:'';position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:24px;height:24px;border-radius:50%;border:1.5px dashed rgba(255,255,255,.35)}
+
+/* Color swatches */
+.swatch-wrap{display:flex;flex-direction:column;gap:12px}
+.swatch-group-label{font-size:11.5px;color:var(--text-dim)}
+.swatch-grid{display:flex;gap:10px;flex-wrap:wrap;margin-top:5px}
+.swatch{width:40px;height:40px;border-radius:50%;border:2px solid transparent;cursor:pointer;padding:0;position:relative;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,.4);transition:transform .12s,box-shadow .2s}
+.swatch:hover{transform:scale(1.1)}
+.swatch.selected{box-shadow:0 0 0 3px rgba(74,222,128,.3),0 2px 8px rgba(0,0,0,.4)}
+.sw-graphite{background:rgba(27,31,39,.92);border-color:rgba(255,255,255,.08)}
+.sw-crimson{background:linear-gradient(135deg,#b91c1c,#ef4444)}
+.sw-azure{background:linear-gradient(135deg,#1e40af,#3b82f6)}
+.sw-emerald{background:linear-gradient(135deg,#047857,#10b981)}
+.sw-sunset{background:linear-gradient(135deg,#f97316,#ec4899)}
+.sw-ocean{background:linear-gradient(135deg,#0ea5e9,#14b8a6)}
+.sw-violet{background:linear-gradient(135deg,#7c3aed,#ec4899)}
+
+/* Reveal block (progressive disclosure) */
+.reveal{overflow:hidden;max-height:0;opacity:0;transition:max-height .3s ease,opacity .25s ease,margin .25s ease}
+.reveal.open{max-height:640px;opacity:1}
+
+/* Model list (mock) */
+.model-card{background:var(--surface-2);border:1px solid var(--border);border-radius:11px;padding:12px 14px;display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:8px}
+.model-card.active{border-color:var(--accent)}
+.model-name{font-size:13px;font-weight:600;display:flex;align-items:center;gap:7px}
+.model-meta{font-size:11.5px;color:var(--text-dim);margin-top:2px}
+.m-badge{font-size:10px;padding:1px 7px;background:var(--surface);border:1px solid var(--border);border-radius:99px;color:var(--text-dim)}
+.mbtn{font-size:12px;padding:6px 13px;border-radius:7px;cursor:pointer;border:1px solid var(--border);background:var(--surface);color:var(--text);font-family:inherit;white-space:nowrap}
+.mbtn:hover{background:#2c3340}
+.mbtn.primary{background:var(--accent);color:#0b0d10;border-color:var(--accent)}
+.mbtn.active{background:rgba(74,222,128,.15);border-color:var(--accent);color:var(--accent);cursor:default}
+.mbtn.danger{background:rgba(239,68,68,.12);border-color:var(--danger);color:#fca5a5}
+.linklike{background:none;border:none;color:var(--accent);font-family:inherit;font-size:12.5px;cursor:pointer;text-decoration:underline;padding:0}
+
+/* Inline explainer (replaces hover tooltips) */
+.explain{margin-top:10px;border:1px solid var(--border);border-radius:10px;background:var(--surface-2)}
+.explain>summary{list-style:none;cursor:pointer;display:flex;align-items:center;gap:8px;padding:10px 13px;font-size:12.5px;font-weight:600;color:var(--accent-2)}
+.explain>summary::-webkit-details-marker{display:none}
+.explain>summary::before{content:'?';display:grid;place-items:center;width:18px;height:18px;border-radius:50%;background:rgba(34,211,238,.15);color:var(--accent-2);font-size:12px;font-weight:800;flex-shrink:0}
+.explain[open]>summary{color:var(--text)}
+.explain-body{padding:0 13px 13px;font-size:12.5px;color:var(--text-dim);line-height:1.65}
+.explain-body strong{color:var(--text)}
+.explain-steps{list-style:none;display:flex;flex-direction:column;gap:9px;margin-top:8px}
+.explain-steps li{display:flex;gap:10px;align-items:flex-start}
+.explain-steps .n{flex:none;width:21px;height:21px;border-radius:50%;background:var(--accent);color:#0b0d10;font-size:11.5px;font-weight:800;display:grid;place-items:center}
+
+/* Free-tier capacity note — small "how much can I do" panel */
+.limit-note{display:flex;align-items:flex-start;gap:10px;margin-top:10px;padding:11px 13px;border-radius:11px;background:rgba(34,211,238,.07);border:1px solid rgba(34,211,238,.28)}
+.limit-note .lnico{flex:none;width:26px;height:26px;border-radius:8px;display:grid;place-items:center;background:rgba(34,211,238,.15);font-size:14px}
+.limit-note .ln-body{flex:1;min-width:0}
+.limit-note .ln-main{font-size:12.5px;color:var(--text);line-height:1.55;display:block}
+.limit-note .ln-main strong{color:var(--accent-2);font-weight:700}
+.ln-more{margin-top:6px}
+.ln-more>summary{list-style:none;cursor:pointer;font-size:11.5px;color:var(--accent-2);font-weight:600;display:inline-flex;align-items:center;gap:5px}
+.ln-more>summary::-webkit-details-marker{display:none}
+.ln-more>summary::before{content:'▸';transition:transform .15s}
+.ln-more[open]>summary::before{transform:rotate(90deg)}
+.ln-more-body{font-size:11.5px;color:var(--text-dim);line-height:1.6;margin-top:6px}
+
+/* ── Translation tab — experiential hero ── */
+.xl-hero{background:linear-gradient(180deg,var(--surface-2),var(--surface));border:1px solid var(--border);border-radius:16px;padding:18px;display:flex;flex-direction:column;gap:15px}
+.flow{display:flex;align-items:stretch;justify-content:center;gap:8px}
+.flow-step{flex:1;display:flex;flex-direction:column;align-items:center;gap:9px;text-align:center;background:var(--surface);border:1px solid var(--border);border-radius:13px;padding:14px 8px}
+.flow-ico{width:42px;height:42px;border-radius:11px;display:grid;place-items:center;font-size:20px;background:var(--surface-2);border:1px solid var(--border)}
+.flow-ico.accent{background:rgba(74,222,128,.14);border-color:rgba(74,222,128,.35)}
+.flow-cap{font-size:12px;color:var(--text-dim);line-height:1.45}
+.flow-cap strong{color:var(--text);font-weight:600}
+.flow-arrow{width:18px;height:18px;align-self:center;flex:none;color:var(--accent-2);opacity:.85}
+.lang-pair{display:flex;align-items:center;gap:11px;flex-wrap:wrap;justify-content:center;padding:13px;background:var(--surface);border:1px solid var(--border);border-radius:12px}
+.lp-label{font-size:13px;color:var(--text-dim)}
+.lp-source{font-size:13.5px;font-weight:600;color:var(--text);background:var(--surface-2);border:1px solid var(--border);border-radius:9px;padding:8px 14px}
+.lp-arrow{font-size:18px;color:var(--accent-2);font-weight:800}
+select.lp-target{min-width:140px;font-weight:700;border-color:var(--accent);color:var(--accent);background:rgba(74,222,128,.07)}
+.formats{display:flex;align-items:center;gap:7px;flex-wrap:wrap;justify-content:center}
+.fmt-label{font-size:12px;color:var(--text-dim)}
+.fmt-chip{font-size:11.5px;color:var(--text-dim);background:var(--surface);border:1px solid var(--border);border-radius:99px;padding:3px 11px}
+
+/* Service rows (connections) */
+.svc-row{display:flex;align-items:center;justify-content:space-between;gap:14px;padding:14px 0;border-top:1px solid var(--border)}
+.scard-title + .svc-row{border-top:none}
+.svc-main{min-width:0;flex:1}
+.svc-head{display:flex;align-items:center;gap:9px;flex-wrap:wrap}
+.svc-dot{width:9px;height:9px;border-radius:50%;background:#5b6270;flex:none;transition:background .15s,box-shadow .15s}
+.svc-dot.on{background:var(--accent);box-shadow:0 0 8px rgba(74,222,128,.6)}
+.svc-name{font-size:14px;font-weight:700}
+.svc-sub{font-size:12px;color:var(--text-dim);margin-top:3px;line-height:1.5}
+.svc-action{flex:none;display:flex;align-items:center;gap:11px}
+.svc-status{font-size:12.5px;color:var(--text-dim);white-space:nowrap}
+.svc-status.on{color:var(--accent);font-weight:600}
+.badge.soft{background:var(--surface-2);color:var(--text-dim);border:1px solid var(--border)}
+
+/* Translation status card */
+.status-card{display:flex;align-items:center;gap:13px;padding:15px 16px;border-radius:13px;border:1px solid var(--border);background:var(--surface)}
+.status-card .ico{width:38px;height:38px;border-radius:50%;display:grid;place-items:center;font-size:18px;font-weight:800;flex-shrink:0}
+.status-card.ok{border-color:rgba(74,222,128,.4);background:rgba(74,222,128,.06)}
+.status-card.ok .ico{background:rgba(74,222,128,.18);color:var(--accent)}
+.status-card.setup .ico{background:rgba(34,211,238,.16);color:var(--accent-2)}
+.status-card .st-title{font-size:14.5px;font-weight:700}
+.status-card .st-sub{font-size:12.5px;color:var(--text-dim);margin-top:2px;line-height:1.5}
+
+/* Big primary connect button */
+.cta{
+  display:inline-flex;align-items:center;gap:9px;justify-content:center;
+  font-family:inherit;font-size:14px;font-weight:700;
+  padding:12px 20px;border-radius:11px;border:none;cursor:pointer;
+  background:var(--accent);color:#0b0d10;transition:transform .12s,filter .12s;
+}
+.cta:hover{transform:translateY(-1px);filter:brightness(1.05)}
+.cta.ghost{background:transparent;border:1px solid var(--accent);color:var(--accent)}
+.cta.ghost:hover{background:var(--accent);color:#0b0d10}
+
+/* Advanced accordion */
+.adv{border:1px solid var(--border);border-radius:12px;background:var(--surface);padding:0 16px}
+.adv>summary{list-style:none;cursor:pointer;display:flex;align-items:center;gap:8px;padding:14px 0;font-size:13px;font-weight:700;color:var(--text)}
+.adv>summary::-webkit-details-marker{display:none}
+.adv>summary::before{content:'▸';color:var(--text-dim);transition:transform .15s}
+.adv[open]>summary::before{transform:rotate(90deg)}
+.adv-body{padding-bottom:16px;display:flex;flex-direction:column;gap:4px}
+
+/* Wizard dialog */
+dialog.wizard{border:none;background:transparent;padding:0;max-width:480px;width:92vw;color:var(--text);margin:auto}
+dialog.wizard::backdrop{background:rgba(0,0,0,.6);backdrop-filter:blur(3px)}
+.wiz-card{background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:22px;box-shadow:0 20px 60px rgba(0,0,0,.6)}
+.wiz-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}
+.wiz-head h3{font-size:18px;font-weight:700}
+.wiz-x{background:none;border:none;color:var(--text-dim);font-size:18px;cursor:pointer;padding:4px}
+.wiz-x:hover{color:var(--text)}
+.wiz-intro{font-size:13px;color:var(--text-dim);line-height:1.6;margin-bottom:16px}
+.wiz-steps{list-style:none;display:flex;flex-direction:column;gap:16px}
+.wiz-steps>li{display:flex;gap:12px;align-items:flex-start}
+.wiz-n{flex:none;width:25px;height:25px;border-radius:50%;background:var(--accent);color:#0b0d10;font-size:13px;font-weight:800;display:grid;place-items:center}
+.wiz-step-title{font-size:14px;font-weight:700;margin-bottom:4px}
+.wiz-step-desc{font-size:12.5px;color:var(--text-dim);line-height:1.55;margin-bottom:9px}
+.wiz-open-btn{font-family:inherit;font-size:13px;font-weight:600;background:transparent;border:1px solid var(--border);border-radius:9px;padding:9px 14px;color:var(--accent-2);cursor:pointer}
+.wiz-open-btn:hover{border-color:var(--accent-2)}
+.wiz-input{font-family:inherit;background:var(--surface-2);color:var(--text);border:1px solid var(--border);border-radius:9px;padding:10px 12px;width:100%;letter-spacing:1px}
+.wiz-input:focus{outline:none;border-color:var(--accent)}
+.wiz-feedback{font-size:12.5px;font-weight:600;margin-top:7px;min-height:16px}
+.wiz-feedback.ok{color:var(--accent)}.wiz-feedback.err{color:#fca5a5}.wiz-feedback.checking{color:var(--text-dim);font-weight:400}
+.wiz-actions{display:flex;gap:10px;margin-top:22px}
+.wiz-actions .cta:disabled{opacity:.45;cursor:not-allowed;transform:none}
+.btn-sec{font-family:inherit;font-size:13px;padding:11px 18px;border-radius:10px;border:1px solid var(--border);background:transparent;color:var(--text);cursor:pointer}
+.btn-sec:hover{border-color:var(--text-dim)}
+.lock-note{font-size:11.5px;color:var(--text-dim);margin-top:12px;display:flex;align-items:center;gap:6px}
+
+/* About */
+.about-hero{text-align:center;padding:6px 0 8px}
+.about-title{font-size:34px;font-weight:800;letter-spacing:-.5px;background:linear-gradient(135deg,var(--accent),var(--accent-2));-webkit-background-clip:text;background-clip:text;color:transparent}
+.about-tag{font-size:13.5px;color:var(--text-dim);margin-top:4px}
+.about-ver{font-size:12px;color:var(--text-dim);opacity:.7;margin-top:6px}
+.about-card{background:var(--surface);border:1px solid var(--border);border-radius:13px;padding:16px 18px}
+.about-card h3{font-size:13px;color:var(--accent);font-weight:700;margin-bottom:8px}
+.about-card p{font-size:13px;color:var(--text);line-height:1.65;margin:5px 0}
+.about-contact{text-align:center}
+.about-author{font-weight:700;margin-top:12px}
+.about-email{color:var(--accent-2);text-decoration:none;font-family:Consolas,monospace;font-size:13px}
+
+/* Micro toast (auto-save confirm) */
+#toast{position:absolute;bottom:20px;left:50%;transform:translateX(-50%) translateY(160%);background:var(--surface-2);border:1px solid var(--accent);color:var(--text);border-radius:11px;padding:10px 18px;font-size:13px;font-weight:600;display:flex;align-items:center;gap:9px;box-shadow:0 12px 30px rgba(0,0,0,.5);transition:transform .25s cubic-bezier(.34,1.56,.64,1),opacity .2s;opacity:0;z-index:99}
+#toast.show{transform:translateX(-50%) translateY(0);opacity:1}
+#toast .tk{color:var(--accent);font-weight:800}
+
+:focus-visible{outline:2px solid var(--accent-2);outline-offset:2px}
+.content::-webkit-scrollbar{width:9px}
+.content::-webkit-scrollbar-thumb{background:#2e3542;border-radius:5px}
+
+/* Mockup banner (not part of the real app) */
+.mock-flag{position:fixed;top:10px;inset-inline-start:14px;font-size:11px;color:#5b626e;background:rgba(20,22,28,.7);border:1px solid var(--border);border-radius:8px;padding:5px 10px;z-index:50}
+</style>
+</head>
+<body>
+<div class="mock-flag">מוקאפ עיצוב · נתונים מדומים · אין חיבור לבקאנד</div>
+
+<div class="window">
+  <!-- Title bar -->
+  <div class="titlebar">
+    <div class="titlebar-controls">
+      <button class="tb-btn" title="מזער"><svg viewBox="0 0 24 24"><path d="M6 12h12" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg></button>
+      <button class="tb-btn tb-close" title="סגור"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg></button>
+    </div>
+    <div class="titlebar-title">
+      <svg class="tb-logo" viewBox="0 0 24 24"><path d="M12 14a3 3 0 0 0 3-3V6a3 3 0 1 0-6 0v5a3 3 0 0 0 3 3zm5-3a5 5 0 0 1-10 0H5a7 7 0 0 0 6 6.92V21h2v-3.08A7 7 0 0 0 19 11h-2z" fill="currentColor"/></svg>
+      <span class="tb-name">Timluli</span>
+    </div>
+  </div>
+
+  <div class="app">
+    <!-- Right-rail nav -->
+    <nav class="nav">
+      <div class="nav-brand"><span class="dot"></span><h1>הגדרות</h1></div>
+      <div class="nav-list">
+        <button class="nav-item active" data-go="dictation">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="2.5" width="6" height="11" rx="3"/><path d="M5.5 11a6.5 6.5 0 0 0 13 0"/><path d="M12 17.5v3M8.5 20.5h7"/></svg>
+          תמלול
+        </button>
+        <button class="nav-item" data-go="appearance">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="4" width="19" height="13" rx="2.2"/><path d="M8 20.5h8M12 17.5v3"/></svg>
+          מראה והפעלה
+        </button>
+        <button class="nav-item" data-go="translate">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9.5"/><path d="M2.5 12h19M12 2.5c2.7 2.5 4 6 4 9.5s-1.3 7-4 9.5c-2.7-2.5-4-6-4-9.5s1.3-7 4-9.5z"/></svg>
+          תרגום מסמכים
+        </button>
+        <button class="nav-item" data-go="about">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9.5"/><path d="M12 11v6M12 7.5v.5"/></svg>
+          אודות
+        </button>
+      </div>
+      <div class="nav-foot">
+        <div class="nav-version">v1.12.0 · Oliel Studio</div>
+        <button class="nav-reset" id="resetBtn">שחזר ברירות מחדל</button>
+      </div>
+    </nav>
+
+    <!-- Content -->
+    <main class="content">
+
+      <!-- ════════ תמלול ════════ -->
+      <section class="section active" id="dictation">
+        <div class="section-head">
+          <h2>תמלול</h2>
+          <p>איך הדיבור שלך הופך לטקסט — שפה, הפעלה ומנוע.</p>
+        </div>
+
+        <div class="scard">
+          <div class="scard-title">שפה והפעלה</div>
+          <div class="srow">
+            <div class="srow-main">
+              <div class="srow-label">השפה שאני מדבר</div>
+              <div class="srow-help">השפה שבה תכתיב טקסט. שפת התרגום למסמכים נקבעת בנפרד.</div>
+            </div>
+            <div class="srow-control">
+              <select data-save><option>עברית</option><option>אנגלית</option></select>
+            </div>
+          </div>
+          <div class="srow">
+            <div class="srow-main">
+              <div class="srow-label">איך מתחילים תמלול</div>
+              <div class="srow-help">לחיצה כפולה על מקש, או צירוף מקשים שתבחר.</div>
+            </div>
+            <div class="srow-control">
+              <div class="seg" data-seg="shortcut"><button class="on" data-v="double">לחיצה כפולה</button><button data-v="combo">צירוף מקשים</button></div>
+            </div>
+          </div>
+          <div class="srow" id="dtKeyRow">
+            <div class="srow-main"><div class="srow-label">המקש ללחיצה כפולה</div></div>
+            <div class="srow-control"><select data-save><option>Ctrl ✕2</option><option>Alt ✕2</option><option>Shift ✕2</option><option>Win ✕2</option></select></div>
+          </div>
+          <div class="srow">
+            <div class="srow-main">
+              <div class="srow-label">אופן ההקלטה</div>
+              <div class="srow-help">„החלפה" — לחיצה מתחילה, שנייה עוצרת. „החזקה" — מקליט רק כל עוד המקש לחוץ.</div>
+            </div>
+            <div class="srow-control"><div class="seg" data-seg="mode"><button class="on">החלפה</button><button>החזקה</button></div></div>
+          </div>
+          <div class="srow">
+            <div class="srow-main">
+              <div class="srow-label">עצירה אוטומטית אחרי שקט</div>
+              <div class="srow-help">כמה שקט נדרש כדי שהתמלול ייעצר לבד.</div>
+            </div>
+            <div class="srow-control"><input type="range" min="800" max="4000" step="100" value="1500" data-save id="silence"><span class="range-val" id="silenceVal">1500ms</span></div>
+          </div>
+        </div>
+
+        <div class="scard">
+          <div class="scard-title">מנוע התמלול</div>
+          <div class="srow col">
+            <div class="srow-main"><div class="srow-help" style="margin-top:0">איפה הדיבור הופך לטקסט. אפשר להחליף בכל רגע.</div></div>
+            <div class="srow-control" style="width:100%">
+              <div class="choice-grid" id="engineGroup" style="width:100%">
+                <button class="choice-card selected" data-engine="online">
+                  <span class="choice-head"><span class="choice-radio"></span><span class="choice-title">דרך האינטרנט (גוגל)</span><span class="choice-tag">מומלץ</span></span>
+                  <span class="choice-desc">המהיר והמדויק ביותר · דורש חיבור לאינטרנט · ההקלטה נשלחת לגוגל לתמלול בלבד ואינה נשמרת.</span>
+                </button>
+                <button class="choice-card" data-engine="offline">
+                  <span class="choice-head"><span class="choice-radio"></span><span class="choice-title">במחשב שלי (בלי אינטרנט)</span></span>
+                  <span class="choice-desc">פרטיות מלאה — שום דבר לא יוצא מהמחשב · עובד גם בלי רשת · הורדה חד-פעמית של כ-700MB.</span>
+                  <span class="choice-note">⚡ המהירות תלויה בעוצמת המחשב.</span>
+                </button>
+              </div>
+            </div>
+          </div>
+          <!-- progressive disclosure: models appear only for offline -->
+          <div class="reveal" id="modelsReveal">
+            <div style="display:flex;align-items:center;justify-content:space-between;padding-top:6px">
+              <div class="srow-label" style="font-size:13px">המודלים שלי</div>
+              <button class="linklike">ייבא מודל ידני…</button>
+            </div>
+            <div class="model-card active">
+              <div><div class="model-name">ivrit.ai Turbo Q5 <span class="m-badge">פעיל</span></div><div class="model-meta">704 MB · איכות גבוהה</div></div>
+              <button class="mbtn active">פעיל ✓</button>
+            </div>
+            <div class="model-card">
+              <div><div class="model-name">ivrit.ai Turbo FP16</div><div class="model-meta">1620 MB · איכות מרבית</div></div>
+              <button class="mbtn primary">הורד</button>
+            </div>
+            <div class="srow-help" style="padding-bottom:10px">מודלים מאת ivrit.ai (Apache 2.0). מודל פעיל תופס בזיכרון מקום כגודל הקובץ.</div>
+          </div>
+        </div>
+
+        <div class="scard">
+          <div class="scard-title">שכלולים</div>
+          <div class="srow">
+            <div class="srow-main">
+              <div class="srow-label">פיסוק אוטומטי</div>
+              <div class="srow-help">מוסיף נקודות, פסיקים וסימני שאלה — אוטומטית, בלי שתצטרך לומר אותם. רץ במחשב, לא נשלח לאינטרנט.</div>
+            </div>
+            <div class="srow-control"><div class="toggle on" data-save id="punctToggle"></div></div>
+          </div>
+          <div class="reveal open" id="punctReveal">
+            <div class="srow" style="border-top:1px solid var(--border)">
+              <div class="srow-main"><div class="srow-label" style="font-weight:500;font-size:13px">שורה חדשה אחרי כל משפט</div></div>
+              <div class="srow-control"><div class="toggle" data-save></div></div>
+            </div>
+          </div>
+          <div class="srow col">
+            <div class="srow-main">
+              <div class="srow-label">תמלול קבצי אודיו ווידאו</div>
+              <div class="srow-help">גרור קובץ אודיו או וידאו (mp3, wav, m4a, mp4…) על המיקרופון כדי לתמלל אותו לקובץ טקסט.</div>
+            </div>
+            <div class="srow-control"><div class="seg" data-seg="audio"><button class="on">ענן (מהיר)</button><button>במחשב</button></div></div>
+          </div>
+          <!-- free-tier capacity: cloud (Groq whisper) only -->
+          <div class="limit-note" id="audioLimitNote">
+            <span class="lnico">🎧</span>
+            <div class="ln-body">
+              <span class="ln-main">במפתח החינמי של Groq אפשר לתמלל בממוצע עד <strong>~8 שעות אודיו ביום</strong>. קובצי וידאו משתמשים באותה מכסה (האודיו מחולץ מהם). בתמלול „במחשב" אין מגבלה.</span>
+              <details class="ln-more">
+                <summary>מספרים מדויקים</summary>
+                <div class="ln-more-body">המגבלה הרשמית: עד 2,000 קבצים ביום · עד 7,200 שניות אודיו בכל שעה · עד 28,800 שניות (8 שעות) ביום · קובץ בודד עד 25MB.</div>
+              </details>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ════════ מראה והפעלה ════════ -->
+      <section class="section" id="appearance">
+        <div class="section-head">
+          <h2>מראה והפעלה</h2>
+          <p>איך Timluli נראה על המסך ומתי הוא מופעל.</p>
+        </div>
+
+        <div class="scard">
+          <div class="scard-title">איך Timluli מופיע על המסך</div>
+          <div class="srow col" style="padding-top:14px">
+            <div class="srow-control" style="width:100%">
+              <div class="choice-grid cols3" id="displayGroup" style="width:100%">
+                <button class="choice-card selected" data-display="panel">
+                  <span class="preview preview-panel"></span>
+                  <span class="choice-head"><span class="choice-radio"></span><span class="choice-title" style="font-size:13.5px">תפריט צד</span></span>
+                  <span class="choice-desc">ידית דקה בקצה המסך, נפתחת ל-3 פעולות.</span>
+                </button>
+                <button class="choice-card" data-display="mic">
+                  <span class="preview preview-mic"></span>
+                  <span class="choice-head"><span class="choice-radio"></span><span class="choice-title" style="font-size:13.5px">מיקרופון מרחף</span></span>
+                  <span class="choice-desc">כדור שאפשר לגרור לכל מקום.</span>
+                </button>
+                <button class="choice-card" data-display="hidden">
+                  <span class="preview preview-hidden"></span>
+                  <span class="choice-head"><span class="choice-radio"></span><span class="choice-title" style="font-size:13.5px">מצב מוסתר</span></span>
+                  <span class="choice-desc">חבוי; מופיע רק בזמן הקלטה.</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- mic appearance — hidden when display=panel (mic not visible at rest) -->
+        <div class="scard reveal" id="micAppearance">
+          <div class="scard-title">עיצוב המיקרופון</div>
+          <div class="srow">
+            <div class="srow-main"><div class="srow-label">גודל</div></div>
+            <div class="srow-control"><div class="seg" data-seg="size"><button>קטן</button><button class="on">בינוני</button><button>גדול</button></div></div>
+          </div>
+          <div class="srow">
+            <div class="srow-main"><div class="srow-label">שקיפות</div></div>
+            <div class="srow-control"><input type="range" min="40" max="100" value="95" data-save id="opacity"><span class="range-val" id="opacityVal">95%</span></div>
+          </div>
+          <div class="srow col">
+            <div class="srow-main"><div class="srow-label">צבע</div></div>
+            <div class="srow-control" style="width:100%">
+              <div class="swatch-wrap" style="width:100%">
+                <div><span class="swatch-group-label">צבעים אחידים</span>
+                  <div class="swatch-grid">
+                    <button class="swatch sw-graphite selected" data-sw></button><button class="swatch sw-crimson" data-sw></button><button class="swatch sw-azure" data-sw></button><button class="swatch sw-emerald" data-sw></button>
+                  </div>
+                </div>
+                <div><span class="swatch-group-label">גרדיאנטים</span>
+                  <div class="swatch-grid">
+                    <button class="swatch sw-sunset" data-sw></button><button class="swatch sw-ocean" data-sw></button><button class="swatch sw-violet" data-sw></button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="srow">
+            <div class="srow-main">
+              <div class="srow-label">הצמדה לשדה ההקלדה <span class="badge exp">ניסיוני</span></div>
+              <div class="srow-help">המיקרופון יקפוץ אוטומטית לצד שדה הכתיבה הפעיל ברוב התוכנות.</div>
+            </div>
+            <div class="srow-control"><div class="toggle" data-save></div></div>
+          </div>
+        </div>
+
+        <div class="scard">
+          <div class="scard-title">הפעלה</div>
+          <div class="srow">
+            <div class="srow-main"><div class="srow-label">הפעל את Timluli עם הדלקת המחשב</div></div>
+            <div class="srow-control"><div class="toggle" data-save></div></div>
+          </div>
+          <div class="srow">
+            <div class="srow-main"><div class="srow-label">הצג את המיקרופון בהפעלה</div></div>
+            <div class="srow-control"><div class="toggle on" data-save></div></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ════════ תרגום מסמכים ════════ -->
+      <section class="section" id="translate">
+        <div class="section-head">
+          <h2>תרגום מסמכים</h2>
+          <p>גוררים מסמך על המיקרופון — והוא חוזר מתורגם, לצד הקובץ המקורי.</p>
+        </div>
+
+        <!-- HERO: how it works + language pair + supported formats -->
+        <div class="xl-hero">
+          <div class="flow">
+            <div class="flow-step">
+              <span class="flow-ico">📄</span>
+              <span class="flow-cap"><strong>גוררים מסמך</strong><br>על המיקרופון</span>
+            </div>
+            <svg class="flow-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 6l-6 6 6 6"/></svg>
+            <div class="flow-step">
+              <span class="flow-ico accent">✨</span>
+              <span class="flow-cap"><strong>תרגום חכם</strong><br>אוטומטי בענן</span>
+            </div>
+            <svg class="flow-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 6l-6 6 6 6"/></svg>
+            <div class="flow-step">
+              <span class="flow-ico">💾</span>
+              <span class="flow-cap"><strong>נשמר אוטומטית</strong><br>לצד הקובץ</span>
+            </div>
+          </div>
+          <div class="lang-pair">
+            <span class="lp-label">מתרגם</span>
+            <span class="lp-source">כל שפה</span>
+            <span class="lp-arrow">←</span>
+            <select class="lp-target" id="targetLang" data-save>
+              <option>עברית</option><option>אנגלית</option><option>ערבית</option><option>רוסית</option><option>צרפתית</option><option>ספרדית</option><option>גרמנית</option><option>איטלקית</option>
+            </select>
+          </div>
+          <div class="formats">
+            <span class="fmt-label">תומך ב־</span>
+            <span class="fmt-chip">Word</span><span class="fmt-chip">PDF</span><span class="fmt-chip">PowerPoint</span><span class="fmt-chip">כתוביות (SRT/VTT)</span><span class="fmt-chip">טקסט</span>
+          </div>
+        </div>
+
+        <!-- readiness banner -->
+        <div class="status-card setup" id="transStatus">
+          <div class="ico" id="transIco">↓</div>
+          <div>
+            <div class="st-title" id="transTitle">כדי להתחיל — חבר שירות תרגום</div>
+            <div class="st-sub" id="transSub">חיבור חד-פעמי וחינמי. אחרי זה פשוט גוררים מסמך על המיקרופון.</div>
+          </div>
+        </div>
+
+        <!-- connections: Groq (primary) + Cerebras (backup) — both visible & clear -->
+        <div class="scard">
+          <div class="scard-title">החיבורים שלי</div>
+          <div class="svc-row">
+            <div class="svc-main">
+              <div class="svc-head"><span class="svc-dot" id="groqDot"></span><span class="svc-name">שירות ראשי · Groq</span><span class="badge rec">חינם</span></div>
+              <div class="svc-sub">תרגום איכותי בענן · במכסה החינמית ~100–150 עמודי טקסט ביום.</div>
+            </div>
+            <div class="svc-action">
+              <span class="svc-status" id="groqStatus">לא מחובר</span>
+              <button class="cta" id="connBtn" onclick="openWizard(false)">חבר (חינם)</button>
+            </div>
+          </div>
+          <div class="svc-row">
+            <div class="svc-main">
+              <div class="svc-head"><span class="svc-dot" id="cereDot"></span><span class="svc-name">גיבוי · Cerebras</span><span class="badge soft">לא חובה</span></div>
+              <div class="svc-sub">נכנס אוטומטית כשנגמרת המכסה של Groq · מוסיף ~1 מיליון טוקנים ביום.</div>
+            </div>
+            <div class="svc-action">
+              <span class="svc-status" id="backupStatus">לא מחובר</span>
+              <button class="cta ghost" id="backupBtn" onclick="openWizard(true)">חבר גיבוי</button>
+            </div>
+          </div>
+          <details class="explain">
+            <summary>מה זה החיבורים האלה? · איך משיגים מפתח (חינם)?</summary>
+            <div class="explain-body">
+              התרגום מתבצע בענן בעזרת שירות בינה מלאכותית (<strong>Groq</strong>), שמחזיר תרגום איכותי. צריך לחבר אותו פעם אחת עם מפתח חינמי. <strong>המפתח נשמר מוצפן על המחשב שלך בלבד</strong> ולא נשלח לשום מקום מלבד שירות התרגום.
+              <ul class="explain-steps">
+                <li><span class="n">1</span><span>לוחצים „חבר (חינם)" — וניקח אתכם לאתר השירות.</span></li>
+                <li><span class="n">2</span><span>נרשמים בחינם, יוצרים „API Key" ומעתיקים.</span></li>
+                <li><span class="n">3</span><span>מדביקים את המפתח — Timluli בודק אותו אוטומטית. וזהו.</span></li>
+              </ul>
+              <div style="margin-top:8px"><strong>כמה אפשר בחינם?</strong> Groq: ~100–150 עמודי טקסט ביום (200K–500K טוקנים למודל; המערכת מתחלפת בין מודלים). גיבוי Cerebras: עוד ~1,000,000 טוקנים ביום. כתוביות ומסמכים קצרים — הרבה יותר.</div>
+              <div style="margin-top:8px"><strong>גיבוי (Cerebras):</strong> לא חובה — מתחברים בדיוק אותו דבר באתר cloud.cerebras.ai. נכנס לפעולה רק כשנגמרת המכסה של Groq, כדי שתרגומים גדולים לא ייעצרו.</div>
+            </div>
+          </details>
+        </div>
+
+        <!-- options -->
+        <div class="scard">
+          <div class="scard-title">אפשרויות</div>
+          <div class="srow">
+            <div class="srow-main">
+              <div class="srow-label">מהירות התרגום</div>
+              <div class="srow-help">„רגיל" מתאים לכמעט כולם. „מהיר" מתרגם כמה קטעים במקביל — דורש חשבון Groq בתשלום.</div>
+            </div>
+            <div class="srow-control"><div class="seg" data-seg="speed"><button class="on">רגיל (חינם)</button><button>מהיר</button></div></div>
+          </div>
+        </div>
+
+        <details class="adv">
+          <summary>הגדרות מתקדמות</summary>
+          <div class="adv-body">
+            <div class="srow">
+              <div class="srow-main"><div class="srow-label">מודל תרגום</div><div class="srow-help">„אוטומטי" בוחר את הטוב ביותר. שנה רק אם אתה יודע מה אתה עושה.</div></div>
+              <div class="srow-control"><select data-save><option>אוטומטי (מומלץ)</option></select></div>
+            </div>
+            <div class="srow">
+              <div class="srow-main"><div class="srow-label">פריסת PDF בתרגום לעברית</div></div>
+              <div class="srow-control"><select data-save><option>שימור מיקום מקורי</option><option>התאמת פריסה לימין</option></select></div>
+            </div>
+          </div>
+        </details>
+      </section>
+
+      <!-- ════════ אודות ════════ -->
+      <section class="section" id="about">
+        <div class="section-head"><h2>אודות</h2></div>
+        <div class="about-hero">
+          <div class="about-title">Timluli</div>
+          <div class="about-tag">כלי תמלול ותרגום עברית מערכתי לווינדוס — מהיר ועוצמתי.</div>
+          <div class="about-ver">גרסה 1.12.0 · Oliel Studio</div>
+        </div>
+        <div class="about-card">
+          <h3>פרטיות</h3>
+          <p>במנוע המקוון האודיו נשלח לשרתי Google לתמלול בלבד. לא נשמרים אודיו או טקסט.</p>
+          <p>במנוע המקומי כל העיבוד מתבצע על המחשב שלך, ללא שליחת נתונים לשרת חיצוני.</p>
+        </div>
+        <div class="about-card about-contact">
+          <h3>תמיכה ויצירת קשר</h3>
+          <p>יש לכם שאלה, תקלה או רעיון לפיצ'ר? אשמח לשמוע.</p>
+          <p class="about-author">דניאל דלויה</p>
+          <a class="about-email" href="#">ddlgap@gmail.com</a>
+        </div>
+        <div style="text-align:center;padding-top:4px">
+          <button class="nav-reset" id="resetBtn2" style="font-size:12.5px">שחזר את כל ההגדרות לברירת המחדל</button>
+        </div>
+      </section>
+
+    </main>
+  </div>
+  <!-- Auto-save toast (anchored inside the window frame) -->
+  <div id="toast"><span class="tk">✓</span><span id="toastText">נשמר</span></div>
+</div>
+
+<!-- Connect wizard -->
+<dialog class="wizard" id="wizard">
+  <div class="wiz-card">
+    <div class="wiz-head">
+      <h3 id="wizTitle">חיבור שירות תרגום</h3>
+      <button class="wiz-x" onclick="document.getElementById('wizard').close()">✕</button>
+    </div>
+    <p class="wiz-intro" id="wizIntro">שני צעדים קצרים ואתה מוכן לתרגם. הכול חינם.</p>
+    <ol class="wiz-steps">
+      <li>
+        <span class="wiz-n">1</span>
+        <div style="flex:1">
+          <div class="wiz-step-title">קבל מפתח חינמי</div>
+          <div class="wiz-step-desc" id="wizStep1">ניקח אותך לאתר Groq. הירשם (חינם), לחץ על „Create API Key", והעתק את המפתח.</div>
+          <button class="wiz-open-btn" id="wizOpenSite">פתח את אתר Groq (חינם) ↗</button>
+        </div>
+      </li>
+      <li>
+        <span class="wiz-n">2</span>
+        <div style="flex:1">
+          <div class="wiz-step-title">הדבק את המפתח כאן</div>
+          <input class="wiz-input" id="wizKey" placeholder="gsk_…" autocomplete="off" spellcheck="false" />
+          <div class="wiz-feedback" id="wizFeedback"></div>
+        </div>
+      </li>
+    </ol>
+    <div class="lock-note">🔒 המפתח נשמר מוצפן על המחשב שלך בלבד (DPAPI) ולא נשלח לאף שרת מלבד שירות התרגום.</div>
+    <div class="wiz-actions">
+      <button class="btn-sec" onclick="document.getElementById('wizard').close()">ביטול</button>
+      <button class="cta" id="wizSave" disabled onclick="finishWizard()">שמור וסיים</button>
+    </div>
+  </div>
+</dialog>
+
+<script>
+const $=s=>document.querySelector(s), $$=s=>[...document.querySelectorAll(s)];
+
+/* ── Nav switching ── */
+$$('.nav-item').forEach(b=>b.addEventListener('click',()=>{
+  $$('.nav-item').forEach(x=>x.classList.remove('active'));
+  b.classList.add('active');
+  $$('.section').forEach(s=>s.classList.remove('active'));
+  $('#'+b.dataset.go).classList.add('active');
+  $('.content').scrollTop=0;
+}));
+
+/* ── Auto-save toast ── */
+let toastT;
+function saved(msg='נשמר'){
+  $('#toastText').textContent=msg;
+  const t=$('#toast'); t.classList.add('show');
+  clearTimeout(toastT); toastT=setTimeout(()=>t.classList.remove('show'),1400);
+}
+
+/* ── Toggles ── */
+$$('.toggle').forEach(t=>t.addEventListener('click',()=>{
+  t.classList.toggle('on');
+  if(t.id==='punctToggle') $('#punctReveal').classList.toggle('open',t.classList.contains('on'));
+  saved();
+}));
+
+/* ── Segmented controls ── */
+$$('.seg').forEach(seg=>seg.querySelectorAll('button').forEach(btn=>btn.addEventListener('click',()=>{
+  seg.querySelectorAll('button').forEach(x=>x.classList.remove('on'));
+  btn.classList.add('on');
+  if(seg.dataset.seg==='shortcut') $('#dtKeyRow').style.display = btn.dataset.v==='double'?'':'none';
+  // audio limit note applies only to the cloud (Groq) backend — first button
+  if(seg.dataset.seg==='audio') $('#audioLimitNote').style.display = (btn===seg.querySelector('button'))?'flex':'none';
+  saved();
+})));
+
+/* ── Generic save on change (selects, sliders) ── */
+$$('[data-save]').forEach(el=>{
+  if(el.tagName==='SELECT') el.addEventListener('change',()=>saved());
+  if(el.type==='range') el.addEventListener('input',()=>{ syncRange(el); });
+  if(el.type==='range') el.addEventListener('change',()=>saved());
+});
+function syncRange(el){
+  if(el.id==='silence') $('#silenceVal').textContent=el.value+'ms';
+  if(el.id==='opacity') $('#opacityVal').textContent=el.value+'%';
+}
+
+/* ── Engine choice → reveal model manager ── */
+$$('#engineGroup .choice-card').forEach(c=>c.addEventListener('click',()=>{
+  $$('#engineGroup .choice-card').forEach(x=>x.classList.remove('selected'));
+  c.classList.add('selected');
+  $('#modelsReveal').classList.toggle('open', c.dataset.engine==='offline');
+  saved(c.dataset.engine==='offline'?'עברת למנוע מקומי':'עברת למנוע מקוון');
+}));
+
+/* ── Display choice → show/hide mic-appearance card ── */
+const micApp=$('#micAppearance');
+function syncDisplay(sel){ micApp.classList.toggle('open', sel!=='panel'); }
+$$('#displayGroup .choice-card').forEach(c=>c.addEventListener('click',()=>{
+  $$('#displayGroup .choice-card').forEach(x=>x.classList.remove('selected'));
+  c.classList.add('selected');
+  syncDisplay(c.dataset.display);
+  saved();
+}));
+
+/* ── Color swatches ── */
+$$('[data-sw]').forEach(s=>s.addEventListener('click',()=>{
+  $$('[data-sw]').forEach(x=>x.classList.remove('selected'));
+  s.classList.add('selected'); saved('ערכת הצבע עודכנה');
+}));
+
+/* ── Connect wizard (mock live validation) ── */
+let wizBackup=false;
+function openWizard(backup=false){
+  wizBackup=backup;
+  $('#wizKey').value=''; $('#wizFeedback').textContent=''; $('#wizFeedback').className='wiz-feedback'; $('#wizSave').disabled=true;
+  $('#wizTitle').textContent = backup?'חיבור שירות גיבוי':'חיבור שירות תרגום';
+  $('#wizStep1').textContent = backup
+    ? 'ניקח אותך לאתר Cerebras. הירשם (חינם), צור מפתח (API Key), והעתק אותו.'
+    : 'ניקח אותך לאתר Groq. הירשם (חינם), לחץ על „Create API Key", והעתק את המפתח.';
+  $('#wizOpenSite').textContent = backup?'פתח את אתר Cerebras (חינם) ↗':'פתח את אתר Groq (חינם) ↗';
+  $('#wizKey').placeholder = backup?'csk-…':'gsk_…';
+  $('#wizard').showModal();
+}
+let vT;
+$('#wizKey').addEventListener('input',e=>{
+  const v=e.target.value.trim(); const fb=$('#wizFeedback'); $('#wizSave').disabled=true; clearTimeout(vT);
+  if(!v){fb.textContent='';fb.className='wiz-feedback';return;}
+  fb.textContent='בודק את המפתח…'; fb.className='wiz-feedback checking';
+  vT=setTimeout(()=>{
+    const good=v.length>=8;
+    if(good){fb.textContent='✓ המפתח תקין — נמצאו 22 מודלים';fb.className='wiz-feedback ok';$('#wizSave').disabled=false;}
+    else{fb.textContent='✗ המפתח קצר מדי או לא תקין';fb.className='wiz-feedback err';}
+  },650);
+});
+function finishWizard(){
+  $('#wizard').close();
+  if(!wizBackup){
+    const sc=$('#transStatus'); sc.className='status-card ok';
+    $('#transIco').textContent='✓'; $('#transTitle').textContent='הכול מוכן — אפשר לתרגם';
+    $('#transSub').textContent='גוררים מסמך על אייקון המיקרופון, והתרגום נשמר לצד הקובץ.';
+    const gs=$('#groqStatus'); if(gs){ gs.textContent='מחובר ✓'; gs.classList.add('on'); }
+    $('#groqDot')?.classList.add('on');
+    $('#connBtn').textContent='החלף מפתח'; $('#connBtn').classList.add('ghost');
+  } else {
+    const bs=$('#backupStatus'); if(bs){ bs.textContent='מחובר ✓'; bs.classList.add('on'); }
+    $('#cereDot')?.classList.add('on');
+    const bb=$('#backupBtn'); if(bb) bb.textContent='החלף מפתח';
+  }
+  saved(wizBackup?'מפתח הגיבוי חובר בהצלחה':'שירות התרגום חובר בהצלחה');
+}
+$('#wizOpenSite').addEventListener('click',()=>saved('נפתח בדפדפן (הדגמה)'));
+
+/* ── Reset (mock) ── */
+['#resetBtn','#resetBtn2'].forEach(id=>$(id)?.addEventListener('click',()=>saved('שוחזרו ברירות מחדל')));
+
+/* init */
+syncDisplay('panel');
+</script>
+</body>
+</html>

@@ -223,6 +223,49 @@ fn output_path_with_ext(basis: &Path, target_language: &str, ext: &str) -> PathB
     basis.with_file_name(format!("{stem}.{suffix}.{ext}"))
 }
 
+/// Removes Unicode directional formatting marks (LRM/RLM, embeddings, overrides,
+/// isolates) and the zero-width no-break space / BOM from a string, leaving plain
+/// logical-order text. Models translating to Hebrew/Arabic often inject these into
+/// subtitle text; VLC renders RLM/LRM as a stray on-screen glyph (vlc#13059) and a
+/// bidi-capable player lays RTL out correctly without them — the same "plain logical
+/// order, no marks" guarantee the video→SRT pipeline relies on. Real punctuation
+/// (including an intentional leading `...`) is preserved.
+fn strip_directional_marks(s: &str) -> String {
+    s.chars()
+        .filter(|c| {
+            !matches!(
+                *c,
+                '\u{200E}' | '\u{200F}'        // LRM, RLM
+                    | '\u{202A}'..='\u{202E}'  // LRE, RLE, PDF, LRO, RLO
+                    | '\u{2066}'..='\u{2069}'  // LRI, RLI, FSI, PDI
+                    | '\u{FEFF}'               // BOM / zero-width no-break space
+            )
+        })
+        .collect()
+}
+
+#[cfg(test)]
+mod rtl_subtitle_tests {
+    use super::strip_directional_marks;
+
+    #[test]
+    fn strips_all_bidi_marks_but_keeps_text_and_punctuation() {
+        // Leading RLM + an RLE…PDF wrap + a trailing LRM, around real text whose
+        // leading "..." continuation marker MUST survive.
+        let input = "\u{200F}\u{202B}...\u{202C}שלום, עולם.\u{200E}";
+        assert_eq!(strip_directional_marks(input), "...שלום, עולם.");
+        for m in ['\u{200E}', '\u{200F}', '\u{202A}', '\u{202B}', '\u{202C}', '\u{2066}', '\u{FEFF}'] {
+            assert!(!strip_directional_marks(input).contains(m), "mark survived");
+        }
+    }
+
+    #[test]
+    fn plain_hebrew_is_unchanged() {
+        let s = "שלום לכם, מה שלומכם?\nשורה שנייה.";
+        assert_eq!(strip_directional_marks(s), s);
+    }
+}
+
 /// Entry point: dispatches on file extension.
 pub async fn translate_file(app: &AppHandle, path: &str) -> Result<String, String> {
     let input = PathBuf::from(path);
@@ -280,11 +323,20 @@ async fn translate_text_format(
 
     let out = output_path_with_ext(input, target, ext);
 
-    let map = if units.is_empty() {
+    let mut map = if units.is_empty() {
         HashMap::new()
     } else {
         translate_units(app, target, system_prompt, batch_size, &units).await?
     };
+
+    // Subtitle output must be plain logical-order text so it renders RTL correctly:
+    // strip any directional marks the model injected (see `strip_directional_marks`).
+    // Mirrors the video→SRT pipeline; harmless for LTR targets (no marks to remove).
+    if matches!(doc.category(), Category::Subtitle) {
+        for v in map.values_mut() {
+            *v = strip_directional_marks(v);
+        }
+    }
 
     std::fs::write(&out, doc.render(&map)).map_err(|e| format!("שגיאה בכתיבת הפלט: {e}"))?;
     Ok(out.to_string_lossy().into_owned())

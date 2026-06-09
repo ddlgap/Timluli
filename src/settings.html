@@ -22,22 +22,26 @@
     </div>
   </div>
 
-  <header>
-    <h1>הגדרות</h1>
-    <span class="muted" id="version">v1.8.0</span>
-  </header>
+  <div class="app">
+    <aside class="nav-rail">
+      <header>
+        <h1>הגדרות</h1>
+        <span class="muted" id="version">v1.8.0</span>
+      </header>
 
-  <nav class="tabs" role="tablist" aria-label="הגדרות Timluli">
-    <button role="tab" id="tab-general" aria-controls="general" aria-selected="true" tabindex="0" data-tab="general" class="active">כללי</button>
-    <button role="tab" id="tab-shortcut" aria-controls="shortcut" aria-selected="false" tabindex="-1" data-tab="shortcut">קיצור מקלדת</button>
-    <button role="tab" id="tab-display" aria-controls="display" aria-selected="false" tabindex="-1" data-tab="display">תצוגה</button>
-    <button role="tab" id="tab-behavior" aria-controls="behavior" aria-selected="false" tabindex="-1" data-tab="behavior">התנהגות</button>
-    <button role="tab" id="tab-engine" aria-controls="engine" aria-selected="false" tabindex="-1" data-tab="engine">מנוע תמלול</button>
-    <button role="tab" id="tab-translation" aria-controls="translation" aria-selected="false" tabindex="-1" data-tab="translation">תרגום מסמכים</button>
-    <button role="tab" id="tab-about" aria-controls="about" aria-selected="false" tabindex="-1" data-tab="about">אודות</button>
-  </nav>
+      <nav class="tabs" role="tablist" aria-label="הגדרות Timluli">
+        <button role="tab" id="tab-general" aria-controls="general" aria-selected="true" tabindex="0" data-tab="general" class="active">כללי</button>
+        <button role="tab" id="tab-shortcut" aria-controls="shortcut" aria-selected="false" tabindex="-1" data-tab="shortcut">קיצור מקלדת</button>
+        <button role="tab" id="tab-display" aria-controls="display" aria-selected="false" tabindex="-1" data-tab="display">תצוגה</button>
+        <button role="tab" id="tab-behavior" aria-controls="behavior" aria-selected="false" tabindex="-1" data-tab="behavior">התנהגות</button>
+        <button role="tab" id="tab-engine" aria-controls="engine" aria-selected="false" tabindex="-1" data-tab="engine">מנוע תמלול</button>
+        <button role="tab" id="tab-translation" aria-controls="translation" aria-selected="false" tabindex="-1" data-tab="translation">תרגום מסמכים</button>
+        <button role="tab" id="tab-about" aria-controls="about" aria-selected="false" tabindex="-1" data-tab="about">אודות</button>
+      </nav>
+    </aside>
 
-  <main>
+    <div class="content-col">
+      <main>
     <section id="general" class="section active" role="tabpanel" aria-labelledby="tab-general">
       <div class="field">
         <label for="language">שפת תמלול</label>
@@ -283,6 +287,29 @@
           <button class="model-btn danger-btn" id="punct-cancel-btn" style="display:none">ביטול</button>
         </div>
       </div>
+
+      <!-- ── כתוביות לווידאו ── -->
+      <div class="field" style="margin-top:18px; padding-top:16px; border-top:1px solid var(--border, #2a2a2a)">
+        <div class="field-row">
+          <label for="video_subtitles_enabled">כתוביות לווידאו (וידאו → SRT)</label>
+          <div class="toggle" data-key="video_subtitles_enabled"><input type="checkbox" id="video_subtitles_enabled" /></div>
+        </div>
+        <small class="muted">
+          כשפעיל, גרירת קובץ וידאו (mp4, mkv, mov ועוד) מפיקה קובץ כתוביות SRT עם חותמות זמן ליד קובץ המקור,
+          במנוע התמלול הנבחר למעלה. דורש הורדה חד־פעמית של ffmpeg (לחילוץ האודיו מהווידאו).
+        </small>
+        <div id="ffmpeg-row" class="engine-guidance" style="display:flex; align-items:center; gap:12px; margin-top:10px">
+          <div style="flex:1; min-width:0">
+            <div id="ffmpeg-status-label" class="muted">בודק…</div>
+            <div class="model-card-progress" id="ffmpeg-progress" style="display:none; margin-top:6px">
+              <div class="progress-bar"><div class="progress-fill" id="ffmpeg-fill"></div></div>
+              <span class="progress-label" id="ffmpeg-plabel">0%</span>
+            </div>
+          </div>
+          <button class="model-btn primary-sm" id="ffmpeg-download-btn" style="display:none">הורד ffmpeg</button>
+          <button class="model-btn danger-btn" id="ffmpeg-cancel-btn" style="display:none">ביטול</button>
+        </div>
+      </div>
     </section>
 
     <!-- ── תרגום מסמכים ── -->
@@ -474,6 +501,8 @@
     <span id="unsaved_indicator" class="unsaved-indicator" hidden>● שינויים לא נשמרו</span>
     <span id="status" class="status-msg"></span>
   </footer>
+    </div><!-- /content-col -->
+  </div><!-- /app -->
 
   <div id="toast" role="status" aria-live="polite">
     <span class="icon"></span>

@@ -901,3 +901,69 @@ main small.muted { max-width: 66ch; }
 button.primary.has-changes {
   box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.28);
 }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   Redesign — Step 1: right-rail sidebar navigation (LAYOUT ONLY).
+   No JS changes: the same <nav class="tabs"> buttons and <main> sections are
+   reused; only their container arrangement + styling change. The invoke/listen
+   contract is byte-identical (verified by design/smoke harness).
+   ═══════════════════════════════════════════════════════════════════════════ */
+.app { flex: 1; display: flex; min-height: 0; }
+
+.nav-rail {
+  width: 200px;
+  flex-shrink: 0;
+  background: var(--surface);
+  border-inline-end: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+}
+
+.content-col {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+/* Brand block sits atop the rail (was a full-width header bar). */
+header {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  padding: 16px 16px 10px;
+  border-bottom: none;
+}
+header h1 { font-size: 17px; }
+
+/* Tabs become vertical sidebar items. */
+nav.tabs {
+  flex-direction: column;
+  gap: 3px;
+  padding: 4px 10px 10px;
+  border-bottom: none;
+  background: transparent;
+}
+nav.tabs button {
+  width: 100%;
+  text-align: start;
+  padding: 10px 12px;
+  border-radius: 9px;
+  border-bottom: none;
+}
+nav.tabs button:hover { background: var(--surface-2); color: var(--text); }
+nav.tabs button.active {
+  background: rgba(74, 222, 128, 0.10);
+  color: var(--text);
+  border-bottom: none;
+  box-shadow: inset 3px 0 0 var(--accent); /* accent on the right (inline-start) edge in RTL */
+}
+
+/* main scrolls inside the content column; footer is no longer fixed full-width. */
+main { padding-bottom: 24px; }
+footer {
+  position: static;
+  flex-shrink: 0;
+}

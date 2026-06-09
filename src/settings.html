@@ -30,11 +30,8 @@
       </header>
 
       <nav class="tabs" role="tablist" aria-label="הגדרות Timluli">
-        <button role="tab" id="tab-general" aria-controls="general" aria-selected="true" tabindex="0" data-tab="general" class="active">כללי</button>
-        <button role="tab" id="tab-shortcut" aria-controls="shortcut" aria-selected="false" tabindex="-1" data-tab="shortcut">קיצור מקלדת</button>
-        <button role="tab" id="tab-display" aria-controls="display" aria-selected="false" tabindex="-1" data-tab="display">תצוגה</button>
-        <button role="tab" id="tab-behavior" aria-controls="behavior" aria-selected="false" tabindex="-1" data-tab="behavior">התנהגות</button>
-        <button role="tab" id="tab-engine" aria-controls="engine" aria-selected="false" tabindex="-1" data-tab="engine">מנוע תמלול</button>
+        <button role="tab" id="tab-dictation" aria-controls="dictation" aria-selected="true" tabindex="0" data-tab="dictation" class="active">תמלול</button>
+        <button role="tab" id="tab-appearance" aria-controls="appearance" aria-selected="false" tabindex="-1" data-tab="appearance">מראה והפעלה</button>
         <button role="tab" id="tab-translation" aria-controls="translation" aria-selected="false" tabindex="-1" data-tab="translation">תרגום מסמכים</button>
         <button role="tab" id="tab-about" aria-controls="about" aria-selected="false" tabindex="-1" data-tab="about">אודות</button>
       </nav>
@@ -42,7 +39,9 @@
 
     <div class="content-col">
       <main>
-    <section id="general" class="section active" role="tabpanel" aria-labelledby="tab-general">
+    <!-- ═══════════════ קבוצה 1: תמלול ═══════════════ -->
+    <section id="dictation" class="section active" role="tabpanel" aria-labelledby="tab-dictation">
+      <!-- שפה -->
       <div class="field">
         <label for="language">שפת תמלול</label>
         <select id="language">
@@ -50,17 +49,9 @@
           <option value="en-US">אנגלית</option>
         </select>
       </div>
-      <div class="field-row">
-        <label for="start_with_windows">הפעל את Timluli עם הפעלת ווינדוס</label>
-        <div class="toggle" data-key="start_with_windows"><input type="checkbox" id="start_with_windows" /></div>
-      </div>
-      <div class="field-row">
-        <label for="show_mic_on_startup">הצג את המיקרופון המרחף בהפעלה</label>
-        <div class="toggle" data-key="show_mic_on_startup"><input type="checkbox" id="show_mic_on_startup" /></div>
-      </div>
-    </section>
 
-    <section id="shortcut" class="section" role="tabpanel" aria-labelledby="tab-shortcut">
+      <!-- קיצור והפעלה -->
+      <div class="group-divider"><span class="group-divider-label">קיצור והפעלה</span></div>
       <div class="field">
         <label for="shortcut_type">אופן הקיצור</label>
         <select id="shortcut_type">
@@ -94,104 +85,15 @@
           <option value="push_to_talk">החזקה — מקליט רק כל עוד המקש לחוץ</option>
         </select>
       </div>
-    </section>
 
-    <section id="display" class="section" role="tabpanel" aria-labelledby="tab-display">
-      <div class="field">
-        <label for="display_mode">מצב תצוגה</label>
-        <select id="display_mode">
-          <option value="side-panel">תפריט צד</option>
-          <option value="floating-mic">מיקרופון מרחף</option>
-          <option value="hidden-mic">מצב מוסתר</option>
-        </select>
-        <small class="muted">"תפריט צד" (ברירת מחדל, מומלץ) מציג ידית נשלפת בקצה הימני של המסך שנפתחת לשלוש פעולות: תמלול לייב, תרגום קובץ ותמלול קובץ. "מיקרופון מרחף" מציג כדור שאפשר לגרור לכל מקום במסך. "מצב מוסתר" — המיקרופון חבוי כל הזמן ומופיע רק בזמן הקלטה (בלחיצה על קיצור המקלדת), ונעלם אוטומטית כשהתמלול מסתיים. אפשר להחליף מצב כאן בכל רגע; האפליקציה תמיד נגישה דרך האייקון של Timluli בשורת המשימות.</small>
-      </div>
-
-      <!-- Mic-appearance settings only apply to the floating-mic display mode. In
-           side-panel mode the mic is hidden at rest, so changing size/opacity/theme
-           appears to "do nothing" — hide the whole group there to avoid that
-           confusion. Toggled by applyDisplayModeVisibility() in settings.js. -->
-      <div id="mic-only-settings" class="mic-only-settings">
-      <div class="field">
-        <label>גודל המיקרופון</label>
-        <select id="mic_size">
-          <option value="small">קטן</option>
-          <option value="medium" selected>בינוני</option>
-          <option value="large">גדול</option>
-        </select>
-      </div>
-      <div class="field">
-        <label for="mic_opacity">שקיפות (<span id="opacity_value">95</span>%)</label>
-        <input id="mic_opacity" type="range" min="40" max="100" step="1" value="95" />
-        <div class="range-ends muted" aria-hidden="true">
-          <span>שקוף</span>
-          <span>אטום</span>
-        </div>
-      </div>
-
-      <div class="field">
-        <label class="field-label-bold">ערכת צבע למיקרופון</label>
-
-        <div class="theme-group">
-          <span class="theme-group-label">צבעים אחידים</span>
-          <div class="theme-grid">
-            <button type="button" class="theme-swatch" data-theme="graphite" title="גרפיט" aria-label="ערכת צבע: גרפיט"></button>
-            <button type="button" class="theme-swatch" data-theme="crimson"  title="אדום" aria-label="ערכת צבע: אדום"></button>
-            <button type="button" class="theme-swatch" data-theme="azure"    title="כחול" aria-label="ערכת צבע: כחול"></button>
-            <button type="button" class="theme-swatch" data-theme="emerald"  title="ירוק" aria-label="ערכת צבע: ירוק"></button>
-          </div>
-        </div>
-
-        <div class="theme-group">
-          <span class="theme-group-label">גרדיאנטים</span>
-          <div class="theme-grid">
-            <button type="button" class="theme-swatch" data-theme="sunset" title="שקיעה" aria-label="ערכת צבע: שקיעה"></button>
-            <button type="button" class="theme-swatch" data-theme="ocean"  title="אוקיינוס" aria-label="ערכת צבע: אוקיינוס"></button>
-            <button type="button" class="theme-swatch" data-theme="violet" title="סגול" aria-label="ערכת צבע: סגול"></button>
-          </div>
-        </div>
-
-        <div class="theme-group">
-          <span class="theme-group-label">כדור תלת־ממד</span>
-          <div class="theme-grid">
-            <button type="button" class="theme-swatch" data-theme="orb-plasma" title="פלזמה" aria-label="ערכת צבע: כדור פלזמה"></button>
-            <button type="button" class="theme-swatch" data-theme="orb-aurora" title="זוהר הצפון" aria-label="ערכת צבע: כדור זוהר הצפון"></button>
-          </div>
-        </div>
-      </div>
-
-      <div class="field">
-        <div class="field-row">
-          <label for="field_docking_enabled">
-            הצמד את המיקרופון לשדה ההקלדה הפעיל
-            <span class="badge-experimental">ניסיוני</span>
-          </label>
-          <div class="toggle" data-key="field_docking_enabled"><input type="checkbox" id="field_docking_enabled" /></div>
-        </div>
-        <small class="muted">המיקרופון יקפוץ אוטומטית לצד שדה ההקלדה שתבחר ברוב התוכנות (Notepad, Office, Chrome/Edge, VS Code, Terminal). לא יעבוד ב-Java, משחקים, ותוכנות ללא תמיכה בנגישות. בזמן הכתבה המיקרופון מוקפא במקומו.</small>
-      </div>
-      </div><!-- /mic-only-settings -->
-    </section>
-
-    <section id="behavior" class="section" role="tabpanel" aria-labelledby="tab-behavior">
       <div class="field">
         <label for="silence_timeout_ms">זמן שתיקה לעצירה אוטומטית (<span id="silence_value">1500</span> ms)</label>
         <input id="silence_timeout_ms" type="range" min="800" max="4000" step="100" value="1500" />
         <small class="muted">כמה זמן של שקט עד שהתמלול ייעצר. ברירת מחדל: 1500ms.</small>
       </div>
-      <div class="field-row">
-        <label for="mute_during_fullscreen">השתק אוטומטית במצב מסך מלא <span class="badge-soon">בקרוב</span></label>
-        <div class="toggle disabled" data-key="mute_during_fullscreen"><input type="checkbox" id="mute_during_fullscreen" disabled aria-disabled="true" /></div>
-      </div>
-      <div class="field-row">
-        <label for="mute_during_calls">השתק במהלך שיחות (Teams/Zoom) <span class="badge-soon">בקרוב</span></label>
-        <div class="toggle disabled" data-key="mute_during_calls"><input type="checkbox" id="mute_during_calls" disabled aria-disabled="true" /></div>
-      </div>
-      <small class="muted">תכונות אלה עדיין בפיתוח ויתווספו בעדכון קרוב.</small>
-    </section>
 
-    <!-- ── מנוע תמלול (Phase 2) ── -->
-    <section id="engine" class="section" role="tabpanel" aria-labelledby="tab-engine">
+      <!-- מנוע התמלול -->
+      <div class="group-divider"><span class="group-divider-label">מנוע התמלול</span></div>
       <div class="field">
         <label class="field-label-bold">בחר מנוע תמלול</label>
         <div class="engine-radio-group">
@@ -312,7 +214,96 @@
       </div>
     </section>
 
-    <!-- ── תרגום מסמכים ── -->
+    <!-- ═══════════════ קבוצה 2: מראה והפעלה ═══════════════ -->
+    <section id="appearance" class="section" role="tabpanel" aria-labelledby="tab-appearance">
+      <div class="field">
+        <label for="display_mode">מצב תצוגה</label>
+        <select id="display_mode">
+          <option value="side-panel">תפריט צד</option>
+          <option value="floating-mic">מיקרופון מרחף</option>
+          <option value="hidden-mic">מצב מוסתר</option>
+        </select>
+        <small class="muted">"תפריט צד" (ברירת מחדל, מומלץ) מציג ידית נשלפת בקצה הימני של המסך שנפתחת לשלוש פעולות: תמלול לייב, תרגום קובץ ותמלול קובץ. "מיקרופון מרחף" מציג כדור שאפשר לגרור לכל מקום במסך. "מצב מוסתר" — המיקרופון חבוי כל הזמן ומופיע רק בזמן הקלטה (בלחיצה על קיצור המקלדת), ונעלם אוטומטית כשהתמלול מסתיים. אפשר להחליף מצב כאן בכל רגע; האפליקציה תמיד נגישה דרך האייקון של Timluli בשורת המשימות.</small>
+      </div>
+
+      <!-- Mic-appearance settings only apply to the floating-mic display mode. In
+           side-panel mode the mic is hidden at rest, so changing size/opacity/theme
+           appears to "do nothing" — hide the whole group there to avoid that
+           confusion. Toggled by applyDisplayModeVisibility() in settings.js. -->
+      <div id="mic-only-settings" class="mic-only-settings">
+      <div class="field">
+        <label>גודל המיקרופון</label>
+        <select id="mic_size">
+          <option value="small">קטן</option>
+          <option value="medium" selected>בינוני</option>
+          <option value="large">גדול</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="mic_opacity">שקיפות (<span id="opacity_value">95</span>%)</label>
+        <input id="mic_opacity" type="range" min="40" max="100" step="1" value="95" />
+        <div class="range-ends muted" aria-hidden="true">
+          <span>שקוף</span>
+          <span>אטום</span>
+        </div>
+      </div>
+
+      <div class="field">
+        <label class="field-label-bold">ערכת צבע למיקרופון</label>
+
+        <div class="theme-group">
+          <span class="theme-group-label">צבעים אחידים</span>
+          <div class="theme-grid">
+            <button type="button" class="theme-swatch" data-theme="graphite" title="גרפיט" aria-label="ערכת צבע: גרפיט"></button>
+            <button type="button" class="theme-swatch" data-theme="crimson"  title="אדום" aria-label="ערכת צבע: אדום"></button>
+            <button type="button" class="theme-swatch" data-theme="azure"    title="כחול" aria-label="ערכת צבע: כחול"></button>
+            <button type="button" class="theme-swatch" data-theme="emerald"  title="ירוק" aria-label="ערכת צבע: ירוק"></button>
+          </div>
+        </div>
+
+        <div class="theme-group">
+          <span class="theme-group-label">גרדיאנטים</span>
+          <div class="theme-grid">
+            <button type="button" class="theme-swatch" data-theme="sunset" title="שקיעה" aria-label="ערכת צבע: שקיעה"></button>
+            <button type="button" class="theme-swatch" data-theme="ocean"  title="אוקיינוס" aria-label="ערכת צבע: אוקיינוס"></button>
+            <button type="button" class="theme-swatch" data-theme="violet" title="סגול" aria-label="ערכת צבע: סגול"></button>
+          </div>
+        </div>
+
+        <div class="theme-group">
+          <span class="theme-group-label">כדור תלת־ממד</span>
+          <div class="theme-grid">
+            <button type="button" class="theme-swatch" data-theme="orb-plasma" title="פלזמה" aria-label="ערכת צבע: כדור פלזמה"></button>
+            <button type="button" class="theme-swatch" data-theme="orb-aurora" title="זוהר הצפון" aria-label="ערכת צבע: כדור זוהר הצפון"></button>
+          </div>
+        </div>
+      </div>
+
+      <div class="field">
+        <div class="field-row">
+          <label for="field_docking_enabled">
+            הצמד את המיקרופון לשדה ההקלדה הפעיל
+            <span class="badge-experimental">ניסיוני</span>
+          </label>
+          <div class="toggle" data-key="field_docking_enabled"><input type="checkbox" id="field_docking_enabled" /></div>
+        </div>
+        <small class="muted">המיקרופון יקפוץ אוטומטית לצד שדה ההקלדה שתבחר ברוב התוכנות (Notepad, Office, Chrome/Edge, VS Code, Terminal). לא יעבוד ב-Java, משחקים, ותוכנות ללא תמיכה בנגישות. בזמן הכתבה המיקרופון מוקפא במקומו.</small>
+      </div>
+      </div><!-- /mic-only-settings -->
+
+      <!-- הפעלה (מתוך „כללי" לשעבר) -->
+      <div class="group-divider"><span class="group-divider-label">הפעלה</span></div>
+      <div class="field-row">
+        <label for="start_with_windows">הפעל את Timluli עם הפעלת ווינדוס</label>
+        <div class="toggle" data-key="start_with_windows"><input type="checkbox" id="start_with_windows" /></div>
+      </div>
+      <div class="field-row">
+        <label for="show_mic_on_startup">הצג את המיקרופון המרחף בהפעלה</label>
+        <div class="toggle" data-key="show_mic_on_startup"><input type="checkbox" id="show_mic_on_startup" /></div>
+      </div>
+    </section>
+
+    <!-- ═══════════════ קבוצה 3: תרגום מסמכים ═══════════════ -->
     <section id="translation" class="section" role="tabpanel" aria-labelledby="tab-translation">
       <!-- D: status banner -->
       <div id="translate_banner" class="translate-banner">
@@ -470,6 +461,7 @@
       </dialog>
     </section>
 
+    <!-- ═══════════════ קבוצה 4: אודות ═══════════════ -->
     <section id="about" class="section" role="tabpanel" aria-labelledby="tab-about">
       <div class="about-hero">
         <h2 class="about-title">Timluli</h2>
@@ -493,13 +485,13 @@
         <a class="about-email" href="mailto:ddlgap@gmail.com">ddlgap@gmail.com</a>
       </div>
     </section>
-  </main>
+      </main>
 
-  <footer>
-    <span class="muted autosave-note">✓ השינויים נשמרים אוטומטית</span>
-    <button id="reset">שחזר ברירות מחדל</button>
-    <span id="status" class="status-msg"></span>
-  </footer>
+      <footer>
+        <span class="muted autosave-note">✓ השינויים נשמרים אוטומטית</span>
+        <button id="reset">שחזר ברירות מחדל</button>
+        <span id="status" class="status-msg"></span>
+      </footer>
     </div><!-- /content-col -->
   </div><!-- /app -->
 

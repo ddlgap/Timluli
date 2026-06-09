@@ -970,3 +970,16 @@ footer {
 
 /* Step 2: auto-save — footer reassurance note (replaces the Save button). */
 .autosave-note { font-size: 12px; align-self: center; color: var(--text-dim); }
+
+/* Step 3: labelled divider between sub-groups inside a consolidated section. */
+.group-divider {
+  margin: 20px 0 2px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border);
+}
+.group-divider-label {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.3px;
+  color: var(--text-dim);
+}

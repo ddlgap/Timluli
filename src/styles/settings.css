@@ -1116,6 +1116,9 @@ main > .section { max-width: 780px; margin-inline: auto; width: 100%; }
 /* Neutral hovers + toggle track + scrollbar tuned for a light surface. */
 :root.light button:hover { background: var(--surface-2); }
 :root.light .toggle { background: #c5cbd6; }
+/* The .light .toggle rule above outranks .toggle.on, so re-assert the green
+   "on" state with a higher-specificity light selector (else on reads as off). */
+:root.light .toggle.on { background: var(--accent); }
 :root.light .toggle::after { background: #ffffff; }
 :root.light ::-webkit-scrollbar-thumb { background: #c9cfd9; }
 :root.light .toggle.disabled { background: #e2e6ec; }

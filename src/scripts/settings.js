@@ -34,7 +34,7 @@ function applyTheme(t) {
   const btn = $('tb-theme');
   if (btn) btn.setAttribute('aria-label', t === 'light' ? 'עבור למצב כהה' : 'עבור למצב בהיר');
 }
-let uiTheme = (() => { try { return localStorage.getItem(THEME_KEY) || 'dark'; } catch (_) { return 'dark'; } })();
+let uiTheme = (() => { try { return localStorage.getItem(THEME_KEY) || 'light'; } catch (_) { return 'light'; } })();
 applyTheme(uiTheme);
 $('tb-theme')?.addEventListener('click', () => {
   uiTheme = uiTheme === 'light' ? 'dark' : 'light';
@@ -77,6 +77,14 @@ document.querySelector('nav.tabs')?.addEventListener('keydown', (e) => {
 
 const hashTab = location.hash.replace('#', '');
 if (hashTab) activateTab(document.querySelector(`[data-tab="${hashTab}"]`));
+
+// Home quick-jump cards → switch to the named settings tab.
+document.querySelectorAll('.jump-card[data-jump]').forEach((card) => {
+  card.addEventListener('click', () => {
+    const tab = document.querySelector(`nav.tabs [data-tab="${card.dataset.jump}"]`);
+    if (tab) activateTab(tab, true);
+  });
+});
 
 // ---- Auto-save ----
 // Every staged control persists itself shortly after it changes (debounced), so
@@ -222,6 +230,16 @@ shortcutType.addEventListener('change', () => applyShortcutType(shortcutType.val
 // The checkbox is the source of truth (focusable for keyboard/Space + screen
 // readers); clicking the pill or its label drives it, and a single change
 // listener keeps the visual `.on` state and the dirty flag in sync.
+// Mirror a single-purpose toggle's on/off onto its wrapping .s-card so the card
+// gets the green "active" tint (Dribbble reference). Cards that hold more than
+// one toggle are skipped, so a sub-option can't flip the whole card's tint.
+function syncCardOn(toggleEl) {
+  const card = toggleEl.closest('.s-card');
+  if (!card) return;
+  if (card.querySelectorAll('.toggle').length !== 1) return;
+  card.classList.toggle('on', toggleEl.classList.contains('on'));
+}
+
 document.querySelectorAll('.toggle').forEach((el) => {
   const checkbox = el.querySelector('input');
   if (!checkbox) return;
@@ -233,6 +251,7 @@ document.querySelectorAll('.toggle').forEach((el) => {
   });
   checkbox.addEventListener('change', () => {
     el.classList.toggle('on', checkbox.checked);
+    syncCardOn(el);
   });
 });
 
@@ -242,6 +261,7 @@ function setToggle(key, value) {
   el.classList.toggle('on', !!value);
   const cb = el.querySelector('input');
   if (cb) cb.checked = !!value;
+  syncCardOn(el);
 }
 
 function getToggle(key) {
@@ -275,6 +295,9 @@ async function loadSettings() {
   setToggle('punctuation_newline', stg.punctuation_newline);
   setToggle('video_subtitles_enabled', stg.video_subtitles_enabled !== false);
   const sc = stg.shortcut || 'Ctrl+Ctrl';
+  // Home quick-guide shortcut chip — show the live shortcut (Super → Win for users).
+  const homeKbd = $('home-shortcut-kbd');
+  if (homeKbd) homeKbd.textContent = sc.split('+').map((t) => (t === 'Super' ? 'Win' : t)).join(' + ');
   const dtMod = doubleTapModifierOf(sc);
   if (dtMod) {
     shortcutType.value = 'double';

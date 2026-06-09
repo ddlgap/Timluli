@@ -38,96 +38,221 @@
       </header>
 
       <nav class="tabs" role="tablist" aria-label="הגדרות Timluli">
-        <button role="tab" id="tab-dictation" aria-controls="dictation" aria-selected="true" tabindex="0" data-tab="dictation" class="active">תמלול</button>
-        <button role="tab" id="tab-appearance" aria-controls="appearance" aria-selected="false" tabindex="-1" data-tab="appearance">מראה והפעלה</button>
-        <button role="tab" id="tab-translation" aria-controls="translation" aria-selected="false" tabindex="-1" data-tab="translation">תרגום מסמכים</button>
-        <button role="tab" id="tab-about" aria-controls="about" aria-selected="false" tabindex="-1" data-tab="about">אודות</button>
+        <button role="tab" id="tab-home" aria-controls="home" aria-selected="true" tabindex="0" data-tab="home" class="active">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 10.5 12 3l9 7.5"/><path d="M5 9.5V20h14V9.5"/><path d="M9.5 20v-6h5v6"/></svg>
+          <span>בית</span>
+        </button>
+        <button role="tab" id="tab-dictation" aria-controls="dictation" aria-selected="false" tabindex="-1" data-tab="dictation">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="2.5" width="6" height="11" rx="3"/><path d="M5.5 11a6.5 6.5 0 0 0 13 0"/><path d="M12 17.5v3M8.5 20.5h7"/></svg>
+          <span>תמלול</span>
+        </button>
+        <button role="tab" id="tab-appearance" aria-controls="appearance" aria-selected="false" tabindex="-1" data-tab="appearance">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h9M19 7h1"/><circle cx="16" cy="7" r="2.2"/><path d="M4 17h1M11 17h9"/><circle cx="8" cy="17" r="2.2"/></svg>
+          <span>מראה והפעלה</span>
+        </button>
+        <button role="tab" id="tab-translation" aria-controls="translation" aria-selected="false" tabindex="-1" data-tab="translation">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 5h7M7.5 5v1.5c0 3-1.8 5.5-4 6.5"/><path d="M5 9.5c0 2 2.2 3.8 5 4"/><path d="M12.5 19l4-9 4 9M14 16h5"/></svg>
+          <span>תרגום מסמכים</span>
+        </button>
+        <button role="tab" id="tab-about" aria-controls="about" aria-selected="false" tabindex="-1" data-tab="about">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 11v5"/><circle cx="12" cy="7.8" r="1" fill="currentColor" stroke="none"/></svg>
+          <span>אודות</span>
+        </button>
       </nav>
     </aside>
 
     <div class="content-col">
       <main>
-    <!-- ═══════════════ קבוצה 1: תמלול ═══════════════ -->
-    <section id="dictation" class="section active" role="tabpanel" aria-labelledby="tab-dictation">
-      <!-- שפה -->
-      <div class="field">
-        <label for="language">שפת תמלול</label>
-        <select id="language">
-          <option value="he-IL">עברית</option>
-          <option value="en-US">אנגלית</option>
-        </select>
-      </div>
-
-      <!-- קיצור והפעלה -->
-      <div class="group-divider"><span class="group-divider-label">קיצור והפעלה</span></div>
-      <div class="field">
-        <label for="shortcut_type">אופן הקיצור</label>
-        <select id="shortcut_type">
-          <option value="double">לחיצה כפולה על מקש</option>
-          <option value="combo">צירוף מקשים מותאם</option>
-        </select>
-      </div>
-
-      <div class="field" id="double_tap_field">
-        <label for="double_tap_modifier">מקש ללחיצה כפולה</label>
-        <select id="double_tap_modifier">
-          <option value="Ctrl">Ctrl — לחיצה כפולה</option>
-          <option value="Alt">Alt — לחיצה כפולה</option>
-          <option value="Shift">Shift — לחיצה כפולה</option>
-          <option value="Win">Win — לחיצה כפולה</option>
-        </select>
-        <small class="muted">הקש פעמיים ברצף (כמו דאבל-קליק) על המקש הנבחר כדי להתחיל/לעצור תמלול. ברירת מחדל: Ctrl פעמיים.</small>
-      </div>
-
-      <div class="field" id="combo_field" style="display:none">
-        <label>קיצור מקלדת גלובלי</label>
-        <button id="shortcut-key" class="shortcut-input" type="button">Ctrl+Super+Space</button>
-        <small class="muted">לחץ על הכפתור והקש את הקיצור הרצוי (מודיפייר + מקש).</small>
-        <small id="shortcut-status" class="muted"></small>
-      </div>
-
-      <div class="field">
-        <label for="activation_mode">אופן הפעלה</label>
-        <select id="activation_mode">
-          <option value="toggle">החלפה — לחיצה ראשונה מתחילה, שנייה עוצרת</option>
-          <option value="push_to_talk">החזקה — מקליט רק כל עוד המקש לחוץ</option>
-        </select>
-      </div>
-
-      <div class="field">
-        <label for="silence_timeout_ms">זמן שתיקה לעצירה אוטומטית (<span id="silence_value">1500</span> ms)</label>
-        <input id="silence_timeout_ms" type="range" min="800" max="4000" step="100" value="1500" />
-        <small class="muted">כמה זמן של שקט עד שהתמלול ייעצר. ברירת מחדל: 1500ms.</small>
-      </div>
-
-      <!-- מנוע התמלול -->
-      <div class="group-divider"><span class="group-divider-label">מנוע התמלול</span></div>
-      <div class="field">
-        <label class="field-label-bold">בחר מנוע תמלול</label>
-        <div class="engine-radio-group">
-          <label class="engine-option" id="engine-opt-web">
-            <input type="radio" name="engine_id" value="web-speech" />
-            <div class="engine-option-content">
-              <span class="engine-name">מקוון (Google)</span>
-              <span class="engine-desc">מהיר ומדויק — דורש חיבור לאינטרנט</span>
-            </div>
-          </label>
-          <label class="engine-option" id="engine-opt-local">
-            <input type="radio" name="engine_id" value="whisper-local" />
-            <div class="engine-option-content">
-              <span class="engine-name">מקומי (אופליין)</span>
-              <span class="engine-desc">עובד על המחשב בלי אינטרנט — הורדה חד־פעמית (~700MB)</span>
-            </div>
-          </label>
+    <!-- ═══════════════ קבוצה 0: בית / מדריך מהיר ═══════════════ -->
+    <section id="home" class="section active" role="tabpanel" aria-labelledby="tab-home">
+      <div class="home-hero">
+        <span class="home-logo-wrap" role="img" aria-label="Timluli">
+          <!-- Transparent PNG lockups (waveform + wordmark), swapped by theme. -->
+          <img class="home-logo home-logo-dark" src="/timluli-logo-dark.png" alt="" />
+          <img class="home-logo home-logo-light" src="/timluli-logo-light.png" alt="" />
+        </span>
+        <h1 class="home-welcome">ברוכים הבאים 👋</h1>
+        <p class="home-tagline">תמלול ותרגום בעברית — בכל תוכנה במחשב</p>
+        <div class="home-shortcut">
+          <span class="hs-label">הקיצור שלך:</span>
+          <kbd id="home-shortcut-kbd">Ctrl + Ctrl</kbd>
         </div>
       </div>
 
+      <div class="s-group">איך זה עובד</div>
+      <div class="xl-hero">
+        <div class="flow">
+          <div class="flow-step">
+            <span class="flow-ico">⌨️</span>
+            <span class="flow-cap"><strong>מקישים על הקיצור</strong><br>Ctrl פעמיים</span>
+          </div>
+          <svg class="flow-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14.5 6l-6 6 6 6"/></svg>
+          <div class="flow-step">
+            <span class="flow-ico accent">🎤</span>
+            <span class="flow-cap"><strong>מדברים</strong><br>בעברית או אנגלית</span>
+          </div>
+          <svg class="flow-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14.5 6l-6 6 6 6"/></svg>
+          <div class="flow-step">
+            <span class="flow-ico">✍️</span>
+            <span class="flow-cap"><strong>הטקסט נכתב לבד</strong><br>בכל חלון פעיל</span>
+          </div>
+        </div>
+        <div class="limit-note">
+          <span class="lnico">📄</span>
+          <div class="ln-body">
+            <span class="ln-main">רוצים לתרגם מסמך? <strong>גוררים אותו על אייקון המיקרופון</strong> וקובץ מתורגם נשמר לידו — Word, PDF, PowerPoint, כתוביות וטקסט.</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="s-group">קיצורי דרך</div>
+      <div class="home-jump">
+        <button type="button" class="jump-card" data-jump="dictation">
+          <span class="s-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="2.5" width="6" height="11" rx="3"/><path d="M5.5 11a6.5 6.5 0 0 0 13 0"/><path d="M12 17.5v3M8.5 20.5h7"/></svg></span>
+          <span class="jc-title">הגדרות תמלול</span>
+          <span class="jc-desc">שפה, קיצור, מנוע ופיסוק</span>
+        </button>
+        <button type="button" class="jump-card" data-jump="translation">
+          <span class="s-icon accent"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 5h7M7.5 5v1.5c0 3-1.8 5.5-4 6.5"/><path d="M5 9.5c0 2 2.2 3.8 5 4"/><path d="M12.5 19l4-9 4 9M14 16h5"/></svg></span>
+          <span class="jc-title">תרגום מסמכים</span>
+          <span class="jc-desc">חיבור שירות ושפת יעד</span>
+        </button>
+        <button type="button" class="jump-card" data-jump="appearance">
+          <span class="s-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h9M19 7h1"/><circle cx="16" cy="7" r="2.2"/><path d="M4 17h1M11 17h9"/><circle cx="8" cy="17" r="2.2"/></svg></span>
+          <span class="jc-title">מראה והפעלה</span>
+          <span class="jc-desc">תצוגה, מיקרופון והפעלה</span>
+        </button>
+      </div>
+    </section>
+
+    <!-- ═══════════════ קבוצה 1: תמלול ═══════════════ -->
+    <section id="dictation" class="section" role="tabpanel" aria-labelledby="tab-dictation">
+      <div class="s-head">
+        <h2>תמלול</h2>
+        <p>שפת התמלול, אופן ההפעלה והקיצור, ומנוע התמלול — הכול במקום אחד.</p>
+      </div>
+
+      <!-- שפה -->
+      <div class="s-card stack">
+        <div class="s-row">
+          <span class="s-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M3 12h18"/><path d="M12 3c2.5 2.5 2.5 15 0 18M12 3c-2.5 2.5-2.5 15 0 18"/></svg></span>
+          <span class="s-text">
+            <span class="s-title">שפת תמלול</span>
+            <span class="s-desc">השפה שבה תדברו לתמלול חי.</span>
+          </span>
+        </div>
+        <div class="s-body">
+          <select id="language">
+            <option value="he-IL">עברית</option>
+            <option value="en-US">אנגלית</option>
+          </select>
+        </div>
+      </div>
+
+      <!-- קיצור והפעלה -->
+      <div class="s-group">קיצור והפעלה</div>
+
+      <div class="s-card stack">
+        <div class="s-row">
+          <span class="s-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2.5" y="6" width="19" height="12" rx="2"/><path d="M6 9.5h.01M9.5 9.5h.01M13 9.5h.01M16.5 9.5h.01M7 14h10"/></svg></span>
+          <span class="s-text">
+            <span class="s-title">אופן הקיצור</span>
+            <span class="s-desc">איך מפעילים את התמלול — הקשה כפולה על מקש או צירוף מקשים מותאם.</span>
+          </span>
+        </div>
+        <div class="s-body">
+          <select id="shortcut_type">
+            <option value="double">לחיצה כפולה על מקש</option>
+            <option value="combo">צירוף מקשים מותאם</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="s-card stack" id="double_tap_field">
+        <div class="s-row">
+          <span class="s-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2.5" y="6" width="19" height="12" rx="2"/><path d="M6 9.5h.01M9.5 9.5h.01M13 9.5h.01M16.5 9.5h.01M7 14h10"/></svg></span>
+          <span class="s-text">
+            <span class="s-title">מקש ללחיצה כפולה</span>
+            <span class="s-desc">הקש פעמיים ברצף (כמו דאבל-קליק) על המקש הנבחר כדי להתחיל/לעצור תמלול. ברירת מחדל: Ctrl פעמיים.</span>
+          </span>
+        </div>
+        <div class="s-body">
+          <select id="double_tap_modifier">
+            <option value="Ctrl">Ctrl — לחיצה כפולה</option>
+            <option value="Alt">Alt — לחיצה כפולה</option>
+            <option value="Shift">Shift — לחיצה כפולה</option>
+            <option value="Win">Win — לחיצה כפולה</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="s-card stack" id="combo_field" style="display:none">
+        <div class="s-row">
+          <span class="s-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2.5" y="6" width="19" height="12" rx="2"/><path d="M6 9.5h.01M9.5 9.5h.01M13 9.5h.01M16.5 9.5h.01M7 14h10"/></svg></span>
+          <span class="s-text">
+            <span class="s-title">קיצור מקלדת גלובלי</span>
+            <span class="s-desc">לחץ על הכפתור והקש את הקיצור הרצוי (מודיפייר + מקש).</span>
+          </span>
+        </div>
+        <div class="s-body">
+          <button id="shortcut-key" class="shortcut-input" type="button">Ctrl+Super+Space</button>
+          <small id="shortcut-status" class="muted"></small>
+        </div>
+      </div>
+
+      <div class="s-card stack">
+        <div class="s-row">
+          <span class="s-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v8"/><path d="M6.6 6.6a8 8 0 1 0 10.8 0"/></svg></span>
+          <span class="s-text">
+            <span class="s-title">אופן הפעלה</span>
+            <span class="s-desc">„החלפה” — לחיצה ראשונה מתחילה ושנייה עוצרת. „החזקה” — מקליט רק כל עוד המקש לחוץ.</span>
+          </span>
+        </div>
+        <div class="s-body">
+          <select id="activation_mode">
+            <option value="toggle">החלפה — לחיצה ראשונה מתחילה, שנייה עוצרת</option>
+            <option value="push_to_talk">החזקה — מקליט רק כל עוד המקש לחוץ</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="s-card stack">
+        <div class="s-row">
+          <span class="s-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7.5V12l3.2 2"/></svg></span>
+          <span class="s-text">
+            <span class="s-title">זמן שתיקה לעצירה אוטומטית (<span id="silence_value">1500</span> ms)</span>
+            <span class="s-desc">כמה זמן של שקט עד שהתמלול ייעצר. ברירת מחדל: 1500ms.</span>
+          </span>
+        </div>
+        <div class="s-body">
+          <input id="silence_timeout_ms" type="range" min="800" max="4000" step="100" value="1500" />
+        </div>
+      </div>
+
+      <!-- מנוע התמלול -->
+      <div class="s-group">מנוע תמלול חי</div>
+      <p class="s-desc subgroup-desc">המנוע שממיר דיבור חי לטקסט. תרגום מסמכים פועל בנפרד ואינו מושפע מכאן.</p>
+      <div class="engine-radio-group">
+        <label class="engine-option" id="engine-opt-web">
+          <input type="radio" name="engine_id" value="web-speech" />
+          <div class="engine-option-content">
+            <span class="engine-name">מקוון (Google)</span>
+            <span class="engine-desc">מהיר ומדויק — דורש חיבור לאינטרנט</span>
+          </div>
+        </label>
+        <label class="engine-option" id="engine-opt-local">
+          <input type="radio" name="engine_id" value="whisper-local" />
+          <div class="engine-option-content">
+            <span class="engine-name">מקומי (אופליין)</span>
+            <span class="engine-desc">עובד על המחשב בלי אינטרנט — הורדה חד־פעמית (~700MB)</span>
+          </div>
+        </label>
+      </div>
+
       <!-- ── תמלול בקבצי אודיו ── -->
-      <div class="field" style="margin-top:18px; padding-top:16px; border-top:1px solid var(--border, #2a2a2a)">
-        <label class="field-label-bold">תמלול בקבצי אודיו</label>
-        <small class="muted" style="margin-bottom:8px">
-          גרור קובץ אודיו (mp3, wav, m4a, ועוד) על המיקרופון כדי לתמלל אותו. התמלול נשמר כקובץ טקסט לצד הקובץ המקורי.
-        </small>
+      <div class="s-group">תמלול קובצי אודיו</div>
+      <p class="s-desc subgroup-desc">גרור קובץ אודיו (mp3, wav, m4a ועוד) על המיקרופון כדי לתמלל אותו. התמלול נשמר כקובץ טקסט לצד הקובץ המקורי.</p>
+      <div class="audio-file-block">
         <div class="engine-radio-group">
           <label class="engine-option" id="audio-engine-opt-groq">
             <input type="radio" name="audio_file_engine" value="groq" />
@@ -177,22 +302,19 @@
         </small>
       </div>
 
-      <!-- ── פיסוק אוטומטי ── -->
-      <div class="field" style="margin-top:18px; padding-top:16px; border-top:1px solid var(--border, #2a2a2a)">
-        <div class="field-row">
-          <label for="punctuation_enabled">פיסוק אוטומטי (עברית)</label>
-          <div class="toggle" data-key="punctuation_enabled"><input type="checkbox" id="punctuation_enabled" /></div>
+      <!-- ── פיסוק וכתוביות ── -->
+      <div class="s-group">פיסוק וכתוביות</div>
+
+      <div class="s-card">
+        <div class="s-row">
+          <span class="s-icon accent"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 7h14M5 12h11M5 17h7"/></svg></span>
+          <span class="s-text">
+            <label class="s-title" for="punctuation_enabled">פיסוק אוטומטי (עברית)</label>
+            <span class="s-desc">מוסיף נקודות, פסיקים וסימני שאלה לתמלול — אוטומטית, בלי שתצטרך לומר אותם. רץ במחשב (לא נשלח לאינטרנט) ומוסיף השהיה זניחה. דורש הורדה חד־פעמית של מודל (~283MB).</span>
+          </span>
+          <span class="s-control"><div class="toggle" data-key="punctuation_enabled"><input type="checkbox" id="punctuation_enabled" /></div></span>
         </div>
-        <small class="muted">
-          מוסיף נקודות, פסיקים וסימני שאלה לתמלול — אוטומטית, בלי שתצטרך לומר אותם. רץ במחשב (לא נשלח לאינטרנט)
-          ומוסיף השהיה זניחה. דורש הורדה חד־פעמית של מודל (~283MB).
-        </small>
-        <div class="field-row" style="margin-top:10px">
-          <label for="punctuation_newline">שורה חדשה אחרי כל משפט (. ? !)</label>
-          <div class="toggle" data-key="punctuation_newline"><input type="checkbox" id="punctuation_newline" /></div>
-        </div>
-        <small class="muted">כל משפט בשורה משלו. נכנס כשבירת-שורה רגילה (לא "שליחה") — בטוח גם בצ'אטים.</small>
-        <div id="punct-row" class="engine-guidance" style="display:flex; align-items:center; gap:12px; margin-top:10px">
+        <div id="punct-row" class="engine-guidance" style="display:flex; align-items:center; gap:12px; margin-top:12px">
           <div style="flex:1; min-width:0">
             <div id="punct-status-label" class="muted">בודק…</div>
             <div class="model-card-progress" id="punct-progress" style="display:none; margin-top:6px">
@@ -205,17 +327,28 @@
         </div>
       </div>
 
-      <!-- ── כתוביות לווידאו ── -->
-      <div class="field" style="margin-top:18px; padding-top:16px; border-top:1px solid var(--border, #2a2a2a)">
-        <div class="field-row">
-          <label for="video_subtitles_enabled">כתוביות לווידאו (וידאו → SRT)</label>
-          <div class="toggle" data-key="video_subtitles_enabled"><input type="checkbox" id="video_subtitles_enabled" /></div>
+      <div class="s-card">
+        <div class="s-row">
+          <span class="s-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 5v5a4 4 0 0 1-4 4H5"/><path d="M9 10l-4 4 4 4"/></svg></span>
+          <span class="s-text">
+            <label class="s-title" for="punctuation_newline">שורה חדשה אחרי כל משפט (. ? !)</label>
+            <span class="s-desc">כל משפט בשורה משלו. נכנס כשבירת-שורה רגילה (לא „שליחה”) — בטוח גם בצ'אטים.</span>
+          </span>
+          <span class="s-control"><div class="toggle" data-key="punctuation_newline"><input type="checkbox" id="punctuation_newline" /></div></span>
         </div>
-        <small class="muted">
-          כשפעיל, גרירת קובץ וידאו (mp4, mkv, mov ועוד) מפיקה קובץ כתוביות SRT עם חותמות זמן ליד קובץ המקור,
-          במנוע התמלול הנבחר למעלה. דורש הורדה חד־פעמית של ffmpeg (לחילוץ האודיו מהווידאו).
-        </small>
-        <div id="ffmpeg-row" class="engine-guidance" style="display:flex; align-items:center; gap:12px; margin-top:10px">
+      </div>
+
+      <!-- ── כתוביות לווידאו ── -->
+      <div class="s-card">
+        <div class="s-row">
+          <span class="s-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 9.5h18M3 14.5h18M8 5v14M16 5v14"/></svg></span>
+          <span class="s-text">
+            <label class="s-title" for="video_subtitles_enabled">כתוביות לווידאו (וידאו → SRT)</label>
+            <span class="s-desc">כשפעיל, גרירת קובץ וידאו (mp4, mkv, mov ועוד) מפיקה קובץ כתוביות SRT עם חותמות זמן ליד קובץ המקור, במנוע התמלול הנבחר למעלה. דורש הורדה חד־פעמית של ffmpeg (לחילוץ האודיו מהווידאו).</span>
+          </span>
+          <span class="s-control"><div class="toggle" data-key="video_subtitles_enabled"><input type="checkbox" id="video_subtitles_enabled" /></div></span>
+        </div>
+        <div id="ffmpeg-row" class="engine-guidance" style="display:flex; align-items:center; gap:12px; margin-top:12px">
           <div style="flex:1; min-width:0">
             <div id="ffmpeg-status-label" class="muted">בודק…</div>
             <div class="model-card-progress" id="ffmpeg-progress" style="display:none; margin-top:6px">
@@ -231,14 +364,27 @@
 
     <!-- ═══════════════ קבוצה 2: מראה והפעלה ═══════════════ -->
     <section id="appearance" class="section" role="tabpanel" aria-labelledby="tab-appearance">
-      <div class="field">
-        <label for="display_mode">מצב תצוגה</label>
-        <select id="display_mode">
-          <option value="side-panel">תפריט צד</option>
-          <option value="floating-mic">מיקרופון מרחף</option>
-          <option value="hidden-mic">מצב מוסתר</option>
-        </select>
-        <small class="muted">"תפריט צד" (ברירת מחדל, מומלץ) מציג ידית נשלפת בקצה הימני של המסך שנפתחת לשלוש פעולות: תמלול לייב, תרגום קובץ ותמלול קובץ. "מיקרופון מרחף" מציג כדור שאפשר לגרור לכל מקום במסך. "מצב מוסתר" — המיקרופון חבוי כל הזמן ומופיע רק בזמן הקלטה (בלחיצה על קיצור המקלדת), ונעלם אוטומטית כשהתמלול מסתיים. אפשר להחליף מצב כאן בכל רגע; האפליקציה תמיד נגישה דרך האייקון של Timluli בשורת המשימות.</small>
+      <div class="s-head">
+        <h2>מראה והפעלה</h2>
+        <p>איך Timluli מופיע על המסך, מראה המיקרופון, והתנהגות בהפעלת המחשב.</p>
+      </div>
+
+      <div class="s-card stack">
+        <div class="s-row">
+          <span class="s-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="13" rx="2"/><path d="M8 21h8M12 17v4"/></svg></span>
+          <span class="s-text">
+            <span class="s-title">מצב תצוגה</span>
+            <span class="s-desc">איך הגישה ל-Timluli מופיעה על המסך. אפשר להחליף בכל רגע; האפליקציה תמיד נגישה דרך האייקון בשורת המשימות.</span>
+          </span>
+        </div>
+        <div class="s-body">
+          <select id="display_mode">
+            <option value="side-panel">תפריט צד</option>
+            <option value="floating-mic">מיקרופון מרחף</option>
+            <option value="hidden-mic">מצב מוסתר</option>
+          </select>
+          <small class="muted">„תפריט צד” (ברירת מחדל, מומלץ) מציג ידית נשלפת בקצה הימני של המסך שנפתחת לשלוש פעולות: תמלול לייב, תרגום קובץ ותמלול קובץ. „מיקרופון מרחף” מציג כדור שאפשר לגרור לכל מקום במסך. „מצב מוסתר” — המיקרופון חבוי ומופיע רק בזמן הקלטה (בלחיצה על קיצור המקלדת), ונעלם אוטומטית כשהתמלול מסתיים.</small>
+        </div>
       </div>
 
       <!-- Mic-appearance settings only apply to the floating-mic display mode. In
@@ -246,80 +392,122 @@
            appears to "do nothing" — hide the whole group there to avoid that
            confusion. Toggled by applyDisplayModeVisibility() in settings.js. -->
       <div id="mic-only-settings" class="mic-only-settings">
-      <div class="field">
-        <label>גודל המיקרופון</label>
-        <select id="mic_size">
-          <option value="small">קטן</option>
-          <option value="medium" selected>בינוני</option>
-          <option value="large">גדול</option>
-        </select>
-      </div>
-      <div class="field">
-        <label for="mic_opacity">שקיפות (<span id="opacity_value">95</span>%)</label>
-        <input id="mic_opacity" type="range" min="40" max="100" step="1" value="95" />
-        <div class="range-ends muted" aria-hidden="true">
-          <span>שקוף</span>
-          <span>אטום</span>
+        <div class="s-card stack">
+          <div class="s-row">
+            <span class="s-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 14v6h6M20 10V4h-6"/><path d="M4 20l7-7M20 4l-7 7"/></svg></span>
+            <span class="s-text">
+              <span class="s-title">גודל המיקרופון</span>
+              <span class="s-desc">גודל כדור המיקרופון המרחף על המסך.</span>
+            </span>
+          </div>
+          <div class="s-body">
+            <select id="mic_size">
+              <option value="small">קטן</option>
+              <option value="medium" selected>בינוני</option>
+              <option value="large">גדול</option>
+            </select>
+          </div>
         </div>
-      </div>
-
-      <div class="field">
-        <label class="field-label-bold">ערכת צבע למיקרופון</label>
-
-        <div class="theme-group">
-          <span class="theme-group-label">צבעים אחידים</span>
-          <div class="theme-grid">
-            <button type="button" class="theme-swatch" data-theme="graphite" title="גרפיט" aria-label="ערכת צבע: גרפיט"></button>
-            <button type="button" class="theme-swatch" data-theme="crimson"  title="אדום" aria-label="ערכת צבע: אדום"></button>
-            <button type="button" class="theme-swatch" data-theme="azure"    title="כחול" aria-label="ערכת צבע: כחול"></button>
-            <button type="button" class="theme-swatch" data-theme="emerald"  title="ירוק" aria-label="ערכת צבע: ירוק"></button>
+        <div class="s-card stack">
+          <div class="s-row">
+            <span class="s-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 3a9 9 0 0 1 0 18z" fill="currentColor" stroke="none"/></svg></span>
+            <span class="s-text">
+              <span class="s-title">שקיפות (<span id="opacity_value">95</span>%)</span>
+              <span class="s-desc">עד כמה המיקרופון שקוף כשאינו בשימוש.</span>
+            </span>
+          </div>
+          <div class="s-body">
+            <input id="mic_opacity" type="range" min="40" max="100" step="1" value="95" />
+            <div class="range-ends muted" aria-hidden="true">
+              <span>שקוף</span>
+              <span>אטום</span>
+            </div>
           </div>
         </div>
 
-        <div class="theme-group">
-          <span class="theme-group-label">גרדיאנטים</span>
-          <div class="theme-grid">
-            <button type="button" class="theme-swatch" data-theme="sunset" title="שקיעה" aria-label="ערכת צבע: שקיעה"></button>
-            <button type="button" class="theme-swatch" data-theme="ocean"  title="אוקיינוס" aria-label="ערכת צבע: אוקיינוס"></button>
-            <button type="button" class="theme-swatch" data-theme="violet" title="סגול" aria-label="ערכת צבע: סגול"></button>
+        <div class="s-card stack">
+          <div class="s-row">
+            <span class="s-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3a9 9 0 1 0 0 18 1.6 1.6 0 0 0 1.6-1.6c0-.4-.2-.7-.2-1.1 0-.6.5-1.1 1.1-1.1H16a4 4 0 0 0 4-4c0-4.4-3.6-8-8-8z"/><circle cx="8" cy="11" r="1.1" fill="currentColor" stroke="none"/><circle cx="12" cy="8" r="1.1" fill="currentColor" stroke="none"/><circle cx="16" cy="11" r="1.1" fill="currentColor" stroke="none"/></svg></span>
+            <span class="s-text">
+              <span class="s-title">ערכת צבע למיקרופון</span>
+              <span class="s-desc">צבע כדור המיקרופון המרחף.</span>
+            </span>
+          </div>
+          <div class="s-body">
+            <div class="theme-group">
+              <span class="theme-group-label">צבעים אחידים</span>
+              <div class="theme-grid">
+                <button type="button" class="theme-swatch" data-theme="graphite" title="גרפיט" aria-label="ערכת צבע: גרפיט"></button>
+                <button type="button" class="theme-swatch" data-theme="crimson"  title="אדום" aria-label="ערכת צבע: אדום"></button>
+                <button type="button" class="theme-swatch" data-theme="azure"    title="כחול" aria-label="ערכת צבע: כחול"></button>
+                <button type="button" class="theme-swatch" data-theme="emerald"  title="ירוק" aria-label="ערכת צבע: ירוק"></button>
+              </div>
+            </div>
+
+            <div class="theme-group">
+              <span class="theme-group-label">גרדיאנטים</span>
+              <div class="theme-grid">
+                <button type="button" class="theme-swatch" data-theme="sunset" title="שקיעה" aria-label="ערכת צבע: שקיעה"></button>
+                <button type="button" class="theme-swatch" data-theme="ocean"  title="אוקיינוס" aria-label="ערכת צבע: אוקיינוס"></button>
+                <button type="button" class="theme-swatch" data-theme="violet" title="סגול" aria-label="ערכת צבע: סגול"></button>
+              </div>
+            </div>
+
+            <div class="theme-group">
+              <span class="theme-group-label">כדור תלת־ממד</span>
+              <div class="theme-grid">
+                <button type="button" class="theme-swatch" data-theme="orb-plasma" title="פלזמה" aria-label="ערכת צבע: כדור פלזמה"></button>
+                <button type="button" class="theme-swatch" data-theme="orb-aurora" title="זוהר הצפון" aria-label="ערכת צבע: כדור זוהר הצפון"></button>
+              </div>
+            </div>
           </div>
         </div>
 
-        <div class="theme-group">
-          <span class="theme-group-label">כדור תלת־ממד</span>
-          <div class="theme-grid">
-            <button type="button" class="theme-swatch" data-theme="orb-plasma" title="פלזמה" aria-label="ערכת צבע: כדור פלזמה"></button>
-            <button type="button" class="theme-swatch" data-theme="orb-aurora" title="זוהר הצפון" aria-label="ערכת צבע: כדור זוהר הצפון"></button>
+        <div class="s-card">
+          <div class="s-row">
+            <span class="s-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 21s7-5.5 7-11a7 7 0 1 0-14 0c0 5.5 7 11 7 11z"/><circle cx="12" cy="10" r="2.5"/></svg></span>
+            <span class="s-text">
+              <label class="s-title" for="field_docking_enabled">הצמד את המיקרופון לשדה ההקלדה הפעיל<span class="badge-experimental">ניסיוני</span></label>
+              <span class="s-desc">המיקרופון יקפוץ אוטומטית לצד שדה ההקלדה שתבחר ברוב התוכנות (Notepad, Office, Chrome/Edge, VS Code, Terminal). לא יעבוד ב-Java, משחקים, ותוכנות ללא תמיכה בנגישות. בזמן הכתבה המיקרופון מוקפא במקומו.</span>
+            </span>
+            <span class="s-control"><div class="toggle" data-key="field_docking_enabled"><input type="checkbox" id="field_docking_enabled" /></div></span>
           </div>
         </div>
-      </div>
-
-      <div class="field">
-        <div class="field-row">
-          <label for="field_docking_enabled">
-            הצמד את המיקרופון לשדה ההקלדה הפעיל
-            <span class="badge-experimental">ניסיוני</span>
-          </label>
-          <div class="toggle" data-key="field_docking_enabled"><input type="checkbox" id="field_docking_enabled" /></div>
-        </div>
-        <small class="muted">המיקרופון יקפוץ אוטומטית לצד שדה ההקלדה שתבחר ברוב התוכנות (Notepad, Office, Chrome/Edge, VS Code, Terminal). לא יעבוד ב-Java, משחקים, ותוכנות ללא תמיכה בנגישות. בזמן הכתבה המיקרופון מוקפא במקומו.</small>
-      </div>
       </div><!-- /mic-only-settings -->
 
-      <!-- הפעלה (מתוך „כללי" לשעבר) -->
-      <div class="group-divider"><span class="group-divider-label">הפעלה</span></div>
-      <div class="field-row">
-        <label for="start_with_windows">הפעל את Timluli עם הפעלת ווינדוס</label>
-        <div class="toggle" data-key="start_with_windows"><input type="checkbox" id="start_with_windows" /></div>
+      <!-- הפעלה -->
+      <div class="s-group">הפעלה</div>
+
+      <div class="s-card">
+        <div class="s-row">
+          <span class="s-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v8"/><path d="M6.6 6.6a8 8 0 1 0 10.8 0"/></svg></span>
+          <span class="s-text">
+            <label class="s-title" for="start_with_windows">הפעל את Timluli עם הפעלת ווינדוס</label>
+            <span class="s-desc">Timluli ייפתח אוטומטית כשמדליקים את המחשב.</span>
+          </span>
+          <span class="s-control"><div class="toggle" data-key="start_with_windows"><input type="checkbox" id="start_with_windows" /></div></span>
+        </div>
       </div>
-      <div class="field-row">
-        <label for="show_mic_on_startup">הצג את המיקרופון המרחף בהפעלה</label>
-        <div class="toggle" data-key="show_mic_on_startup"><input type="checkbox" id="show_mic_on_startup" /></div>
+
+      <div class="s-card">
+        <div class="s-row">
+          <span class="s-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2.5 12s3.5-7 9.5-7 9.5 7 9.5 7-3.5 7-9.5 7-9.5-7-9.5-7z"/><circle cx="12" cy="12" r="2.8"/></svg></span>
+          <span class="s-text">
+            <label class="s-title" for="show_mic_on_startup">הצג את המיקרופון המרחף בהפעלה</label>
+            <span class="s-desc">המיקרופון יופיע על המסך מיד עם פתיחת האפליקציה (חל על מצב „מיקרופון מרחף”).</span>
+          </span>
+          <span class="s-control"><div class="toggle" data-key="show_mic_on_startup"><input type="checkbox" id="show_mic_on_startup" /></div></span>
+        </div>
       </div>
     </section>
 
     <!-- ═══════════════ קבוצה 3: תרגום מסמכים ═══════════════ -->
     <section id="translation" class="section" role="tabpanel" aria-labelledby="tab-translation">
+      <div class="s-head">
+        <h2>תרגום מסמכים</h2>
+        <p>גוררים מסמך על המיקרופון והוא מתורגם אוטומטית ונשמר לצד הקובץ המקורי.</p>
+      </div>
+
       <!-- HERO: how it works + language pair + supported formats -->
       <div class="xl-hero">
         <div class="flow">
@@ -369,16 +557,22 @@
       </div>
 
       <!-- חיבור לשירות (A) — מנוהל דרך אשף מודרך -->
-      <div class="field">
-        <label>
-          חיבור לשירות תרגום
-          <span class="info-icon" title="התרגום מתבצע בענן. צריך לחבר פעם אחת שירות תרגום חינמי — נלווה אותך בתהליך.">ⓘ</span>
-        </label>
-        <div class="conn-row">
-          <span class="conn-status" id="conn_status">בודק…</span>
-          <button type="button" class="conn-btn" id="conn_open">חבר שירות תרגום</button>
+      <div class="s-card stack">
+        <div class="s-row">
+          <span class="s-icon accent"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 15l6-6"/><path d="M11 7l1-1a3.5 3.5 0 0 1 5 5l-1 1"/><path d="M13 17l-1 1a3.5 3.5 0 0 1-5-5l1-1"/></svg></span>
+          <span class="s-text">
+            <span class="s-title">חיבור לשירות תרגום
+              <span class="info-icon" title="התרגום מתבצע בענן. צריך לחבר פעם אחת שירות תרגום חינמי — נלווה אותך בתהליך.">ⓘ</span>
+            </span>
+            <span class="s-desc">🔒 המפתח נשמר מוצפן במחשב שלך בלבד ולא נשלח לאף שרת מלבד שירות התרגום.</span>
+          </span>
         </div>
-        <small class="muted">🔒 המפתח נשמר מוצפן במחשב שלך בלבד ולא נשלח לאף שרת מלבד שירות התרגום.</small>
+        <div class="s-body">
+          <div class="conn-row">
+            <span class="conn-status" id="conn_status">בודק…</span>
+            <button type="button" class="conn-btn" id="conn_open">חבר שירות תרגום</button>
+          </div>
+        </div>
       </div>
 
       <!-- סוג החשבון: מבהיר ויזואלית את ההבדל חינם/בתשלום -->

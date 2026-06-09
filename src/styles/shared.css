@@ -9,8 +9,14 @@
   --accent-2: #22d3ee;
   --danger: #ef4444;
   --warning: #f59e0b;
-  --radius: 10px;
-  --shadow: 0 6px 18px rgba(0, 0, 0, 0.35);
+  /* surface-3: one step above surface-2 (hovers, raised chips). */
+  --surface-3: #2c333f;
+  /* Radius scale (settings cards use --radius-lg; shared button/input use --radius). */
+  --radius-sm: 8px;
+  --radius: 12px;
+  --radius-lg: 16px;
+  /* Soft card shadow (settings .s-card:hover). Tuned for dark; light remaps it. */
+  --shadow: 0 1px 2px rgba(0, 0, 0, 0.30), 0 8px 22px rgba(0, 0, 0, 0.32);
 }
 
 * { box-sizing: border-box; }

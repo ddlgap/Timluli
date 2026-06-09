@@ -1085,17 +1085,19 @@ main > .section { max-width: 780px; margin-inline: auto; width: 100%; }
    Remaps the core tokens, then fixes the few hardcoded dark-only colors.
    ═══════════════════════════════════════════════════════════════════════════ */
 :root.light {
-  --bg: #eceef2;
-  --surface: #ffffff;
-  --surface-2: #f3f5f8;
-  --border: #dde1e8;
-  --text: #1b1f27;
-  --text-dim: #5f6671;
+  --bg: #f4f6f9;          /* soft gray page (cards float above it) */
+  --surface: #ffffff;     /* card / panel face */
+  --surface-2: #eef1f6;   /* inset chips, icon tiles, hovers */
+  --surface-3: #e5e9f0;   /* one step above surface-2 */
+  --border: #e7eaf0;      /* hairline */
+  --text: #1b2330;
+  --text-dim: #69707d;
   --accent: #16a34a;
   --accent-2: #0e8aa6;
   --danger: #dc2626;
   --warning: #b45309;
-  --shadow: 0 6px 18px rgba(20, 30, 50, 0.10);
+  /* Two-layer soft shadow — the reference's airy "lifted card" feel. */
+  --shadow: 0 1px 2px rgba(20, 30, 50, 0.05), 0 8px 20px rgba(20, 30, 50, 0.07);
 }
 
 /* Green-filled controls need light text on the (now darker) green. */
@@ -1126,10 +1128,135 @@ main > .section { max-width: 780px; margin-inline: auto; width: 100%; }
 /* Subtle accent tints read fine on white; nudge the green "selected" fills a touch. */
 :root.light .engine-option.selected,
 :root.light .acct-card.on,
-:root.light .choice-card.selected { background: rgba(22, 163, 74, 0.08); }
+:root.light .s-card.on,
+:root.light .choice-card.selected { background: rgba(22, 163, 74, 0.06); }
+:root.light .s-icon.accent { background: rgba(22, 163, 74, 0.10); border-color: rgba(22, 163, 74, 0.30); }
 :root.light .nav.tabs button.active,
 :root.light nav.tabs button.active { background: rgba(22, 163, 74, 0.12); }
 
 /* Toast + dialogs keep enough contrast on light. */
 :root.light #toast { box-shadow: 0 8px 24px rgba(20, 30, 50, 0.18); }
 :root.light dialog.wizard::backdrop { background: rgba(30, 40, 60, 0.35); }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   Steps 5–9: card-based settings — premium, icon-led rows (Dribbble reference).
+   Primitives reused across all tabs. The controls keep their JS hooks; only the
+   wrapping markup changes (.s-card / .s-row / .s-icon / .s-text / .s-control).
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* One setting per card. `.row` = control inline (toggles/buttons); `.stack` =
+   control on its own line below the text (selects / sliders / radio groups).
+   Cards sit on the section's own 14px flex-gap rhythm, so no inter-card margin. */
+.s-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 14px 16px;
+  transition: border-color .12s ease, box-shadow .12s ease, background .12s ease;
+}
+.s-card:hover { box-shadow: var(--shadow); }
+.s-row { display: flex; align-items: center; gap: 13px; }
+.s-card.stack .s-row { align-items: flex-start; }
+
+.s-icon {
+  flex: none;
+  width: 38px; height: 38px;
+  border-radius: 11px;
+  display: grid; place-items: center;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  color: var(--text-dim);
+}
+.s-icon svg { width: 19px; height: 19px; }
+.s-icon.accent { background: rgba(74,222,128,.12); border-color: rgba(74,222,128,.35); color: var(--accent); }
+
+.s-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.s-title { font-size: 14px; font-weight: 600; color: var(--text); }
+.s-title .badge-experimental, .s-title .badge-soon { vertical-align: middle; }
+.s-desc { font-size: 12px; color: var(--text-dim); line-height: 1.5; }
+
+/* Trailing control (toggle / small button) pinned to the inline-end (left, RTL). */
+.s-control { margin-inline-start: auto; flex: none; display: flex; align-items: center; gap: 8px; }
+
+/* Stacked control area (select / slider / radio group) fills the card width. */
+.s-card.stack .s-body { margin-top: 12px; display: flex; flex-direction: column; gap: 8px; }
+.s-card.stack .s-body > small.muted { max-width: none; }
+
+/* "On" cards get a soft green tint + accent border — mirrors the toggle state. */
+.s-card.on { border-color: var(--accent); background: rgba(74,222,128,.05); }
+
+/* Per-tab section header (reference's "Notification settings" + paragraph). */
+.s-head { margin: 0 0 2px; }
+.s-head h2 { margin: 0 0 4px; font-size: 19px; font-weight: 700; letter-spacing: -.2px; color: var(--text); }
+.s-head p { margin: 0; font-size: 13px; color: var(--text-dim); line-height: 1.55; max-width: 60ch; }
+
+/* Small uppercase-ish group label (reference's "PRIMARY SETTINGS"). Replaces
+   the old .group-divider line; sits in the 14px flex rhythm + 6px extra top. */
+.s-group { margin: 6px 0 0; font-size: 11.5px; font-weight: 700; letter-spacing: .4px; color: var(--text-dim); }
+/* One-line description that sits directly under a group label (pulled up out of
+   the section's 14px flex gap so it hugs the label). */
+.subgroup-desc { margin: -10px 0 0; max-width: 60ch; }
+
+/* ── Nav rail: leading icon per tab (reference's icon+label nav) ── */
+nav.tabs button { display: flex; align-items: center; gap: 10px; }
+nav.tabs button svg { width: 17px; height: 17px; flex: none; opacity: .8; }
+nav.tabs button.active svg { color: var(--accent); opacity: 1; }
+nav.tabs button:hover svg { opacity: 1; }
+
+/* ═══════════════════════ Home / quick-guide tab ═══════════════════════ */
+.home-hero {
+  display: flex; flex-direction: column; align-items: center; gap: 9px;
+  text-align: center; padding: 6px 0 8px;
+}
+/* Brand logo lockup (waveform + "Timluli" wordmark). Two transparent PNGs sit
+   directly on the page background; the matching one is shown per theme. The dark
+   variant has light text (default :root theme); the light variant has dark text. */
+.home-logo-wrap { display: inline-flex; line-height: 0; }
+.home-logo { width: auto; height: 116px; max-width: 84%; object-fit: contain; }
+.home-logo-light { display: none; }       /* default theme is dark → show the dark-bg logo */
+.home-logo-dark  { display: block; }
+:root.light .home-logo-dark  { display: none; }
+:root.light .home-logo-light { display: block; }
+
+.home-welcome { margin: 4px 0 0; font-size: 19px; font-weight: 700; letter-spacing: -.2px; color: var(--text); }
+.home-tagline { margin: 0; font-size: 14px; color: var(--text-dim); }
+
+/* Current-shortcut chip */
+.home-shortcut { display: flex; align-items: center; justify-content: center; gap: 8px; margin-top: 2px; }
+.home-shortcut .hs-label { font-size: 12.5px; color: var(--text-dim); }
+.home-shortcut kbd {
+  font-family: Consolas, "Cascadia Mono", monospace; font-size: 12.5px; font-weight: 600;
+  background: var(--surface-2); border: 1px solid var(--border); border-bottom-width: 2px;
+  border-radius: 7px; padding: 3px 9px; color: var(--text); direction: ltr;
+}
+
+/* Quick-jump cards → switch to a settings tab */
+.home-jump { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; margin-top: 4px; }
+.jump-card {
+  display: flex; flex-direction: column; align-items: flex-start; gap: 9px;
+  text-align: start; padding: 14px; cursor: pointer; color: var(--text);
+  background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg);
+  transition: border-color .12s ease, box-shadow .12s ease, transform .12s ease;
+}
+.jump-card:hover { border-color: var(--accent); box-shadow: var(--shadow); transform: translateY(-1px); }
+.jump-card .jc-title { font-size: 13.5px; font-weight: 600; }
+.jump-card .jc-desc { font-size: 11.5px; color: var(--text-dim); line-height: 1.45; }
+
+/* Home reuses the translation hero shell (.xl-hero/.flow) for "how it works". */
+#home .xl-hero { margin-top: 4px; }
+
+/* Step 7: unify existing component radii with the new card system so every
+   surface shares the same rounded language. (Purely cosmetic.) */
+.engine-option,
+.translate-banner,
+.limit-note,
+.segmented,
+.engine-guidance,
+.model-card,
+details.advanced { border-radius: var(--radius); }
+.acct-card,
+.wizard-card { border-radius: var(--radius-lg); }
+.engine-option { padding: 13px 15px; }
+.about-card { border-radius: var(--radius-lg); }
+/* Engine/model cards gain the same soft hover lift as .s-card. */
+.engine-option:hover, .model-card:hover { box-shadow: var(--shadow); }

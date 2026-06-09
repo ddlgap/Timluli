@@ -967,3 +967,6 @@ footer {
   position: static;
   flex-shrink: 0;
 }
+
+/* Step 2: auto-save — footer reassurance note (replaces the Save button). */
+.autosave-note { font-size: 12px; align-self: center; color: var(--text-dim); }

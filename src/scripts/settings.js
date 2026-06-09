@@ -49,20 +49,21 @@ document.querySelector('nav.tabs')?.addEventListener('keydown', (e) => {
 const hashTab = location.hash.replace('#', '');
 if (hashTab) activateTab(document.querySelector(`[data-tab="${hashTab}"]`));
 
-// ---- Unsaved-changes tracking ----
-// Some controls apply immediately (theme, engine, display mode); the rest are
-// staged until "שמור הגדרות". This flag makes the staged state visible so the
-// user always knows whether their change is persisted.
-let dirty = false;
+// ---- Auto-save ----
+// Every staged control persists itself shortly after it changes (debounced), so
+// there is no "Save" button and no "unsaved" limbo. Instant controls (theme,
+// engine, display mode, punctuation, video subtitles) still self-save via their
+// own handlers and early-return from the change listener below. Keeping the
+// setDirty(true/false) name means every existing call site now schedules a save.
+let autosaveTimer = null;
 function setDirty(v) {
-  dirty = v;
-  const ind = $('unsaved_indicator');
-  if (ind) ind.hidden = !v;
-  $('save')?.classList.toggle('has-changes', v);
+  clearTimeout(autosaveTimer);
+  if (!v) return;                 // false = nothing pending (during load / after a save)
+  autosaveTimer = setTimeout(() => saveSettings(), 350);
 }
 
 // Controls that persist on change (so they must NOT mark the form dirty).
-const INSTANT_IDS = new Set(['display_mode', 'punctuation_enabled', 'punctuation_newline']);
+const INSTANT_IDS = new Set(['display_mode', 'punctuation_enabled', 'punctuation_newline', 'video_subtitles_enabled']);
 const INSTANT_NAMES = new Set(['engine_id', 'audio_file_engine']);
 document.querySelector('main')?.addEventListener('change', (e) => {
   const t = e.target;
@@ -243,6 +244,7 @@ async function loadSettings() {
   // they stay visibly off rather than showing a stored value behind a dead control.
   setToggle('field_docking_enabled', stg.field_docking_enabled);
   setToggle('punctuation_newline', stg.punctuation_newline);
+  setToggle('video_subtitles_enabled', stg.video_subtitles_enabled !== false);
   const sc = stg.shortcut || 'Ctrl+Ctrl';
   const dtMod = doubleTapModifierOf(sc);
   if (dtMod) {
@@ -476,11 +478,10 @@ document.querySelectorAll('.theme-swatch').forEach((swatch) => {
 });
 
 // ---- Save ----
+let saving = false;
 async function saveSettings() {
-  const saveBtn = $('save');
-  const originalLabel = saveBtn.textContent;
-  saveBtn.disabled = true;
-  saveBtn.textContent = 'שומר...';
+  if (saving) { setDirty(true); return; }  // a save is in flight — re-queue, don't overlap
+  saving = true;
 
   const previous = await invoke('get_settings');
   const newSettings = {
@@ -535,19 +536,12 @@ async function saveSettings() {
       if (cerebrasVal) await populateModels('cerebras', $('cerebras_model').value);
     }
 
-    saveBtn.textContent = '✓ נשמר';
-    saveBtn.classList.add('saved');
     setDirty(false);
-    showToast('הגדרות נשמרו בהצלחה', 'ok');
-    setTimeout(() => {
-      saveBtn.textContent = originalLabel;
-      saveBtn.classList.remove('saved');
-      saveBtn.disabled = false;
-    }, 1500);
+    showToast('נשמר ✓', 'ok');
   } catch (err) {
-    saveBtn.textContent = originalLabel;
-    saveBtn.disabled = false;
     showToast(`שגיאה בשמירה: ${err}`, 'err');
+  } finally {
+    saving = false;
   }
 }
 
@@ -572,8 +566,7 @@ function setStatus(text, kind = '') {
   if (text) setTimeout(() => { el.textContent = ''; el.className = 'status-msg'; }, 2500);
 }
 
-$('save').addEventListener('click', saveSettings);
-$('reset').addEventListener('click', async () => {
+$('reset')?.addEventListener('click', async () => {
   if (!confirm('לשחזר הגדרות ברירת מחדל?')) return;
   await invoke('set_field_docking', { enabled: false });
   await invoke('set_display_mode', { mode: 'side-panel' }).catch(() => {});
@@ -790,6 +783,85 @@ await listen('speakly://punct-model-installed', () => {
 });
 
 refreshPunctStatus();
+
+// ── Video subtitles (video → SRT) ─────────────────────────────────────────────
+// The on/off flag applies immediately (saved via save_settings, like the newline
+// toggle). ffmpeg is fetched on demand — its status/download row mirrors the
+// punctuation model's exactly (same DownloadProgress channel shape).
+const videoToggle = $('video_subtitles_enabled');
+const ffStatusLabel = $('ffmpeg-status-label');
+const ffProgress = $('ffmpeg-progress');
+const ffFill = $('ffmpeg-fill');
+const ffPlabel = $('ffmpeg-plabel');
+const ffDownloadBtn = $('ffmpeg-download-btn');
+const ffCancelBtn = $('ffmpeg-cancel-btn');
+let ffDownloading = false;
+
+async function refreshFfmpegStatus() {
+  try {
+    const s = await invoke('get_ffmpeg_status');
+    ffDownloading = s.downloading;
+    ffStatusLabel.textContent = s.installed ? 'ffmpeg מותקן ומוכן ✓' : 'ffmpeg אינו מותקן';
+    ffDownloadBtn.style.display = !s.installed && !ffDownloading ? '' : 'none';
+    ffCancelBtn.style.display = ffDownloading ? '' : 'none';
+    if (!ffDownloading) ffProgress.style.display = 'none';
+  } catch (_) {}
+}
+
+async function startFfmpegDownload() {
+  if (ffDownloading) return;
+  ffDownloading = true;
+  ffProgress.style.display = 'flex';
+  ffDownloadBtn.style.display = 'none';
+  ffCancelBtn.style.display = '';
+  ffPlabel.textContent = 'מתחיל הורדה…';
+  const channel = new Channel();
+  channel.onmessage = (p) => {
+    const pct = p.totalBytes > 0 ? Math.round((p.downloadedBytes / p.totalBytes) * 100) : 0;
+    if (ffFill) ffFill.style.width = `${pct}%`;
+    const mbDone = Math.round(p.downloadedBytes / 1_000_000);
+    const mbTotal = Math.round(p.totalBytes / 1_000_000);
+    const kbps = Math.round(p.speedBps / 1000);
+    if (ffPlabel) ffPlabel.textContent = `${pct}% · ${mbDone}/${mbTotal} MB · ${kbps} KB/s`;
+  };
+  try {
+    await invoke('download_ffmpeg', { onProgress: channel });
+  } catch (e) {
+    ffDownloading = false;
+    showToast(`שגיאה בהורדת ffmpeg: ${e}`, 'err');
+    refreshFfmpegStatus();
+  }
+}
+
+videoToggle?.addEventListener('change', async () => {
+  const enabled = videoToggle.checked;
+  try {
+    const previous = await invoke('get_settings');
+    await invoke('save_settings', {
+      newSettings: { ...previous, video_subtitles_enabled: enabled },
+    });
+    showToast(enabled ? 'כתוביות לווידאו: פעיל' : 'כתוביות לווידאו: כבוי', 'ok');
+    if (enabled) refreshFfmpegStatus();
+  } catch (e) {
+    setToggle('video_subtitles_enabled', !enabled);
+    showToast(`שגיאה: ${e}`, 'err');
+  }
+});
+
+ffDownloadBtn?.addEventListener('click', startFfmpegDownload);
+ffCancelBtn?.addEventListener('click', async () => {
+  await invoke('cancel_ffmpeg_download').catch(() => {});
+  ffDownloading = false;
+  refreshFfmpegStatus();
+});
+
+await listen('speakly://ffmpeg-installed', () => {
+  ffDownloading = false;
+  showToast('ffmpeg הותקן ✓', 'ok');
+  refreshFfmpegStatus();
+});
+
+refreshFfmpegStatus();
 
 // ── Display mode (floating mic ⇄ side panel) ──────────────────────────────────
 // Mirrors the engine picker: apply immediately on change, no Save needed.

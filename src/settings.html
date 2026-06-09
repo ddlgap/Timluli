@@ -136,6 +136,13 @@
             </div>
           </label>
         </div>
+        <!-- Step 4: free-tier capacity for audio/video transcription (cloud · Groq) -->
+        <div class="limit-note">
+          <span class="lnico">🎧</span>
+          <div class="ln-body">
+            <span class="ln-main">בתמלול „ענן (Groq)" אפשר לתמלל בממוצע עד <strong>~8 שעות אודיו ביום</strong> במפתח החינמי. קובצי וידאו משתמשים באותה מכסה. בתמלול „מקומי" אין מגבלה.</span>
+          </div>
+        </div>
       </div>
 
       <!-- Shown only when whisper-local is selected and no model is installed -->
@@ -305,28 +312,52 @@
 
     <!-- ═══════════════ קבוצה 3: תרגום מסמכים ═══════════════ -->
     <section id="translation" class="section" role="tabpanel" aria-labelledby="tab-translation">
+      <!-- HERO: how it works + language pair + supported formats -->
+      <div class="xl-hero">
+        <div class="flow">
+          <div class="flow-step">
+            <span class="flow-ico">📄</span>
+            <span class="flow-cap"><strong>גוררים מסמך</strong><br>על המיקרופון</span>
+          </div>
+          <svg class="flow-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 6l-6 6 6 6"/></svg>
+          <div class="flow-step">
+            <span class="flow-ico accent">✨</span>
+            <span class="flow-cap"><strong>תרגום חכם</strong><br>אוטומטי בענן</span>
+          </div>
+          <svg class="flow-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 6l-6 6 6 6"/></svg>
+          <div class="flow-step">
+            <span class="flow-ico">💾</span>
+            <span class="flow-cap"><strong>נשמר אוטומטית</strong><br>לצד הקובץ</span>
+          </div>
+        </div>
+        <div class="lang-pair">
+          <span class="lp-label">מתרגם</span>
+          <span class="lp-source">כל שפה</span>
+          <span class="lp-arrow">←</span>
+          <select class="lp-target" id="translate_target_language">
+            <option value="Hebrew">עברית</option>
+            <option value="English">אנגלית</option>
+            <option value="Arabic">ערבית</option>
+            <option value="Russian">רוסית</option>
+            <option value="Spanish">ספרדית</option>
+            <option value="French">צרפתית</option>
+            <option value="German">גרמנית</option>
+            <option value="Portuguese">פורטוגזית</option>
+            <option value="Italian">איטלקית</option>
+            <option value="Chinese">סינית</option>
+            <option value="Japanese">יפנית</option>
+          </select>
+        </div>
+        <div class="formats">
+          <span class="fmt-label">תומך ב־</span>
+          <span class="fmt-chip">Word</span><span class="fmt-chip">PDF</span><span class="fmt-chip">PowerPoint</span><span class="fmt-chip">כתוביות (SRT/VTT)</span><span class="fmt-chip">טקסט</span>
+        </div>
+      </div>
+
       <!-- D: status banner -->
       <div id="translate_banner" class="translate-banner">
         <span class="tb-icon">✓</span>
         <span class="tb-text">בודק…</span>
-      </div>
-
-      <!-- שפת יעד -->
-      <div class="field">
-        <label for="translate_target_language">שפת יעד לתרגום</label>
-        <select id="translate_target_language">
-          <option value="Hebrew">עברית</option>
-          <option value="English">אנגלית</option>
-          <option value="Arabic">ערבית</option>
-          <option value="Russian">רוסית</option>
-          <option value="Spanish">ספרדית</option>
-          <option value="French">צרפתית</option>
-          <option value="German">גרמנית</option>
-          <option value="Portuguese">פורטוגזית</option>
-          <option value="Italian">איטלקית</option>
-          <option value="Chinese">סינית</option>
-          <option value="Japanese">יפנית</option>
-        </select>
       </div>
 
       <!-- חיבור לשירות (A) — מנוהל דרך אשף מודרך -->
@@ -374,6 +405,43 @@
         <small class="muted acct-warn">בחירה ב„בתשלום” ללא תוכנית מתאימה עלולה לגרום לתרגום להיכשל.</small>
       </div>
 
+      <!-- Step 4: free-tier capacity for document/subtitle translation -->
+      <div class="limit-note">
+        <span class="lnico">📄</span>
+        <div class="ln-body">
+          <span class="ln-main">במפתח החינמי אפשר לתרגם בממוצע <strong>כ‑100–150 עמודי טקסט ביום</strong> (תלוי באורך המסמך ובשפה). כתוביות ומסמכים קצרים — הרבה יותר.</span>
+        </div>
+      </div>
+
+      <!-- Step 4: backup service (Cerebras) — surfaced from the advanced accordion -->
+      <div class="group-divider"><span class="group-divider-label">מפתח גיבוי · Cerebras (לא חובה)</span></div>
+      <div class="field backup-key">
+        <label for="cerebras_api_key">
+          מפתח גיבוי (Cerebras)
+          <span class="info-icon" title="נכנס לפעולה אוטומטית אם המכסה החינמית של השירות הראשי נגמרת.">ⓘ</span>
+          <span class="key-saved" id="cerebras_saved" style="display:none">מחובר ✓</span>
+        </label>
+        <small class="muted">מפתח שני (חינמי) שנכנס לפעולה אוטומטית רק אם נגמרה המכסה היומית של Groq. מומלץ למי שמתרגם הרבה.</small>
+        <input type="password" id="cerebras_api_key" placeholder="מפתח גיבוי (csk-…)" autocomplete="off" spellcheck="false" />
+        <small class="muted">
+          <a class="link-btn" href="https://cloud.cerebras.ai/" target="_blank" rel="noopener">קבלת מפתח גיבוי חינם ↗</a>
+        </small>
+        <select id="cerebras_model" style="margin-top:8px">
+          <option value="">מודל גיבוי: אוטומטי (מומלץ)</option>
+        </select>
+        <label style="margin-top:10px">סוג חשבון הגיבוי</label>
+        <div class="segmented" id="cerebras_speed_segmented" role="group" aria-label="סוג חשבון הגיבוי">
+          <button type="button" class="seg on" data-speed="normal">חינמי</button>
+          <button type="button" class="seg" data-speed="fast">בתשלום</button>
+        </div>
+        <div class="limit-note">
+          <span class="lnico">🛟</span>
+          <div class="ln-body">
+            <span class="ln-main">מפתח הגיבוי מוסיף <strong>~1 מיליון טוקנים ביום</strong> משלו — מכסה גדולה נוספת, כך שכמעט לא תיתקל במגבלה אפילו בתרגום מסמכים גדולים.</span>
+          </div>
+        </div>
+      </div>
+
       <!-- מתקדם — מקופל כברירת מחדל -->
       <details class="advanced" id="translate_advanced">
         <summary>הגדרות מתקדמות</summary>
@@ -384,30 +452,6 @@
               <option value="">אוטומטי (מומלץ)</option>
             </select>
             <small class="muted">"אוטומטי" בוחר את המודל הטוב ביותר. שנה רק אם אתה יודע מה אתה עושה.</small>
-          </div>
-
-          <div class="field">
-            <label for="cerebras_api_key">
-              שירות גיבוי (אופציונלי)
-              <span class="info-icon" title="נכנס לפעולה אוטומטית אם המכסה החינמית של השירות הראשי נגמרת.">ⓘ</span>
-              <span class="key-saved" id="cerebras_saved" style="display:none">מחובר ✓</span>
-            </label>
-            <input type="password" id="cerebras_api_key" placeholder="מפתח גיבוי (csk-…)" autocomplete="off" spellcheck="false" />
-            <small class="muted">
-              גיבוי אוטומטי כשהמכסה הראשית נגמרת.
-              <a class="link-btn" href="https://cloud.cerebras.ai/" target="_blank" rel="noopener">קבלת מפתח גיבוי חינם ↗</a>
-            </small>
-            <select id="cerebras_model" style="margin-top:8px">
-              <option value="">מודל גיבוי: אוטומטי (מומלץ)</option>
-            </select>
-            <label style="margin-top:10px">סוג חשבון הגיבוי</label>
-            <div class="segmented" id="cerebras_speed_segmented" role="group" aria-label="סוג חשבון הגיבוי">
-              <button type="button" class="seg on" data-speed="normal">חינמי</button>
-              <button type="button" class="seg" data-speed="fast">בתשלום</button>
-            </div>
-            <small class="muted">
-              קבע בנפרד אם חשבון הגיבוי חינמי או בתשלום — אין צורך שיהיה זהה לשירות הראשי.
-            </small>
           </div>
 
           <div class="field">

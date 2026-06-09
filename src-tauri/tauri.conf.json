@@ -67,9 +67,12 @@
         "title": "Timluli — הגדרות",
         "width": 820,
         "height": 640,
+        "minWidth": 640,
+        "minHeight": 520,
         "visible": false,
         "center": true,
-        "resizable": false,
+        "resizable": true,
+        "maximizable": true,
         "decorations": false,
         "skipTaskbar": false
       },

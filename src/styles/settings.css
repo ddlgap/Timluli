@@ -1065,3 +1065,68 @@ select.lp-target {
 
 /* Step 4: backup (Cerebras) key surfaced out of the advanced accordion. */
 .backup-key { margin-top: 8px; }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   Titlebar: theme toggle (sun/moon) + maximize/restore icon swap.
+   ═══════════════════════════════════════════════════════════════════════════ */
+.tb-btn svg { width: 15px; height: 15px; }
+.tb-theme .ico-moon,
+.tb-max .ico-restore { display: none; }
+:root.light .tb-theme .ico-sun { display: none; }
+:root.light .tb-theme .ico-moon { display: inline; }
+.tb-max.is-max .ico-maximize { display: none; }
+.tb-max.is-max .ico-restore { display: inline; }
+
+/* When maximized, keep content readable by centering it (don't stretch fields). */
+main > .section { max-width: 780px; margin-inline: auto; width: 100%; }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   LIGHT MODE — toggled by adding `.light` to <html> (settings window only).
+   Remaps the core tokens, then fixes the few hardcoded dark-only colors.
+   ═══════════════════════════════════════════════════════════════════════════ */
+:root.light {
+  --bg: #eceef2;
+  --surface: #ffffff;
+  --surface-2: #f3f5f8;
+  --border: #dde1e8;
+  --text: #1b1f27;
+  --text-dim: #5f6671;
+  --accent: #16a34a;
+  --accent-2: #0e8aa6;
+  --danger: #dc2626;
+  --warning: #b45309;
+  --shadow: 0 6px 18px rgba(20, 30, 50, 0.10);
+}
+
+/* Green-filled controls need light text on the (now darker) green. */
+:root.light button.primary,
+:root.light .cta:not(.ghost),
+:root.light .btn-primary,
+:root.light .choice-tag,
+:root.light .acct-tag,
+:root.light .seg.on,
+:root.light .segmented .seg.on,
+:root.light .model-btn.primary-sm,
+:root.light .mbtn.primary,
+:root.light .step-n,
+:root.light .wiz-n,
+:root.light .mission-badge,
+:root.light button.saved { color: #ffffff; }
+
+/* Neutral hovers + toggle track + scrollbar tuned for a light surface. */
+:root.light button:hover { background: var(--surface-2); }
+:root.light .toggle { background: #c5cbd6; }
+:root.light .toggle::after { background: #ffffff; }
+:root.light ::-webkit-scrollbar-thumb { background: #c9cfd9; }
+:root.light .toggle.disabled { background: #e2e6ec; }
+
+/* Subtle accent tints read fine on white; nudge the green "selected" fills a touch. */
+:root.light .engine-option.selected,
+:root.light .acct-card.on,
+:root.light .choice-card.selected { background: rgba(22, 163, 74, 0.08); }
+:root.light .nav.tabs button.active,
+:root.light nav.tabs button.active { background: rgba(22, 163, 74, 0.12); }
+
+/* Toast + dialogs keep enough contrast on light. */
+:root.light #toast { box-shadow: 0 8px 24px rgba(20, 30, 50, 0.18); }
+:root.light dialog.wizard::backdrop { background: rgba(30, 40, 60, 0.35); }

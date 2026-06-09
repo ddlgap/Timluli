@@ -13,6 +13,35 @@ const appWindow = getCurrentWindow();
 $('tb-min')?.addEventListener('click', () => appWindow.minimize());
 $('tb-close')?.addEventListener('click', () => appWindow.close());
 
+// ---- Maximize / restore (custom titlebar button) ----
+async function refreshMaxIcon() {
+  try {
+    const max = await appWindow.isMaximized();
+    $('tb-max')?.classList.toggle('is-max', !!max);
+  } catch (_) {}
+}
+$('tb-max')?.addEventListener('click', async () => {
+  try { await appWindow.toggleMaximize(); } catch (_) {}
+  refreshMaxIcon();
+});
+appWindow.onResized?.(() => refreshMaxIcon());
+refreshMaxIcon();
+
+// ---- Light / dark mode (settings window only; persisted locally) ----
+const THEME_KEY = 'timluli_settings_theme';
+function applyTheme(t) {
+  document.documentElement.classList.toggle('light', t === 'light');
+  const btn = $('tb-theme');
+  if (btn) btn.setAttribute('aria-label', t === 'light' ? 'עבור למצב כהה' : 'עבור למצב בהיר');
+}
+let uiTheme = (() => { try { return localStorage.getItem(THEME_KEY) || 'dark'; } catch (_) { return 'dark'; } })();
+applyTheme(uiTheme);
+$('tb-theme')?.addEventListener('click', () => {
+  uiTheme = uiTheme === 'light' ? 'dark' : 'light';
+  try { localStorage.setItem(THEME_KEY, uiTheme); } catch (_) {}
+  applyTheme(uiTheme);
+});
+
 // ---- Tabs (ARIA tablist with roving tabindex + arrow-key navigation) ----
 const tabs = Array.from(document.querySelectorAll('nav.tabs [role="tab"]'));
 const sections = document.querySelectorAll('main .section');

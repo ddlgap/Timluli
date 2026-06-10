@@ -15,6 +15,7 @@ use std::path::Path;
 use serde::Deserialize;
 use tauri::AppHandle;
 
+use super::words::TimedWord;
 use crate::whisper_local::inference::Segment;
 
 const GROQ_STT_URL: &str = "https://api.groq.com/openai/v1/audio/transcriptions";
@@ -27,8 +28,13 @@ const GROQ_SUBTITLE_MODEL: &str = "whisper-large-v3";
 const NO_SPEECH_DROP: f32 = 0.85;
 
 /// Uploads `input` (a 16 kHz mono FLAC the caller extracted via ffmpeg) and returns
-/// timed segments. Hebrew error strings, matching the rest of the app.
-pub async fn transcribe_to_segments(app: &AppHandle, input: &Path) -> Result<Vec<Segment>, String> {
+/// timed segments plus word-level timestamps (for the karaoke burn style's
+/// `words.json` sidecar — may be empty if the API omits them). Hebrew error
+/// strings, matching the rest of the app.
+pub async fn transcribe_to_segments(
+    app: &AppHandle,
+    input: &Path,
+) -> Result<(Vec<Segment>, Vec<TimedWord>), String> {
     let key = crate::secrets::get_key(app, "groq").ok_or_else(|| {
         "לא הוגדר מפתח Groq. חבר שירות תרגום בהגדרות → תרגום מסמכים כדי לתמלל בענן.".to_string()
     })?;
@@ -47,11 +53,16 @@ pub async fn transcribe_to_segments(app: &AppHandle, input: &Path) -> Result<Vec
         .mime_str("application/octet-stream")
         .map_err(|e| format!("שגיאה בהכנת הקובץ: {e}"))?;
 
+    // Requesting granularities replaces the default, so `segment` must be asked
+    // for explicitly alongside `word` (validated live against the API, Phase 0:
+    // segments come back identical, plus a `words` array).
     let form = reqwest::multipart::Form::new()
         .part("file", file_part)
         .text("model", GROQ_SUBTITLE_MODEL)
         .text("language", "he")
-        .text("response_format", "verbose_json");
+        .text("response_format", "verbose_json")
+        .text("timestamp_granularities[]", "word")
+        .text("timestamp_granularities[]", "segment");
 
     let client = reqwest::Client::new();
     let resp = client
@@ -77,7 +88,7 @@ pub async fn transcribe_to_segments(app: &AppHandle, input: &Path) -> Result<Vec
         .text()
         .await
         .map_err(|e| format!("שגיאה בקריאת התשובה: {e}"))?;
-    parse_segments(&body)
+    parse_response(&body)
 }
 
 /// Shape of the relevant fields in Groq's `verbose_json` transcription response.
@@ -86,6 +97,8 @@ pub async fn transcribe_to_segments(app: &AppHandle, input: &Path) -> Result<Vec
 struct VerboseResponse {
     #[serde(default)]
     segments: Vec<VerboseSegment>,
+    #[serde(default)]
+    words: Vec<VerboseWord>,
 }
 
 #[derive(Deserialize)]
@@ -97,9 +110,17 @@ struct VerboseSegment {
     no_speech_prob: f32,
 }
 
-/// Maps a `verbose_json` body to [`Segment`]s (seconds → centiseconds), dropping
-/// empty and high-no-speech-probability segments.
-fn parse_segments(body: &str) -> Result<Vec<Segment>, String> {
+#[derive(Deserialize)]
+struct VerboseWord {
+    word: String,
+    start: f64,
+    end: f64,
+}
+
+/// Maps a `verbose_json` body to [`Segment`]s + [`TimedWord`]s (seconds →
+/// centiseconds), dropping empty and high-no-speech-probability segments. Words
+/// are best-effort: an absent/empty array is fine (older responses, no speech).
+fn parse_response(body: &str) -> Result<(Vec<Segment>, Vec<TimedWord>), String> {
     let parsed: VerboseResponse = serde_json::from_str(body)
         .map_err(|e| format!("שגיאה בפענוח תשובת התמלול: {e}"))?;
 
@@ -121,7 +142,26 @@ fn parse_segments(body: &str) -> Result<Vec<Segment>, String> {
             })
         })
         .collect();
-    Ok(segments)
+
+    let words = parsed
+        .words
+        .into_iter()
+        .filter_map(|w| {
+            let text = w.word.trim().to_string();
+            if text.is_empty() {
+                return None;
+            }
+            let t0_cs = (w.start.max(0.0) * 100.0).round() as i64;
+            let t1_cs = (w.end.max(0.0) * 100.0).round() as i64;
+            Some(TimedWord {
+                w: text,
+                t0_cs,
+                t1_cs: t1_cs.max(t0_cs),
+            })
+        })
+        .collect();
+
+    Ok((segments, words))
 }
 
 #[cfg(test)]
@@ -146,7 +186,7 @@ mod tests {
 
     #[test]
     fn parses_segments_seconds_to_centiseconds() {
-        let segs = parse_segments(SAMPLE).expect("parse");
+        let (segs, words) = parse_response(SAMPLE).expect("parse");
         // empty-text (#2) and high-no_speech (#3) segments dropped → 2 remain
         assert_eq!(segs.len(), 2);
         assert_eq!(segs[0].start_cs, 0);
@@ -154,25 +194,55 @@ mod tests {
         assert_eq!(segs[0].text, "דיברתי על מה ששלחת"); // leading space trimmed
         assert_eq!(segs[1].start_cs, 1022);
         assert_eq!(segs[1].end_cs, 1894);
+        // no `words` array in this payload → empty, not an error
+        assert!(words.is_empty());
+    }
+
+    #[test]
+    fn parses_words_alongside_segments() {
+        // Field shape captured live from the API in Phase 0 (word + start/end secs).
+        let body = r#"{
+            "task": "transcribe", "language": "Hebrew", "duration": 12.39,
+            "text": " שלום עולם.",
+            "words": [
+                {"word":"שלום","start":0,"end":1.94},
+                {"word":" עולם. ","start":2.1,"end":3.8},
+                {"word":"   ","start":4.0,"end":4.2},
+                {"word":"הפוך","start":6.0,"end":5.0}
+            ],
+            "segments": [
+                {"id":0,"seek":0,"start":0,"end":3.8,"text":" שלום עולם.","no_speech_prob":0.03}
+            ]
+        }"#;
+        let (segs, words) = parse_response(body).expect("parse");
+        assert_eq!(segs.len(), 1);
+        assert_eq!(words.len(), 3, "blank word dropped");
+        assert_eq!(words[0].w, "שלום");
+        assert_eq!(words[0].t0_cs, 0);
+        assert_eq!(words[0].t1_cs, 194);
+        assert_eq!(words[1].w, "עולם.", "word text trimmed");
+        assert_eq!(words[2].t0_cs, 600);
+        assert_eq!(words[2].t1_cs, 600, "backwards end clamps to start");
     }
 
     #[test]
     fn fractional_seconds_round_to_nearest_centisecond() {
         let body = r#"{"segments":[{"start":1.234,"end":2.999,"text":"x","no_speech_prob":0.0}]}"#;
-        let segs = parse_segments(body).expect("parse");
+        let (segs, _) = parse_response(body).expect("parse");
         assert_eq!(segs[0].start_cs, 123); // 1.234 s → 123.4 cs → 123
         assert_eq!(segs[0].end_cs, 300); // 2.999 s → 299.9 cs → 300
     }
 
     #[test]
     fn missing_segments_field_is_empty_not_error() {
-        let segs = parse_segments(r#"{"task":"transcribe","text":"hi"}"#).expect("parse");
+        let (segs, words) = parse_response(r#"{"task":"transcribe","text":"hi"}"#).expect("parse");
         assert!(segs.is_empty());
+        assert!(words.is_empty());
     }
 
     #[test]
     fn malformed_json_is_a_hebrew_error() {
-        let err = parse_segments("not json").unwrap_err();
+        let err = parse_response("not json").unwrap_err();
         assert!(err.contains("פענוח"), "expected Hebrew parse error, got: {err}");
     }
 
@@ -181,7 +251,7 @@ mod tests {
         // Defensive: a backwards segment clamps end up to start rather than emitting
         // a negative-duration cue.
         let body = r#"{"segments":[{"start":5.0,"end":4.0,"text":"x","no_speech_prob":0.0}]}"#;
-        let segs = parse_segments(body).expect("parse");
+        let (segs, _) = parse_response(body).expect("parse");
         assert_eq!(segs[0].start_cs, 500);
         assert_eq!(segs[0].end_cs, 500);
     }

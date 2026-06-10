@@ -68,7 +68,11 @@ pub async fn download_ffmpeg(
             .remove(DOWNLOAD_KEY);
         match result {
             Ok(()) => {
+                // Both windows can host the download row: settings (its tab) and the
+                // onboarding wizard (the video opt-in step). Emit to both so whichever
+                // is open updates — mirrors `download_punctuation_model`.
                 let _ = app_clone.emit_to("settings", "speakly://ffmpeg-installed", ());
+                let _ = app_clone.emit_to("onboarding", "speakly://ffmpeg-installed", ());
             }
             Err(e) => {
                 log::error!("ffmpeg download: {e}");
@@ -85,6 +89,32 @@ pub fn cancel_ffmpeg_download(state: State<'_, AppState>) -> Result<(), String> 
         token.cancel();
     }
     Ok(())
+}
+
+/// Burns an SRT onto a video with the style chosen in settings (`burn_style`).
+/// Mirrors `transcribe_video_to_srt`: returns the outcome (path + which style
+/// was actually used + whether karaoke degraded to box) AND emits done/error
+/// events to both drop surfaces, so the bubble/panel update even if the
+/// invoking webview navigated meanwhile. Progress percent is emitted from
+/// inside the pipeline as `speakly://burn-progress {percent}`.
+#[tauri::command]
+pub async fn burn_subtitles(
+    app: AppHandle,
+    video_path: String,
+    srt_path: String,
+) -> Result<crate::subtitle_burn::BurnOutcome, String> {
+    let result = crate::subtitle_burn::burn_subtitles(&app, &video_path, &srt_path).await;
+    match &result {
+        Ok(outcome) => {
+            let _ = app.emit_to("mic", "speakly://burn-done", outcome.clone());
+            let _ = app.emit_to("panel", "speakly://burn-done", outcome.clone());
+        }
+        Err(e) => {
+            let _ = app.emit_to("mic", "speakly://burn-error", e.clone());
+            let _ = app.emit_to("panel", "speakly://burn-error", e.clone());
+        }
+    }
+    result
 }
 
 #[tauri::command]

@@ -43,6 +43,17 @@ pub struct Segment {
     pub text: String,
 }
 
+/// One spoken word with chunk-relative time bounds (centiseconds), assembled from
+/// whisper.cpp token timestamps by [`WhisperEngine::transcribe_segments_words`].
+/// The video pipeline shifts these to absolute time and writes them to the
+/// `words.json` sidecar (karaoke burn-in style).
+#[derive(Debug, Clone, PartialEq)]
+pub struct WordSpan {
+    pub text: String,
+    pub t0_cs: i64,
+    pub t1_cs: i64,
+}
+
 pub struct WhisperEngine {
     ctx: WhisperContext,
     pub model_id: String,
@@ -138,25 +149,6 @@ impl WhisperEngine {
             .create_state()
             .map_err(|e| EngineError::Transcribe(e.to_string()))?;
 
-        let mut params = FullParams::new(SamplingStrategy::Greedy { best_of: 1 });
-        params.set_language(Some(lang));
-        params.set_translate(false);
-        params.set_print_special(false);
-        params.set_print_progress(false);
-        params.set_print_realtime(false);
-        params.set_print_timestamps(false);
-        params.set_n_threads(num_cpus::get_physical().min(4) as i32);
-        params.set_no_context(true);
-        // The two flags that differ from `transcribe`: keep per-utterance segments
-        // and emit their timestamps (t0/t1) rather than suppressing them.
-        params.set_single_segment(false);
-        params.set_no_timestamps(false);
-        params.set_temperature(0.2);
-        params.set_temperature_inc(0.0);
-        params.set_entropy_thold(2.8);
-        params.set_logprob_thold(-1.0);
-        params.set_no_speech_thold(0.35);
-
         // Trailing silence pad (see doc comment) — satisfies the skip guard now that
         // timestamps are on.
         let mut padded = Vec::with_capacity(audio_16k_mono.len() + PAD_SAMPLES);
@@ -164,7 +156,7 @@ impl WhisperEngine {
         padded.extend(std::iter::repeat(0.0_f32).take(PAD_SAMPLES));
 
         state
-            .full(params, &padded)
+            .full(Self::segment_params(lang), &padded)
             .map_err(|e| EngineError::Transcribe(e.to_string()))?;
 
         let mut segments = Vec::new();
@@ -185,6 +177,116 @@ impl WhisperEngine {
             });
         }
         Ok(segments)
+    }
+
+    /// Like [`Self::transcribe_segments`], but additionally extracts **word-level**
+    /// timestamps from whisper.cpp's per-token timings (`token_timestamps=true`,
+    /// a post-pass heuristic — segmentation and text are unchanged). Backs the
+    /// karaoke burn-in style's `words.json` sidecar; the SRT itself is still built
+    /// from the returned segments exactly as before.
+    ///
+    /// Tokens are BPE byte pieces: a token whose bytes start with `b' '` opens a
+    /// new word; bytes are accumulated per word (Hebrew codepoints can split
+    /// *across* tokens, so per-token lossy decoding would corrupt them) and decoded
+    /// once per word. Special tokens (`[_BEG_]`, `<|...|>`) are skipped.
+    pub fn transcribe_segments_words(
+        &self,
+        audio_16k_mono: &[f32],
+        lang: &str,
+    ) -> Result<(Vec<Segment>, Vec<WordSpan>), EngineError> {
+        let mut state = self
+            .ctx
+            .create_state()
+            .map_err(|e| EngineError::Transcribe(e.to_string()))?;
+
+        let mut params = Self::segment_params(lang);
+        params.set_token_timestamps(true);
+
+        let mut padded = Vec::with_capacity(audio_16k_mono.len() + PAD_SAMPLES);
+        padded.extend_from_slice(audio_16k_mono);
+        padded.extend(std::iter::repeat(0.0_f32).take(PAD_SAMPLES));
+
+        state
+            .full(params, &padded)
+            .map_err(|e| EngineError::Transcribe(e.to_string()))?;
+
+        let mut segments = Vec::new();
+        let mut words = Vec::new();
+        for seg in state.as_iter() {
+            let text = seg
+                .to_str_lossy()
+                .map_err(|e| EngineError::Transcribe(e.to_string()))?
+                .trim()
+                .to_string();
+            if text.is_empty() {
+                continue;
+            }
+
+            // Group this segment's tokens into words.
+            let mut cur_bytes: Vec<u8> = Vec::new();
+            let mut cur_t0: i64 = 0;
+            let mut cur_t1: i64 = 0;
+            let flush = |bytes: &mut Vec<u8>, t0: i64, t1: i64, out: &mut Vec<WordSpan>| {
+                let w = String::from_utf8_lossy(bytes).trim().to_string();
+                bytes.clear();
+                if !w.is_empty() {
+                    out.push(WordSpan {
+                        text: w,
+                        t0_cs: t0.max(0),
+                        t1_cs: t1.max(t0.max(0)),
+                    });
+                }
+            };
+            for i in 0..seg.n_tokens() {
+                let Some(tok) = seg.get_token(i) else { continue };
+                let Ok(bytes) = tok.to_bytes() else { continue };
+                // Special markers render as "[_...]" or "<|...|>" — never words.
+                if bytes.starts_with(b"[_") || bytes.starts_with(b"<|") {
+                    continue;
+                }
+                let data = tok.token_data();
+                if bytes.starts_with(b" ") && !cur_bytes.is_empty() {
+                    flush(&mut cur_bytes, cur_t0, cur_t1, &mut words);
+                }
+                if cur_bytes.is_empty() {
+                    cur_t0 = data.t0;
+                }
+                cur_t1 = data.t1;
+                cur_bytes.extend_from_slice(bytes);
+            }
+            flush(&mut cur_bytes, cur_t0, cur_t1, &mut words);
+
+            segments.push(Segment {
+                start_cs: seg.start_timestamp(),
+                end_cs: seg.end_timestamp(),
+                text,
+            });
+        }
+        Ok((segments, words))
+    }
+
+    /// The shared `FullParams` for the timestamped (video→SRT) paths. Differs from
+    /// `transcribe` in exactly two flags: multi-segment + timestamps enabled.
+    fn segment_params(lang: &str) -> FullParams<'_, '_> {
+        let mut params = FullParams::new(SamplingStrategy::Greedy { best_of: 1 });
+        params.set_language(Some(lang));
+        params.set_translate(false);
+        params.set_print_special(false);
+        params.set_print_progress(false);
+        params.set_print_realtime(false);
+        params.set_print_timestamps(false);
+        params.set_n_threads(num_cpus::get_physical().min(4) as i32);
+        params.set_no_context(true);
+        // The two flags that differ from `transcribe`: keep per-utterance segments
+        // and emit their timestamps (t0/t1) rather than suppressing them.
+        params.set_single_segment(false);
+        params.set_no_timestamps(false);
+        params.set_temperature(0.2);
+        params.set_temperature_inc(0.0);
+        params.set_entropy_thold(2.8);
+        params.set_logprob_thold(-1.0);
+        params.set_no_speech_thold(0.35);
+        params
     }
 }
 
@@ -320,5 +422,78 @@ mod tests {
             assert!(!s.text.is_empty(), "empty segment text leaked through");
             prev_start = s.start_cs;
         }
+    }
+
+    /// Same harness as [`transcribe_segments_smoke`], for the word-timestamps
+    /// variant backing the karaoke burn style. Validates the token→word grouping
+    /// against a real model + clip: words come back, are time-ordered, and their
+    /// concatenation matches the segment texts (modulo whitespace). Run:
+    ///   $env:TIMLULI_TEST_MODEL = …ggml-model.bin ; $env:TIMLULI_TEST_AUDIO = …clip
+    ///   cargo test --manifest-path src-tauri/Cargo.toml transcribe_segments_words_smoke -- --ignored --nocapture
+    #[test]
+    #[ignore]
+    fn transcribe_segments_words_smoke() {
+        let model = std::env::var("TIMLULI_TEST_MODEL")
+            .expect("set TIMLULI_TEST_MODEL to an installed GGML model file path");
+        let audio_path = std::env::var("TIMLULI_TEST_AUDIO")
+            .expect("set TIMLULI_TEST_AUDIO to a speech clip (mp3/mp4/wav/m4a…)");
+
+        let mut audio = decode_to_16k_mono(&PathBuf::from(&audio_path));
+        assert!(!audio.is_empty(), "decoded to zero samples");
+        let cap = 28 * 16_000;
+        if audio.len() > cap {
+            audio.truncate(cap);
+        }
+
+        let engine =
+            WhisperEngine::load(&PathBuf::from(&model), "test".into()).expect("load model");
+        let (segs, words) = engine
+            .transcribe_segments_words(&audio, "he")
+            .expect("transcribe_segments_words returned an error");
+
+        println!(
+            "=== {} segment(s), {} word(s) ===",
+            segs.len(),
+            words.len()
+        );
+        for w in &words {
+            println!(
+                "  [{:>3}.{:02}s → {:>3}.{:02}s]  {}",
+                w.t0_cs / 100,
+                w.t0_cs % 100,
+                w.t1_cs / 100,
+                w.t1_cs % 100,
+                w.text
+            );
+        }
+
+        assert!(!segs.is_empty(), "no segments");
+        assert!(!words.is_empty(), "no words extracted from tokens");
+        let mut prev_t0 = -1_i64;
+        for w in &words {
+            assert!(w.t1_cs >= w.t0_cs, "word end before start: {w:?}");
+            assert!(w.t0_cs >= prev_t0, "words not time-ordered: {w:?}");
+            assert!(!w.text.trim().is_empty(), "blank word leaked");
+            assert!(
+                !w.text.contains('\u{FFFD}'),
+                "UTF-8 corruption — token bytes split mid-codepoint were not healed: {w:?}"
+            );
+            prev_t0 = w.t0_cs;
+        }
+        // The words must spell the segments (the karaoke matcher relies on this).
+        let seg_join: String = segs
+            .iter()
+            .map(|s| s.text.as_str())
+            .collect::<Vec<_>>()
+            .join(" ")
+            .split_whitespace()
+            .collect::<Vec<_>>()
+            .join(" ");
+        let word_join: String = words
+            .iter()
+            .map(|w| w.text.as_str())
+            .collect::<Vec<_>>()
+            .join(" ");
+        assert_eq!(seg_join, word_join, "word stream diverges from segment text");
     }
 }

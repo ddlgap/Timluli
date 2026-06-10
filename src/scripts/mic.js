@@ -127,6 +127,17 @@ const extOf = (p) => {
 const isTranslatable = (p) => TRANSLATE_EXTS.includes(extOf(p));
 const isAudio = (p) => AUDIO_EXTS.includes(extOf(p));
 const isVideo = (p) => VIDEO_EXTS.includes(extOf(p));
+const isSrt = (p) => extOf(p) === 'srt';
+// Exactly one video + one SRT dropped together = a burn-in pair. Must be checked
+// BEFORE extension classification: a lone .srt routes to translation, but next to
+// a video it means "burn these subtitles onto it".
+function asBurnPair(paths) {
+  if (paths.length !== 2) return null;
+  const [a, b] = paths;
+  if (isVideo(a) && isSrt(b)) return { video: a, srt: b };
+  if (isVideo(b) && isSrt(a)) return { video: b, srt: a };
+  return null;
+}
 // Read fresh each drop (cheap, infrequent); default-on if the field is unset.
 async function videoSubtitlesEnabled() {
   try {
@@ -153,8 +164,39 @@ await listen('speakly://transcribe-progress', (e) => {
   showProgress(chunk && total > 1 ? `${label}… ${chunk}/${total}` : `${label}…`);
 });
 
+// Burn-in re-encodes the whole video, so a live percent (not chunk counts).
+await listen('speakly://burn-progress', (e) => {
+  const { percent } = e.payload || {};
+  showProgress(percent ? `צורב כתוביות… ${percent}%` : 'צורב כתוביות…');
+});
+
 await getCurrentWebview().onDragDropEvent(async (event) => {
   if (event.payload.type !== 'drop' || !event.payload.paths?.length) return;
+
+  // Video + SRT pair → subtitle burn-in (style from settings).
+  const pair = asBurnPair(event.payload.paths);
+  if (pair) {
+    setState('listening');
+    showProgress('צורב כתוביות…');
+    try {
+      const outcome = await invoke('burn_subtitles', { videoPath: pair.video, srtPath: pair.srt });
+      setState('idle');
+      // degraded = karaoke was requested but no usable word timings were found
+      // (no words.json next to the SRT, or a heavily edited SRT) → box style.
+      showBubble(
+        outcome?.degraded
+          ? 'נשמר בסגנון קופסה — אין תזמוני מילים לכתוביות אלה (נוצרות בתמלול וידאו במנוע Groq או מקומי)'
+          : '✓ נשמר'
+      );
+    } catch (err) {
+      console.warn('burn_subtitles failed:', err);
+      setState('error');
+      showBubble('שגיאה');
+      setTimeout(() => setState('idle'), 1500);
+    }
+    return;
+  }
+
   // Classify with video precedence (some video exts also live in AUDIO_EXTS).
   const videoOn = await videoSubtitlesEnabled();
   const videoPaths = [];

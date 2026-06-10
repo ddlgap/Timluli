@@ -70,6 +70,7 @@ await listen('speakly://panel-peek', async () => {
 sectorTop.addEventListener('click', toggleLive);
 document.getElementById('sector-middle').addEventListener('click', () => pickAndRun('translate'));
 document.getElementById('sector-bottom').addEventListener('click', () => pickAndRun('transcribe'));
+document.getElementById('sector-burn').addEventListener('click', () => pickBurn());
 
 async function toggleLive() {
   try {
@@ -100,6 +101,17 @@ const extOf = (p) => {
 const isTranslatable = (p) => TRANSLATE_EXTS.includes(extOf(p));
 const isAudio = (p) => AUDIO_EXTS.includes(extOf(p));
 const isVideo = (p) => VIDEO_EXTS.includes(extOf(p));
+const isSrt = (p) => extOf(p) === 'srt';
+// Exactly one video + one SRT dropped together = a burn-in pair. Must be checked
+// BEFORE extension classification: a lone .srt routes to translation, but next to
+// a video it means "burn these subtitles onto it".
+function asBurnPair(paths) {
+  if (paths.length !== 2) return null;
+  const [a, b] = paths;
+  if (isVideo(a) && isSrt(b)) return { video: a, srt: b };
+  if (isVideo(b) && isSrt(a)) return { video: b, srt: a };
+  return null;
+}
 async function videoSubtitlesEnabled() {
   try {
     const stg = await invoke('get_settings');
@@ -144,6 +156,38 @@ async function runFile(command, path) {
   }
 }
 
+async function runBurn(videoPath, srtPath) {
+  showStatus('צורב כתוביות…', { busy: true });
+  try {
+    const outcome = await invoke('burn_subtitles', { videoPath, srtPath });
+    // degraded = karaoke requested but no usable word timings → box style.
+    showStatus(outcome?.degraded ? 'נשמר בסגנון קופסה (אין תזמוני מילים)' : '✓ נשמר');
+  } catch (err) {
+    console.warn('burn_subtitles failed:', err);
+    showStatus('שגיאה');
+  }
+}
+
+// Two-step native picker for the burn wedge: the video, then its SRT.
+async function pickBurn() {
+  const pickOne = async (filters) => {
+    let sel;
+    try {
+      sel = await open({ multiple: false, directory: false, filters });
+    } catch (e) {
+      console.warn('dialog open failed:', e);
+      return null;
+    }
+    if (!sel) return null; // user cancelled
+    return typeof sel === 'string' ? sel : sel.path || sel;
+  };
+  const video = await pickOne([{ name: 'וידאו', extensions: VIDEO_EXTS }]);
+  if (!video) return;
+  const srt = await pickOne([{ name: 'כתוביות SRT', extensions: ['srt'] }]);
+  if (!srt) return;
+  await runBurn(video, srt);
+}
+
 // Live progress from the backend (translation batches / transcription chunks) →
 // dynamic "מתרגם… 3/12" status, mirroring the floating mic's bubble.
 await listen('speakly://translate-progress', (e) => {
@@ -159,6 +203,12 @@ await listen('speakly://transcribe-progress', (e) => {
   // Video subtitles emit phase="transcribe"; plain audio→txt has no phase.
   const label = phase === 'transcribe' ? 'יוצר כתוביות' : 'מתמלל';
   showStatus(chunk && total > 1 ? `${label}… ${chunk}/${total}` : `${label}…`, { busy: true });
+});
+
+// Burn-in re-encodes the whole video, so a live percent (not chunk counts).
+await listen('speakly://burn-progress', (e) => {
+  const { percent } = e.payload || {};
+  showStatus(percent ? `צורב כתוביות… ${percent}%` : 'צורב כתוביות…', { busy: true });
 });
 
 // ── Drag-and-drop onto the panel ─────────────────────────────────────────────
@@ -194,6 +244,12 @@ async function handleDrag(event) {
   openedForDrag = false; // keep the menu open to show progress + result
 
   const paths = event.payload.paths || [];
+  // Video + SRT pair → subtitle burn-in (style from settings).
+  const pair = asBurnPair(paths);
+  if (pair) {
+    await runBurn(pair.video, pair.srt);
+    return;
+  }
   // Classify with video precedence (some video exts also live in AUDIO_EXTS).
   const videoOn = await videoSubtitlesEnabled();
   const videoPaths = [];

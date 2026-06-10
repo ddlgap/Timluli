@@ -54,11 +54,28 @@
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 5h7M7.5 5v1.5c0 3-1.8 5.5-4 6.5"/><path d="M5 9.5c0 2 2.2 3.8 5 4"/><path d="M12.5 19l4-9 4 9M14 16h5"/></svg>
           <span>תרגום מסמכים</span>
         </button>
+        <button role="tab" id="tab-burn" aria-controls="burn" aria-selected="false" tabindex="-1" data-tab="burn">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2.5"/><path d="M10 9.2l4.2 2.8-4.2 2.8z" /><path d="M6.5 16h11"/></svg>
+          <span>צריבת כתוביות</span>
+        </button>
         <button role="tab" id="tab-about" aria-controls="about" aria-selected="false" tabindex="-1" data-tab="about">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 11v5"/><circle cx="12" cy="7.8" r="1" fill="currentColor" stroke="none"/></svg>
           <span>אודות</span>
         </button>
       </nav>
+
+      <!-- Brand lockup pinned to the bottom of the rail; theme-swapped PNGs (same as Home/About). -->
+      <div class="rail-brand">
+        <span class="rail-brand-logo" role="img" aria-label="Timluli">
+          <img class="rail-logo rail-logo-dark" src="/timluli-logo-dark.png" alt="" />
+          <img class="rail-logo rail-logo-light" src="/timluli-logo-light.png" alt="" />
+        </span>
+        <span class="rail-brand-credit" dir="ltr">
+          Build with
+          <svg class="rail-heart" viewBox="0 0 24 24" aria-label="love" role="img"><path d="M12 21s-6.7-4.3-9.3-8.2C.8 9.9 2 6.4 5.1 6.4c1.9 0 3.1 1.1 3.9 2.3.8-1.2 2-2.3 3.9-2.3 3.1 0 4.3 3.5 2.4 6.4C18.7 16.7 12 21 12 21z" fill="currentColor"/></svg>
+          By daniel daloya
+        </span>
+      </div>
     </aside>
 
     <div class="content-col">
@@ -129,7 +146,16 @@
     <section id="dictation" class="section" role="tabpanel" aria-labelledby="tab-dictation">
       <div class="s-head">
         <h2>תמלול</h2>
-        <p>שפת התמלול, אופן ההפעלה והקיצור, ומנוע התמלול — הכול במקום אחד.</p>
+        <p>שלוש דרכים להפוך דיבור לטקסט — תמלול חי בכל חלון, תמלול קובצי אודיו, וכתוביות לווידאו. לכל אחת ההגדרות שלה.</p>
+      </div>
+
+      <!-- ═══════════════ בלוק 1: תמלול חי ═══════════════ -->
+      <div class="tx-block">
+        <span class="tx-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="2.5" width="6" height="11" rx="3"/><path d="M5.5 11a6.5 6.5 0 0 0 13 0"/><path d="M12 17.5v3M8.5 20.5h7"/></svg></span>
+        <span class="tx-text">
+          <span class="tx-title">תמלול חי</span>
+          <span class="tx-sub">דברו בכל חלון במחשב — הטקסט נכתב לבד לאן שאתם מקלידים. זהו הבסיס של Timluli.</span>
+        </span>
       </div>
 
       <!-- שפה -->
@@ -229,9 +255,9 @@
         </div>
       </div>
 
-      <!-- מנוע התמלול -->
-      <div class="s-group">מנוע תמלול חי</div>
-      <p class="s-desc subgroup-desc">המנוע שממיר דיבור חי לטקסט. תרגום מסמכים פועל בנפרד ואינו מושפע מכאן.</p>
+      <!-- מנוע התמלול החי -->
+      <div class="s-group">מנוע התמלול החי</div>
+      <p class="s-desc subgroup-desc">המנוע שממיר דיבור חי לטקסט. (תמלול קבצים ותרגום מסמכים מוגדרים בנפרד.)</p>
       <div class="engine-radio-group">
         <label class="engine-option" id="engine-opt-web">
           <input type="radio" name="engine_id" value="web-speech" />
@@ -244,66 +270,13 @@
           <input type="radio" name="engine_id" value="whisper-local" />
           <div class="engine-option-content">
             <span class="engine-name">מקומי (אופליין)</span>
-            <span class="engine-desc">עובד על המחשב בלי אינטרנט — הורדה חד־פעמית (~700MB)</span>
+            <span class="engine-desc">עובד על המחשב בלי אינטרנט — דורש מודל מקומי (ראו „מודלים מקומיים” בהמשך)</span>
           </div>
         </label>
       </div>
 
-      <!-- ── תמלול בקבצי אודיו ── -->
-      <div class="s-group">תמלול קובצי אודיו</div>
-      <p class="s-desc subgroup-desc">גרור קובץ אודיו (mp3, wav, m4a ועוד) על המיקרופון כדי לתמלל אותו. התמלול נשמר כקובץ טקסט לצד הקובץ המקורי.</p>
-      <div class="audio-file-block">
-        <div class="engine-radio-group">
-          <label class="engine-option" id="audio-engine-opt-groq">
-            <input type="radio" name="audio_file_engine" value="groq" />
-            <div class="engine-option-content">
-              <span class="engine-name">ענן (Groq · whisper-large-v3-turbo)</span>
-              <span class="engine-desc">מהיר ומדויק — דורש חיבור לשירות Groq ואינטרנט (משתמש באותו מפתח של התרגום)</span>
-            </div>
-          </label>
-          <label class="engine-option" id="audio-engine-opt-local">
-            <input type="radio" name="audio_file_engine" value="whisper-local" />
-            <div class="engine-option-content">
-              <span class="engine-name">מקומי (ivrit.ai Turbo)</span>
-              <span class="engine-desc">תמלול על המחשב — ללא אינטרנט, דורש מודל מקומי מותקן</span>
-            </div>
-          </label>
-        </div>
-        <!-- Step 4: free-tier capacity for audio/video transcription (cloud · Groq) -->
-        <div class="limit-note">
-          <span class="lnico">🎧</span>
-          <div class="ln-body">
-            <span class="ln-main">בתמלול „ענן (Groq)" אפשר לתמלל בממוצע עד <strong>~8 שעות אודיו ביום</strong> במפתח החינמי. קובצי וידאו משתמשים באותה מכסה. בתמלול „מקומי" אין מגבלה.</span>
-          </div>
-        </div>
-      </div>
-
-      <!-- Shown only when whisper-local is selected and no model is installed -->
-      <div id="no-model-guidance" class="engine-guidance" style="display:none">
-        <span class="guidance-icon">ℹ</span>
-        <div>
-          <p>לא נמצא מודל מותקן. הורד מודל כדי להשתמש בתמלול מקומי.</p>
-          <button class="link-btn" id="guidance-scroll-btn">גלול למודלים ↓</button>
-        </div>
-      </div>
-
-      <div class="engine-model-section">
-        <div class="engine-section-header">
-          <h3 class="model-section-title">מודלים מקומיים</h3>
-          <button class="link-btn" id="btn-import-manual">ייבא מודל ידני…</button>
-        </div>
-        <div id="model-list" class="model-list">
-          <p class="muted">טוען מודלים…</p>
-        </div>
-        <small class="muted">
-          מודלים מאת <a href="https://www.ivrit.ai/" target="_blank" rel="noopener">ivrit.ai</a> (רישיון Apache 2.0).
-          מודל Q5 (~700MB) מומלץ לרוב המשתמשים; FP16 (~1.5GB) לאיכות מרבית.
-          כשמודל פעיל הוא תופס בזיכרון (RAM) מקום כגודל הקובץ.
-        </small>
-      </div>
-
-      <!-- ── פיסוק וכתוביות ── -->
-      <div class="s-group">פיסוק וכתוביות</div>
+      <!-- פיסוק — שייך לתמלול החי -->
+      <div class="s-group">פיסוק אוטומטי</div>
 
       <div class="s-card">
         <div class="s-row">
@@ -338,13 +311,63 @@
         </div>
       </div>
 
-      <!-- ── כתוביות לווידאו ── -->
+      <!-- ═══════════════ בלוק 2: תמלול קבצים ═══════════════ -->
+      <div class="tx-block">
+        <span class="tx-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7.5A1.5 1.5 0 0 1 4.5 6h4l2 2.5h7A1.5 1.5 0 0 1 19 10v7.5A1.5 1.5 0 0 1 17.5 19h-13A1.5 1.5 0 0 1 3 17.5z"/></svg></span>
+        <span class="tx-text">
+          <span class="tx-title">תמלול קבצים</span>
+          <span class="tx-sub">גררו קובץ אודיו או וידאו על המיקרופון — וקבלו תמלול מוכן לצד הקובץ המקורי.</span>
+        </span>
+      </div>
+
+      <div class="tx-outcomes">
+        <div class="tx-out">
+          <span class="tx-out-ico accent">🎬</span>
+          <span class="tx-out-text"><strong>וידאו → כתוביות SRT</strong><br>עם חותמות זמן מסונכרנות</span>
+        </div>
+        <div class="tx-out">
+          <span class="tx-out-ico">🎧</span>
+          <span class="tx-out-text"><strong>אודיו → קובץ טקסט</strong><br>תמלול רציף לעריכה והעתקה</span>
+        </div>
+      </div>
+
+      <!-- מנוע קבצים — משותף לאודיו ולווידאו -->
+      <div class="s-group">מנוע התמלול לקבצים</div>
+      <p class="s-desc subgroup-desc">אותו מנוע משמש גם לאודיו וגם לווידאו. „ענן” מהיר ומדויק; „מקומי” עובד ללא אינטרנט.</p>
+      <div class="audio-file-block">
+        <div class="engine-radio-group">
+          <label class="engine-option" id="audio-engine-opt-groq">
+            <input type="radio" name="audio_file_engine" value="groq" />
+            <div class="engine-option-content">
+              <span class="engine-name">ענן (Groq · whisper-large-v3-turbo)</span>
+              <span class="engine-desc">מהיר ומדויק — דורש חיבור לשירות Groq ואינטרנט (משתמש באותו מפתח של התרגום)</span>
+            </div>
+          </label>
+          <label class="engine-option" id="audio-engine-opt-local">
+            <input type="radio" name="audio_file_engine" value="whisper-local" />
+            <div class="engine-option-content">
+              <span class="engine-name">מקומי (ivrit.ai Turbo)</span>
+              <span class="engine-desc">תמלול על המחשב — ללא אינטרנט, דורש מודל מקומי מותקן</span>
+            </div>
+          </label>
+        </div>
+        <!-- Step 4: free-tier capacity for audio/video transcription (cloud · Groq) -->
+        <div class="limit-note">
+          <span class="lnico">🎧</span>
+          <div class="ln-body">
+            <span class="ln-main">בתמלול „ענן (Groq)" אפשר לתמלל בממוצע עד <strong>~8 שעות אודיו ביום</strong> במפתח החינמי. קובצי וידאו משתמשים באותה מכסה. בתמלול „מקומי" אין מגבלה.</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- כתוביות לווידאו -->
+      <div class="s-group">כתוביות לווידאו</div>
       <div class="s-card">
         <div class="s-row">
-          <span class="s-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 9.5h18M3 14.5h18M8 5v14M16 5v14"/></svg></span>
+          <span class="s-icon accent"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 9.5h18M3 14.5h18M8 5v14M16 5v14"/></svg></span>
           <span class="s-text">
             <label class="s-title" for="video_subtitles_enabled">כתוביות לווידאו (וידאו → SRT)</label>
-            <span class="s-desc">כשפעיל, גרירת קובץ וידאו (mp4, mkv, mov ועוד) מפיקה קובץ כתוביות SRT עם חותמות זמן ליד קובץ המקור, במנוע התמלול הנבחר למעלה. דורש הורדה חד־פעמית של ffmpeg (לחילוץ האודיו מהווידאו).</span>
+            <span class="s-desc">כשפעיל, גרירת וידאו (mp4, mkv, mov ועוד) מפיקה קובץ כתוביות SRT עם חותמות זמן לצד המקור. כשכבוי — וידאו מתומלל לקובץ טקסט רגיל (כמו אודיו). דורש הורדה חד־פעמית של ffmpeg. אם הפיסוק האוטומטי פעיל, הוא חל גם על הכתוביות.</span>
           </span>
           <span class="s-control"><div class="toggle" data-key="video_subtitles_enabled"><input type="checkbox" id="video_subtitles_enabled" /></div></span>
         </div>
@@ -359,6 +382,39 @@
           <button class="model-btn primary-sm" id="ffmpeg-download-btn" style="display:none">הורד ffmpeg</button>
           <button class="model-btn danger-btn" id="ffmpeg-cancel-btn" style="display:none">ביטול</button>
         </div>
+      </div>
+
+      <!-- ═══════════════ בלוק 3: מודלים מקומיים (משותף) ═══════════════ -->
+      <div class="tx-block">
+        <span class="tx-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="5" width="14" height="14" rx="2"/><rect x="9" y="9" width="6" height="6"/><path d="M9 2v3M15 2v3M9 19v3M15 19v3M2 9h3M2 15h3M19 9h3M19 15h3"/></svg></span>
+        <span class="tx-text">
+          <span class="tx-title">מודלים מקומיים</span>
+          <span class="tx-sub">נדרשים בכל פעם שבחרתם „מקומי” — גם בתמלול חי אופליין וגם בתמלול קבצים מקומי. הורדה חד־פעמית.</span>
+        </span>
+      </div>
+
+      <!-- Shown only when whisper-local is selected and no model is installed -->
+      <div id="no-model-guidance" class="engine-guidance" style="display:none">
+        <span class="guidance-icon">ℹ</span>
+        <div>
+          <p>לא נמצא מודל מותקן. הורד מודל כדי להשתמש בתמלול מקומי.</p>
+          <button class="link-btn" id="guidance-scroll-btn">גלול למודלים ↓</button>
+        </div>
+      </div>
+
+      <div class="engine-model-section">
+        <div class="engine-section-header">
+          <h3 class="model-section-title">המודלים שלך</h3>
+          <button class="link-btn" id="btn-import-manual">ייבא מודל ידני…</button>
+        </div>
+        <div id="model-list" class="model-list">
+          <p class="muted">טוען מודלים…</p>
+        </div>
+        <small class="muted">
+          מודלים מאת <a href="https://www.ivrit.ai/" target="_blank" rel="noopener">ivrit.ai</a> (רישיון Apache 2.0).
+          מודל Q5 (~700MB) מומלץ לרוב המשתמשים; FP16 (~1.5GB) לאיכות מרבית.
+          כשמודל פעיל הוא תופס בזיכרון (RAM) מקום כגודל הקובץ.
+        </small>
       </div>
     </section>
 
@@ -707,10 +763,79 @@
       </dialog>
     </section>
 
+    <!-- ═══════════════ קבוצה: צריבת כתוביות ═══════════════ -->
+    <section id="burn" class="section" role="tabpanel" aria-labelledby="tab-burn">
+      <div class="s-head">
+        <h2>צריבת כתוביות</h2>
+        <p>גררו יחד קובץ וידאו וקובץ כתוביות SRT על המיקרופון או על תפריט הצד — ויישמר לצדם וידאו חדש עם הכתוביות צרובות בתוך התמונה, בסגנון שתבחרו כאן. הקובץ המקורי לא משתנה.</p>
+      </div>
+
+      <div class="s-group">סגנון הצריבה</div>
+      <div class="burn-styles" role="radiogroup" aria-label="סגנון צריבת כתוביות">
+        <button type="button" class="burn-card" data-style="classic" aria-pressed="false"
+          data-desc="לבן עם קו מתאר שחור — מתאים לכל סרטון">
+          <span class="burn-preview"><span class="bp-sub bp-classic">שלום לכם.</span></span>
+          <span class="bc-title">קלאסי</span>
+        </button>
+        <button type="button" class="burn-card" data-style="box" aria-pressed="false"
+          data-desc="טקסט על רקע כהה שקוף-למחצה — קריא במיוחד">
+          <span class="burn-preview"><span class="bp-sub bp-box">שלום לכם.</span></span>
+          <span class="bc-title">קופסה</span>
+        </button>
+        <button type="button" class="burn-card" data-style="karaoke" aria-pressed="false"
+          data-desc="המילה הנאמרת נצבעת בזמן אמת — זמין לכתוביות שנוצרו בתמלול וידאו של Timluli (מנוע Groq או מקומי); אחרת נצרב בסגנון קופסה">
+          <span class="burn-preview"><span class="bp-sub bp-box"><span class="bp-kara-on">שלום</span> לכם.</span></span>
+          <span class="bc-title">הבלטת מילים</span>
+        </button>
+        <button type="button" class="burn-card" data-style="impact" aria-pressed="false"
+          data-desc="צהוב מודגש עם מתאר שחור עבה — סגנון רשתות חברתיות">
+          <span class="burn-preview"><span class="bp-sub bp-impact">שלום לכם.</span></span>
+          <span class="bc-title">מודגש</span>
+        </button>
+        <button type="button" class="burn-card" data-style="glow" aria-pressed="false"
+          data-desc="הילת ניאון תכלת סביב טקסט לבן">
+          <span class="burn-preview"><span class="bp-sub bp-glow">שלום לכם.</span></span>
+          <span class="bc-title">זוהר</span>
+        </button>
+        <button type="button" class="burn-card" data-style="shadow" aria-pressed="false"
+          data-desc="מינימלי — ללא מתאר, צל רך בלבד">
+          <span class="burn-preview"><span class="bp-sub bp-shadow">שלום לכם.</span></span>
+          <span class="bc-title">צל רך</span>
+        </button>
+        <button type="button" class="burn-card" data-style="fade" aria-pressed="false"
+          data-desc="קלאסי עם הופעה והיעלמות רכות">
+          <span class="burn-preview"><span class="bp-sub bp-classic bp-fade">שלום לכם.</span></span>
+          <span class="bc-title">עדין</span>
+        </button>
+        <button type="button" class="burn-card" data-style="pop" aria-pressed="false"
+          data-desc='כל כתובית "קופצת" קלות בכניסה — אנרגטי'>
+          <span class="burn-preview"><span class="bp-sub bp-classic bp-pop">שלום לכם.</span></span>
+          <span class="bc-title">קופצני</span>
+        </button>
+        <button type="button" class="burn-card" data-style="rise" aria-pressed="false"
+          data-desc="כל כתובית עולה מלמטה עם הופעה רכה">
+          <span class="burn-preview"><span class="bp-sub bp-classic bp-rise">שלום לכם.</span></span>
+          <span class="bc-title">עולה</span>
+        </button>
+      </div>
+      <p class="burn-style-desc" id="burn-style-desc"></p>
+
+      <div class="limit-note">
+        <span class="lnico">🎬</span>
+        <div class="ln-body">
+          <span class="ln-main">הצריבה מקודדת את הווידאו מחדש (האודיו מועתק כמו שהוא), ולכן אורכת זמן — אחוז ההתקדמות מוצג ליד המיקרופון. הפלט נשמר כ-<strong dir="ltr">movie.subtitled.mp4</strong> ליד המקור. נדרשת התקנה חד-פעמית של ffmpeg (בהגדרות התמלול).</span>
+        </div>
+      </div>
+    </section>
+
     <!-- ═══════════════ קבוצה 4: אודות ═══════════════ -->
     <section id="about" class="section" role="tabpanel" aria-labelledby="tab-about">
       <div class="about-hero">
-        <h2 class="about-title">Timluli</h2>
+        <span class="home-logo-wrap about-brand" role="img" aria-label="Timluli">
+          <!-- Same transparent PNG lockups as the Home tab, swapped by theme. -->
+          <img class="home-logo home-logo-dark" src="/timluli-logo-dark.png" alt="" />
+          <img class="home-logo home-logo-light" src="/timluli-logo-light.png" alt="" />
+        </span>
         <p class="about-tagline">כלי תמלול ותרגום עברית מערכתי לווינדוס — מהיר ועוצמתי.</p>
         <span class="about-version">גרסה 1.8.0 · Oliel Studio</span>
       </div>

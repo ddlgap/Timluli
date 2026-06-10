@@ -14,6 +14,7 @@
 pub mod ffmpeg;
 pub mod groq_srt;
 pub mod srt;
+pub mod words;
 
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -71,8 +72,14 @@ pub async fn transcribe_video_to_srt(
 
     emit_progress(app, 1, 1, "extract");
 
+    // Word-level timestamps ride along for the karaoke burn-in style's
+    // `words.json` sidecar — both engines produce them at zero extra cost.
+    let mut timed_words: Vec<words::TimedWord> = Vec::new();
+    let engine_name: &str;
+
     let mut segments: Vec<Segment> = match backend.as_str() {
         "whisper-local" => {
+            engine_name = "whisper-local";
             let pcm_tmp = tmp.join(format!("timluli-vid-{uid}.pcm"));
             // ffmpeg is a blocking subprocess — keep it off the async runtime.
             let (ff, inp, out) = (ffmpeg.clone(), input.clone(), pcm_tmp.clone());
@@ -92,8 +99,8 @@ pub async fn transcribe_video_to_srt(
             for (i, chunk) in chunks.into_iter().enumerate() {
                 emit_progress(app, i + 1, total, "transcribe");
                 let chunk_len = chunk.len();
-                let chunk_segs = engine
-                    .transcribe_segments(chunk, "he")
+                let (chunk_segs, chunk_words) = engine
+                    .transcribe_segments_words(chunk, "he")
                     .await
                     .map_err(|e| e.to_string())?;
                 // Shift chunk-relative timestamps to absolute: samples/16000*100 cs.
@@ -103,12 +110,20 @@ pub async fn transcribe_video_to_srt(
                     s.end_cs += offset_cs;
                     segs.push(s);
                 }
+                for w in chunk_words {
+                    timed_words.push(words::TimedWord {
+                        w: w.text,
+                        t0_cs: w.t0_cs + offset_cs,
+                        t1_cs: w.t1_cs + offset_cs,
+                    });
+                }
                 offset_samples += chunk_len;
             }
             segs
         }
         // Default to the cloud backend for any other value (mirrors the .txt path).
         _ => {
+            engine_name = "groq";
             let flac_tmp = tmp.join(format!("timluli-vid-{uid}.flac"));
             let (ff, inp, out) = (ffmpeg.clone(), input.clone(), flac_tmp.clone());
             tokio::task::spawn_blocking(move || ffmpeg::extract_flac(&ff, &inp, &out))
@@ -116,9 +131,11 @@ pub async fn transcribe_video_to_srt(
                 .map_err(|e| format!("שגיאת thread בחילוץ אודיו: {e}"))??;
 
             emit_progress(app, 1, 1, "transcribe");
-            let segs = groq_srt::transcribe_to_segments(app, &flac_tmp).await;
+            let result = groq_srt::transcribe_to_segments(app, &flac_tmp).await;
             let _ = std::fs::remove_file(&flac_tmp);
-            segs?
+            let (segs, ws) = result?;
+            timed_words = ws;
+            segs
         }
     };
 
@@ -136,6 +153,17 @@ pub async fn transcribe_video_to_srt(
     let srt = srt::build_srt(&segments);
     let out_path = output_srt_path(&input);
     std::fs::write(&out_path, srt).map_err(|e| format!("שגיאה בכתיבת קובץ הכתוביות: {e}"))?;
+
+    // Best-effort `words.json` sidecar (karaoke burn-in style). The words carry
+    // the raw (pre-punctuation) text — the burn side normalizes punctuation away
+    // when matching. A failure here must never fail the SRT itself.
+    if !timed_words.is_empty() {
+        let sidecar = words::sidecar_path(&out_path);
+        if let Err(e) = words::write(&sidecar, engine_name, &timed_words) {
+            log::warn!("words.json sidecar write failed (SRT unaffected): {e}");
+        }
+    }
+
     Ok(out_path.to_string_lossy().into_owned())
 }
 

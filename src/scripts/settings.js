@@ -326,6 +326,9 @@ async function loadSettings() {
   // Theme swatches
   setSelectedTheme(stg.mic_theme || 'graphite');
 
+  // Subtitle burn-in style cards
+  setSelectedBurnStyle(stg.burn_style || 'classic');
+
   // Translation tab
   $('translate_target_language').value = stg.translate_target_language || 'Hebrew';
   $('pdf_rtl_layout').value = stg.pdf_rtl_layout || 'same-box';
@@ -529,6 +532,37 @@ document.querySelectorAll('.theme-swatch').forEach((swatch) => {
   });
 });
 
+// ---- Subtitle burn-in style chips (instant self-save, like theme swatches) ----
+// The chips are compact (preview + name only); the selected style's description
+// shows in one shared line under the grid.
+function setSelectedBurnStyle(style) {
+  let desc = '';
+  document.querySelectorAll('.burn-card').forEach((el) => {
+    const on = el.dataset.style === style;
+    el.classList.toggle('selected', on);
+    el.setAttribute('aria-pressed', on ? 'true' : 'false');
+    if (on) desc = el.dataset.desc || '';
+  });
+  const descEl = document.getElementById('burn-style-desc');
+  if (descEl) descEl.textContent = desc;
+}
+
+document.querySelectorAll('.burn-card:not(.disabled)').forEach((card) => {
+  card.addEventListener('click', async () => {
+    const style = card.dataset.style;
+    setSelectedBurnStyle(style);
+    try {
+      const previous = await invoke('get_settings');
+      await invoke('save_settings', {
+        newSettings: { ...previous, burn_style: style },
+      });
+      showToast('סגנון הצריבה עודכן', 'ok');
+    } catch (err) {
+      showToast(`שגיאה: ${err}`, 'err');
+    }
+  });
+});
+
 // ---- Save ----
 let saving = false;
 async function saveSettings() {
@@ -673,8 +707,13 @@ function updateNoModelGuidance() {
   const hasInstalled = modelsData.some(
     (m) => m.status === 'installed' || m.status === 'manually_imported'
   );
-  guidance.style.display =
-    currentEngineId === 'whisper-local' && !hasInstalled ? 'flex' : 'none';
+  // A local model is needed by either the live offline engine OR the file
+  // transcription engine (audio + video share `audio_file_engine`). Show the
+  // "download a model" hint whenever any local path is selected but none exists.
+  const audioLocal =
+    document.querySelector('input[name="audio_file_engine"]:checked')?.value === 'whisper-local';
+  const needsLocal = currentEngineId === 'whisper-local' || audioLocal;
+  guidance.style.display = needsLocal && !hasInstalled ? 'flex' : 'none';
 }
 
 // Audio-file transcription backend selection
@@ -689,6 +728,7 @@ document.querySelectorAll('input[name="audio_file_engine"]').forEach((radio) => 
   radio.addEventListener('change', async () => {
     const engineId = radio.value;
     setAudioFileEngineRadio(engineId);
+    updateNoModelGuidance();
     try {
       await invoke('set_audio_file_engine', { engineId });
       showToast(

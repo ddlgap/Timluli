@@ -44,15 +44,19 @@
       <!-- Dark navy body behind the wedges; its slivers read as the separators. -->
       <path class="base" d="M640 1248 A608 608 0 0 1 640 32 Z" />
 
-      <!-- Three wedge sectors. Internal separators between wedges keep their 2° gap,
-           but the TOP and BOTTOM wedges' wall-side edges run flush to the chord
-           (x=640) so the button fill reaches the right wall with no dark margin. -->
+      <!-- Four wedge sectors (90°→270°, ~43° each). Internal separators keep
+           their 2° gap, but the TOP and BURN (bottom) wedges' wall-side edges run
+           flush to the chord (x=640) so the button fill reaches the right wall
+           with no dark margin. Note: #sector-bottom is now second-from-bottom —
+           the id is kept so the existing JS/CSS bindings stay untouched. -->
+      <path id="sector-burn" class="sector"
+        d="M640 1240 A600 600 0 0 1 230.8 1078.8 L469.5 822.9 A250 250 0 0 0 640 890 Z" />
       <path id="sector-bottom" class="sector"
-        d="M640 1240 A600 600 0 0 1 131.2 957.9 L428.0 772.5 A250 250 0 0 0 640 890 Z" />
+        d="M201.2 1049.2 A600 600 0 0 1 40.4 660.9 L390.2 648.7 A250 250 0 0 0 457.1 810.5 Z" />
       <path id="sector-middle" class="sector"
-        d="M110.3 921.7 A600 600 0 0 1 110.3 358.3 L419.3 522.6 A250 250 0 0 0 419.3 757.4 Z" />
+        d="M40.4 619.1 A600 600 0 0 1 201.2 230.8 L457.1 469.5 A250 250 0 0 0 390.2 631.3 Z" />
       <path id="sector-top" class="sector"
-        d="M131.2 322.1 A600 600 0 0 1 640 40 L640 390 A250 250 0 0 0 428.0 507.5 Z" />
+        d="M230.8 201.2 A600 600 0 0 1 640 40 L640 390 A250 250 0 0 0 469.5 457.1 Z" />
 
       <!-- Outer neon arc bloom (left semicircle). -->
       <path class="neon-arc" d="M640 1240 A600 600 0 0 1 640 40" filter="url(#neonGlow)" />
@@ -64,7 +68,7 @@
     <!-- Live HTML overlays: icons + Hebrew labels (pointer-events pass to SVG). -->
     <div class="overlay">
       <!-- TOP — live transcription -->
-      <div class="wedge" data-sector="top" style="top:21.2%; left:66.8%">
+      <div class="wedge" data-sector="top" style="top:19.5%; left:66.8%">
         <span class="wedge-icon">
           <svg viewBox="0 0 256 256" aria-hidden="true">
             <circle cx="128" cy="128" r="89"/>
@@ -80,7 +84,7 @@
       </div>
 
       <!-- MIDDLE — file translation -->
-      <div class="wedge" data-sector="middle" style="top:50%; left:37%">
+      <div class="wedge" data-sector="middle" style="top:37.3%; left:38.6%">
         <span class="wedge-icon">
           <svg viewBox="0 0 256 256" aria-hidden="true">
             <path d="M47 34h67l36 36v113H47z"/>
@@ -94,8 +98,8 @@
         <span class="wedge-label">תרגום קובץ</span>
       </div>
 
-      <!-- BOTTOM — file transcription -->
-      <div class="wedge" data-sector="bottom" style="top:78.8%; left:66.8%">
+      <!-- BOTTOM (second from bottom) — file transcription -->
+      <div class="wedge" data-sector="bottom" style="top:62.7%; left:38.6%">
         <span class="wedge-icon">
           <svg viewBox="0 0 256 256" aria-hidden="true">
             <path d="M47 34h67l36 36v113H47z"/>
@@ -106,6 +110,18 @@
           </svg>
         </span>
         <span class="wedge-label">תמלול קובץ</span>
+      </div>
+
+      <!-- BURN (bottom) — subtitle burn-in: video frame + subtitle lines -->
+      <div class="wedge" data-sector="burn" style="top:80.5%; left:66.8%">
+        <span class="wedge-icon">
+          <svg viewBox="0 0 256 256" aria-hidden="true">
+            <rect x="40" y="58" width="176" height="124" rx="14"/>
+            <path d="M106 92l40 24-40 24z"/>
+            <path d="M68 154h120M92 170h72"/>
+          </svg>
+        </span>
+        <span class="wedge-label">צריבת כתוביות</span>
       </div>
 
       <!-- Center close arrow (sits over the inner control). -->

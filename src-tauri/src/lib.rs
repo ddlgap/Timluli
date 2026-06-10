@@ -14,6 +14,7 @@ mod punctuation;
 mod secrets;
 mod settings;
 mod shortcut;
+mod subtitle_burn;
 mod transcription;
 mod translation;
 mod tray;
@@ -148,6 +149,8 @@ pub fn run() {
             commands_video::download_ffmpeg,
             commands_video::cancel_ffmpeg_download,
             commands_video::get_ffmpeg_status,
+            // ── subtitle burn-in ──
+            commands_video::burn_subtitles,
         ])
         .setup(|app| {
             let mut stg = settings::load_or_init(app.handle())

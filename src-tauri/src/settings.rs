@@ -114,6 +114,11 @@ pub struct Settings {
     /// through to the audio→txt path). Requires a one-time ffmpeg download.
     #[serde(default = "default_true")]
     pub video_subtitles_enabled: bool,
+    /// Subtitle burn-in style preset: `"classic" | "box" | "fade" | "pop" |
+    /// "karaoke"`. Applied when a video + SRT pair is dropped on the mic/panel.
+    /// Unknown values fall back to classic at burn time (`ass::Preset::from_id`).
+    #[serde(default = "default_burn_style")]
+    pub burn_style: String,
 }
 
 impl Default for Settings {
@@ -148,6 +153,7 @@ impl Default for Settings {
             punctuation_enabled: false,
             punctuation_newline: false,
             video_subtitles_enabled: true,
+            burn_style: default_burn_style(),
         }
     }
 }
@@ -160,6 +166,7 @@ fn default_pdf_rtl_layout() -> String { "same-box".into() }
 fn default_audio_file_engine() -> String { "groq".into() }
 fn default_display_mode() -> String { "side-panel".into() }
 fn default_true() -> bool { true }
+fn default_burn_style() -> String { "classic".into() }
 
 pub fn settings_dir(app: &AppHandle) -> PathBuf {
     app.path()

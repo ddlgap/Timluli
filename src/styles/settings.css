@@ -793,16 +793,10 @@ dialog.wizard::backdrop {
   text-align: center;
   padding: 8px 0 20px;
 }
-.about-title {
-  font-size: 36px;
-  font-weight: 700;
-  letter-spacing: -0.5px;
-  margin: 0 0 4px;
-  background: linear-gradient(135deg, var(--accent), var(--accent-2));
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
-}
+/* Official brand lockup in the About hero — reuses the Home logo theme-swap,
+   just sized down a touch and given spacing below before the tagline. */
+.about-brand { margin-bottom: 10px; }
+.about-brand .home-logo { height: 96px; }
 .about-tagline {
   font-size: 14px;
   color: var(--text-dim);
@@ -960,6 +954,33 @@ nav.tabs button.active {
   border-bottom: none;
   box-shadow: inset 3px 0 0 var(--accent); /* accent on the right (inline-start) edge in RTL */
 }
+
+/* Brand lockup pinned to the bottom of the sidebar rail (theme-swapped PNGs). */
+.rail-brand {
+  margin-top: auto;            /* push to the bottom of the flex column */
+  padding: 14px 14px 16px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 7px;
+  border-top: 1px solid var(--border);
+}
+.rail-brand-logo { display: inline-flex; line-height: 0; }
+.rail-logo { width: auto; height: 50px; max-width: 90%; object-fit: contain; opacity: .95; }
+.rail-logo-light { display: none; }       /* default theme is dark → show the dark-bg logo */
+.rail-logo-dark  { display: block; }
+:root.light .rail-logo-dark  { display: none; }
+:root.light .rail-logo-light { display: block; }
+.rail-brand-credit {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 10.5px;
+  letter-spacing: 0.2px;
+  color: var(--text-dim);
+  text-align: center;
+}
+.rail-heart { width: 11px; height: 11px; flex: none; color: #ef4444; }
 
 /* main scrolls inside the content column; footer is no longer fixed full-width. */
 main { padding-bottom: 24px; }
@@ -1260,3 +1281,146 @@ details.advanced { border-radius: var(--radius); }
 .about-card { border-radius: var(--radius-lg); }
 /* Engine/model cards gain the same soft hover lift as .s-card. */
 .engine-option:hover, .model-card:hover { box-shadow: var(--shadow); }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   Transcription tab — three function blocks (Live · Files · Models).
+   `.tx-block` is a stronger header than `.s-group`: it opens each pillar with a
+   bordered divider + accent icon tile so the three functions read as distinct
+   zones. Sits in the section's 14px flex rhythm.
+   ═══════════════════════════════════════════════════════════════════════════ */
+.tx-block {
+  display: flex; align-items: center; gap: 13px;
+  margin-top: 12px; padding-top: 18px;
+  border-top: 1px solid var(--border);
+}
+/* The first block (right after the tab header) needs no divider. */
+.s-head + .tx-block { margin-top: 4px; padding-top: 0; border-top: none; }
+.tx-ico {
+  flex: none; width: 42px; height: 42px; border-radius: 12px;
+  display: grid; place-items: center;
+  background: rgba(74,222,128,.12); border: 1px solid rgba(74,222,128,.35); color: var(--accent);
+}
+.tx-ico svg { width: 22px; height: 22px; }
+.tx-text { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.tx-title { font-size: 17px; font-weight: 800; letter-spacing: -.2px; color: var(--text); }
+.tx-sub { font-size: 12.5px; color: var(--text-dim); line-height: 1.5; max-width: 64ch; }
+
+/* Block-2 two-outcome explainer: video→SRT / audio→text. */
+.tx-outcomes { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.tx-out {
+  display: flex; align-items: center; gap: 11px;
+  padding: 12px 14px; border-radius: var(--radius-lg);
+  background: var(--surface); border: 1px solid var(--border);
+}
+.tx-out-ico {
+  flex: none; width: 38px; height: 38px; border-radius: 11px;
+  display: grid; place-items: center; font-size: 19px;
+  background: var(--surface-2); border: 1px solid var(--border);
+}
+.tx-out-ico.accent { background: rgba(74,222,128,.12); border-color: rgba(74,222,128,.35); }
+.tx-out-text { font-size: 12.5px; color: var(--text-dim); line-height: 1.45; }
+.tx-out-text strong { display: block; color: var(--text); font-size: 13.5px; font-weight: 700; margin-bottom: 1px; }
+@media (max-width: 560px) { .tx-outcomes { grid-template-columns: 1fr; } }
+:root.light .tx-ico, :root.light .tx-out-ico.accent { background: rgba(22,163,74,.10); border-color: rgba(22,163,74,.30); }
+
+/* ═══════════════ Subtitle burn-in: compact style chips (CapCut-like) ═══════ */
+.burn-styles {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(112px, 1fr));
+  gap: 10px;
+  max-width: 640px;
+}
+.burn-card {
+  display: flex; flex-direction: column; gap: 5px;
+  padding: 5px 5px 7px;
+  background: var(--card, rgba(255, 255, 255, 0.03));
+  border: 1.5px solid var(--border, rgba(255, 255, 255, 0.09));
+  border-radius: 9px;
+  cursor: pointer;
+  text-align: center;
+  font: inherit; color: inherit;
+  transition: border-color 120ms ease, box-shadow 160ms ease;
+}
+.burn-card:hover { border-color: rgba(255, 255, 255, 0.25); }
+.burn-card.selected {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px rgba(74, 222, 128, 0.2);
+}
+/* Mini "video frame" with a live CSS approximation of the burned look. */
+.burn-preview {
+  position: relative;
+  aspect-ratio: 16 / 9;
+  border-radius: 5px;
+  overflow: hidden;
+  background:
+    radial-gradient(120% 90% at 70% 20%, #2c4a63 0%, #1a2a3a 55%, #101b26 100%);
+}
+.bp-sub {
+  position: absolute;
+  inset-inline: 4px;
+  bottom: 5px;
+  text-align: center;
+  font-size: 10.5px;
+  font-weight: 600;
+  color: #fff;
+  direction: rtl;
+  line-height: 1.3;
+}
+.bp-classic {
+  text-shadow:
+    -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000, 1px 1px 0 #000,
+    0 0 3px rgba(0, 0, 0, 0.8);
+}
+.bp-box {
+  inset-inline: auto;
+  right: 50%;
+  transform: translateX(50%);
+  width: max-content;
+  max-width: calc(100% - 8px);
+  background: rgba(0, 0, 0, 0.6);
+  padding: 1px 5px;
+  border-radius: 2px;
+}
+.bp-kara-on { color: #ffe34d; }
+.bp-impact {
+  color: #ffd400;
+  font-weight: 800;
+  text-shadow:
+    -1.5px -1.5px 0 #000, 1.5px -1.5px 0 #000, -1.5px 1.5px 0 #000, 1.5px 1.5px 0 #000,
+    0 2px 3px rgba(0, 0, 0, 0.7);
+}
+.bp-glow {
+  color: #fff;
+  text-shadow: 0 0 4px #4ff5ff, 0 0 9px #29d8ff, 0 0 14px rgba(41, 216, 255, 0.55);
+}
+.bp-shadow { text-shadow: 0 2px 5px rgba(0, 0, 0, 0.85); }
+.bp-fade { animation: bp-fade 2.6s ease-in-out infinite; }
+@keyframes bp-fade {
+  0%, 100% { opacity: 0; }
+  18%, 82% { opacity: 1; }
+}
+.bp-pop { animation: bp-pop 2.2s ease-out infinite; }
+@keyframes bp-pop {
+  0%        { transform: scale(1); }
+  6%        { transform: scale(1.1); }
+  12%, 100% { transform: scale(1); }
+}
+.bp-rise { animation: bp-rise 2.4s ease-out infinite; }
+@keyframes bp-rise {
+  0%       { transform: translateY(7px); opacity: 0; }
+  10%      { transform: translateY(0); opacity: 1; }
+  86%      { opacity: 1; }
+  96%, 100% { opacity: 0; }
+}
+.bc-title { font-size: 12px; font-weight: 600; color: var(--text); }
+/* One-line description of the selected style, under the grid (set by JS). */
+.burn-style-desc {
+  margin: 10px 2px 0;
+  font-size: 12.5px;
+  color: var(--text-dim);
+  line-height: 1.5;
+  min-height: 1.5em;
+  max-width: 640px;
+}
+:root.light .burn-card { background: rgba(0, 0, 0, 0.025); border-color: rgba(0, 0, 0, 0.1); }
+:root.light .burn-card:hover { border-color: rgba(0, 0, 0, 0.25); }

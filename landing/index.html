@@ -563,8 +563,8 @@ footer{border-top:1px solid var(--border-soft);padding:60px 0 40px;margin-top:90
       <article class="pillar">
         <span class="rank">03</span>
         <div class="picon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M9 13v4M12 11v8M15 13v4"/></svg></div>
-        <h3>תמלול קבצים</h3>
-        <p>גוררים קובץ אודיו או וידאו — ומקבלים <b>תמלול מלא ומדויק</b> של כל מה שנאמר בו, מוכן לעריכה והעתקה.</p>
+        <h3>תמלול קבצים וכתוביות</h3>
+        <p>גוררים קובץ אודיו או וידאו — ומקבלים <b>תמלול מלא</b> או <b>כתוביות <span class="en">SRT</span> מסונכרנות</b>. גוררים וידאו+<span class="en">SRT</span> יחד — והכתוביות <b>נצרבות לתוך הסרטון</b> ב-9 סגנונות.</p>
         <a class="pmore" href="#features">כל התכונות <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg></a>
       </article>
     </div>
@@ -632,8 +632,26 @@ footer{border-top:1px solid var(--border-soft);padding:60px 0 40px;margin-top:90
       </div>
     </div>
 
-    <!-- Row 3: customization -->
+    <!-- Row 3: subtitle burn-in -->
     <div class="frow reveal">
+      <div class="ftext">
+        <span class="ftag"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="14" rx="2"/><path d="M9 8.5l4.5 2.5L9 13.5z"/><path d="M6 15h12"/></svg>צריבת כתוביות על וידאו</span>
+        <h3>וידאו + <span class="en">SRT</span> נכנסים — סרטון עם כתוביות צרובות יוצא</h3>
+        <p>גוררים את שני הקבצים יחד על המיקרופון, ו-<span class="en">Timluli</span> צורב את הכתוביות לתוך התמונה — מקומית לחלוטין, בלי להעלות שום דבר לענן. המקור לא משתנה.</p>
+        <ul class="flist">
+          <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg><span><b>9 סגנונות מובנים —</b> קלאסי, קופסה, מודגש, זוהר ניאון, צל רך, עדין, קופצני, עולה — ו<b>הבלטת מילים</b>.</span></li>
+          <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg><span><b>הבלטת מילים בסגנון <span class="en">CapCut</span> —</b> המילה הנאמרת נצבעת בזמן אמת, כולל עברית מימין-לשמאל.</span></li>
+          <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg><span><b>עברית מושלמת —</b> פיסוק במקום הנכון ומשפטים מעורבים עברית-אנגלית, באמצעות מנוע <span class="en">libass</span>.</span></li>
+        </ul>
+      </div>
+      <div class="window float">
+        <div class="window-bar"><div class="dots"><i></i><i></i><i></i></div><span class="wt">Timluli — צריבת כתוביות</span></div>
+        <img src="assets/shot-burn.png" alt="בחירת סגנון צריבת כתוביות — 9 סגנונות" loading="lazy" />
+      </div>
+    </div>
+
+    <!-- Row 4: customization -->
+    <div class="frow rev reveal">
       <div class="ftext">
         <span class="ftag"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="13.5" cy="6.5" r="2.5"/><circle cx="17.5" cy="10.5" r="2.5"/><circle cx="8.5" cy="7.5" r="2.5"/><circle cx="6.5" cy="12.5" r="2.5"/><path d="M12 2a10 10 0 1 0 0 20c1.1 0 2-.9 2-2 0-1.9 1.6-2 3-2a5 5 0 0 0 5-5c0-5.5-4.5-9-10-9z"/></svg>עיצוב אישי</span>
         <h3>מיקרופון שנראה בדיוק כמו שאתם אוהבים</h3>
@@ -756,6 +774,11 @@ footer{border-top:1px solid var(--border-soft);padding:60px 0 40px;margin-top:90
         <span class="zoom"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3M11 8v6M8 11h6"/></svg></span>
         <img src="assets/shot-translate-new.png" alt="טאב תרגום מסמכים" loading="lazy" />
         <figcaption class="cap">תרגום מסמכים<span>חיבור שירות ושפת יעד</span></figcaption>
+      </figure>
+      <figure class="shot reveal" data-full="assets/shot-burn.png">
+        <span class="zoom"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3M11 8v6M8 11h6"/></svg></span>
+        <img src="assets/shot-burn.png" alt="טאב צריבת כתוביות — 9 סגנונות" loading="lazy" />
+        <figcaption class="cap">צריבת כתוביות<span>9 סגנונות + הבלטת מילים</span></figcaption>
       </figure>
       <figure class="shot reveal" data-full="assets/shot-about.png">
         <span class="zoom"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3M11 8v6M8 11h6"/></svg></span>

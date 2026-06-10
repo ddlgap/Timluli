@@ -246,7 +246,7 @@ fn strip_directional_marks(s: &str) -> String {
 
 #[cfg(test)]
 mod rtl_subtitle_tests {
-    use super::strip_directional_marks;
+    use super::{finalize_output, strip_directional_marks, Category};
 
     #[test]
     fn strips_all_bidi_marks_but_keeps_text_and_punctuation() {
@@ -263,6 +263,44 @@ mod rtl_subtitle_tests {
     fn plain_hebrew_is_unchanged() {
         let s = "שלום לכם, מה שלומכם?\nשורה שנייה.";
         assert_eq!(strip_directional_marks(s), s);
+    }
+
+    #[test]
+    fn subtitle_output_gets_utf8_bom_documents_do_not() {
+        let srt = "1\n00:00:00,000 --> 00:00:02,000\nשלום\n";
+        let with_bom = finalize_output(Category::Subtitle, srt.to_string());
+        assert!(with_bom.starts_with('\u{FEFF}'), "subtitle output must start with a BOM");
+        assert_eq!(&with_bom[3..], srt, "BOM is 3 bytes, content unchanged after it");
+        // Encoded bytes start with the canonical UTF-8 BOM EF BB BF.
+        assert_eq!(&with_bom.as_bytes()[..3], &[0xEF, 0xBB, 0xBF]);
+
+        let txt = finalize_output(Category::Document, "טקסט רגיל".to_string());
+        assert!(!txt.starts_with('\u{FEFF}'), "document output must stay BOM-less");
+    }
+
+    #[test]
+    fn srt_through_parse_render_pipeline_ends_with_bom() {
+        // The same shape `translate_text_format` runs (minus the LLM): a real SRT
+        // through the structural parser, rendered with no translations, finalized.
+        // Proves Format::Srt → Category::Subtitle → BOM, byte-for-byte.
+        let doc = super::parser::parse(
+            super::parser::Format::Srt,
+            "1\n00:00:00,000 --> 00:00:02,000\nשלום עולם\n\n",
+        );
+        let out = finalize_output(doc.category(), doc.render(&std::collections::HashMap::new()));
+        assert_eq!(&out.as_bytes()[..3], &[0xEF, 0xBB, 0xBF], "missing UTF-8 BOM");
+        assert!(out.contains("שלום עולם"), "content lost:\n{out}");
+        assert!(out.contains("00:00:00,000 --> 00:00:02,000"), "timing lost:\n{out}");
+    }
+
+    #[test]
+    fn bom_roundtrip_translated_file_is_readable_as_input() {
+        // A translated SRT (with BOM) fed back into the translator's own reader
+        // must parse identically — the input path strips the BOM (see
+        // `translate_text_format`), mirrored here.
+        let out = finalize_output(Category::Subtitle, "1\n00:00:00,000 --> 00:00:01,000\nא\n".into());
+        let reread = out.strip_prefix('\u{FEFF}').map(str::to_string).unwrap_or(out);
+        assert!(reread.starts_with('1'), "BOM must strip cleanly on re-read");
     }
 }
 
@@ -338,8 +376,23 @@ async fn translate_text_format(
         }
     }
 
-    std::fs::write(&out, doc.render(&map)).map_err(|e| format!("שגיאה בכתיבת הפלט: {e}"))?;
+    let rendered = finalize_output(doc.category(), doc.render(&map));
+    std::fs::write(&out, rendered).map_err(|e| format!("שגיאה בכתיבת הפלט: {e}"))?;
     Ok(out.to_string_lossy().into_owned())
+}
+
+/// Final encoding shape of a translated text file. Subtitle files get a UTF-8
+/// BOM: they are consumed by media players, several of which (Windows Media
+/// Player, TVs, older desktop players) misdetect BOM-less UTF-8 Hebrew as ANSI
+/// and render gibberish — the BOM pins the encoding. The BOM is a *file*
+/// prefix, not text: every reader in this codebase (the translation input at
+/// the top of `translate_text_format`, `subtitle_burn::srt_parse`) already
+/// strips it. TXT/MD outputs stay BOM-less (editor- and tool-friendly).
+fn finalize_output(category: Category, mut rendered: String) -> String {
+    if matches!(category, Category::Subtitle) {
+        rendered.insert(0, '\u{FEFF}');
+    }
+    rendered
 }
 
 /// Legacy `.doc`: convert to a temporary `.docx` via LibreOffice, translate that,

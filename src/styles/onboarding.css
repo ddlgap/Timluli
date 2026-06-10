@@ -1041,6 +1041,130 @@ body { display: flex; flex-direction: column; }
 .btn-primary:disabled { opacity: 0.4; cursor: not-allowed; }
 .btn-primary:disabled:hover { opacity: 0.4; transform: none; }
 
+/* ════════════════════════════════════════════════════════════════════════
+   Step 6 — Output polish (Hebrew auto-punctuation + one-line-per-sentence)
+   ════════════════════════════════════════════════════════════════════════ */
+.punct-step { justify-content: flex-start; padding-top: 2px; }
+.punct-step .subtitle { margin-bottom: 16px; }
+
+/* Step 7 — Video-transcription opt-in. Reuses .feat-card / .punct-dl visuals. */
+.video-step { justify-content: flex-start; padding-top: 2px; }
+.video-step .subtitle { margin-bottom: 16px; }
+
+.feat-list { display: flex; flex-direction: column; gap: 10px; width: 100%; }
+
+/* Toggle "switch" cards — click anywhere on the card to flip it. */
+.feat-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  text-align: start;
+  width: 100%;
+  background: var(--surface);
+  border: 2px solid var(--border);
+  border-radius: 12px;
+  padding: 12px 14px;
+  cursor: pointer;
+  color: var(--text);
+  font-family: inherit;
+  transition: border-color 0.15s, background 0.15s;
+}
+.feat-card:hover:not(.on):not(.disabled) { background: var(--surface-2); }
+.feat-card.on { border-color: var(--accent); background: rgba(74, 222, 128, 0.06); }
+.feat-card.disabled { opacity: 0.5; cursor: not-allowed; }
+
+.feat-ico {
+  width: 38px; height: 38px;
+  flex-shrink: 0;
+  border-radius: 10px;
+  display: grid; place-items: center;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  color: var(--accent);
+  transition: background 0.15s, border-color 0.15s;
+}
+.feat-card.on .feat-ico { background: rgba(74, 222, 128, 0.12); border-color: rgba(74, 222, 128, 0.32); }
+.feat-ico svg { width: 20px; height: 20px; }
+
+.feat-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.feat-title { font-size: 14.5px; font-weight: 700; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.feat-card.on .feat-title { color: var(--accent); }
+.feat-desc { font-size: 12px; color: var(--text-dim); line-height: 1.5; }
+.feat-pill {
+  font-size: 10px; font-weight: 600;
+  color: var(--text-dim);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  padding: 1px 7px; border-radius: 99px;
+}
+
+.feat-switch {
+  width: 42px; height: 24px;
+  flex-shrink: 0;
+  border-radius: 99px;
+  background: var(--border);
+  position: relative;
+  transition: background 0.18s;
+}
+.feat-switch::after {
+  content: '';
+  position: absolute;
+  top: 3px; right: 3px;
+  width: 18px; height: 18px;
+  border-radius: 50%;
+  background: #fff;
+  transition: transform 0.18s;
+}
+.feat-card.on .feat-switch { background: var(--accent); }
+.feat-card.on .feat-switch::after { transform: translateX(-18px); }
+
+/* Live preview "document" — updates as the toggles flip. */
+.punct-preview {
+  width: 100%;
+  margin-top: 14px;
+  background: #0c0e13;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.35);
+}
+.punct-preview-bar {
+  display: flex; align-items: center; gap: 6px;
+  padding: 7px 12px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+}
+.punct-preview-title { margin-inline-start: auto; font-size: 11px; color: var(--text-dim); }
+.punct-preview-body {
+  padding: 14px 16px;
+  font-size: 15px;
+  line-height: 1.85;
+  text-align: start;
+  color: var(--text);
+  min-height: 64px;
+  transition: color 0.2s;
+}
+.punct-preview-body.lines { display: flex; flex-direction: column; gap: 2px; }
+.pline { display: block; }
+.pmark { color: var(--accent); font-weight: 800; }
+
+/* Background-download status row (auto-punctuation model). */
+.punct-dl {
+  display: flex; flex-direction: column; gap: 6px;
+  width: 100%;
+  margin-top: 12px;
+}
+.punct-dl[hidden] { display: none; }
+.punct-dl-bar { height: 6px; border-radius: 99px; background: var(--surface-2); overflow: hidden; }
+.punct-dl-fill {
+  height: 100%; width: 0%;
+  border-radius: 99px;
+  background: linear-gradient(90deg, var(--accent), var(--accent-2));
+  transition: width 0.3s ease;
+}
+.punct-dl-label { font-size: 12px; color: var(--text-dim); line-height: 1.4; }
+.punct-dl.done .punct-dl-label { color: var(--accent); font-weight: 600; }
+
 /* ── Respect reduced-motion: kill decorative spins/blinks/transforms ── */
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {

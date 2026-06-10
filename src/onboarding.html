@@ -33,6 +33,10 @@
       <div class="step-dot" id="dot5"></div>
       <div class="step-line"></div>
       <div class="step-dot" id="dot6"></div>
+      <div class="step-line"></div>
+      <div class="step-dot" id="dot7"></div>
+      <div class="step-line"></div>
+      <div class="step-dot" id="dot8"></div>
     </div>
 
     <!-- ── Step 1 — Welcome ── -->
@@ -235,8 +239,81 @@
       </div>
     </section>
 
-    <!-- ── Step 6 — Ready + mic test + creator seal ── -->
-    <section id="step6" class="step">
+    <!-- ── Step 6 — Output polish (Hebrew auto-punctuation) ── -->
+    <section id="step6" class="step punct-step">
+      <div class="step-icon">✍️</div>
+      <h1 class="title" tabindex="-1">רוצים פיסוק אוטומטי?</h1>
+      <p class="subtitle">Timluli יכול להוסיף נקודות, פסיקים וסימני שאלה לבד — אפשר לשנות בכל רגע בהגדרות</p>
+
+      <div class="feat-list">
+        <button type="button" class="feat-card" id="punctCard" role="switch" aria-checked="false">
+          <span class="feat-ico" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 7h14M5 12h11M5 17h7"/></svg>
+          </span>
+          <span class="feat-text">
+            <span class="feat-title">פיסוק אוטומטי (עברית) <span class="feat-pill">‎~283MB · חד־פעמי</span></span>
+            <span class="feat-desc">מוסיף נקודות, פסיקים וסימני שאלה לתמלול — בלי שתצטרכו לומר אותם. רץ במחשב, לא נשלח לאינטרנט.</span>
+          </span>
+          <span class="feat-switch" aria-hidden="true"></span>
+        </button>
+
+        <button type="button" class="feat-card disabled" id="newlineCard" role="switch" aria-checked="false" aria-disabled="true">
+          <span class="feat-ico" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M20 5v5a4 4 0 0 1-4 4H5"/><path d="M9 10l-4 4 4 4"/></svg>
+          </span>
+          <span class="feat-text">
+            <span class="feat-title">שורה חדשה אחרי כל משפט</span>
+            <span class="feat-desc">כל משפט בשורה משלו (. ? !). פועל יחד עם הפיסוק האוטומטי.</span>
+          </span>
+          <span class="feat-switch" aria-hidden="true"></span>
+        </button>
+      </div>
+
+      <div class="punct-preview" aria-hidden="true">
+        <div class="punct-preview-bar">
+          <span class="win-dot"></span><span class="win-dot"></span><span class="win-dot"></span>
+          <span class="punct-preview-title">תצוגה מקדימה</span>
+        </div>
+        <div class="punct-preview-body" id="punctPreviewBody" dir="rtl"></div>
+      </div>
+
+      <div class="punct-dl" id="punctDl" hidden>
+        <div class="punct-dl-bar"><div class="punct-dl-fill" id="punctDlFill"></div></div>
+        <span class="punct-dl-label" id="punctDlLabel" role="status" aria-live="polite"></span>
+      </div>
+
+      <p class="hint dim">לא חובה — אפשר לדלג ולהפעיל מאוחר יותר בהגדרות ‹ תמלול.</p>
+    </section>
+
+    <!-- ── Step 7 — Video transcription opt-in (background ffmpeg download) ── -->
+    <section id="step7" class="step video-step">
+      <div class="step-icon">🎬</div>
+      <h1 class="title" tabindex="-1">לתמלל גם קובצי וידאו?</h1>
+      <p class="subtitle">גררו סרטון על המיקרופון ותקבלו כתוביות מסונכרנות — אפשר לשנות בכל רגע בהגדרות</p>
+
+      <div class="feat-list">
+        <button type="button" class="feat-card" id="videoCard" role="switch" aria-checked="false">
+          <span class="feat-ico" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="5.5" width="14" height="13" rx="2.2"/><path d="M16.5 9.5l5-3v11l-5-3z"/></svg>
+          </span>
+          <span class="feat-text">
+            <span class="feat-title">תמלול קובצי וידאו <span class="feat-pill">חד־פעמי</span></span>
+            <span class="feat-desc">גרירת קובץ וידאו (mp4, mkv, mov ועוד) על המיקרופון תפיק קובץ כתוביות SRT עם חותמות זמן, לצד הקובץ המקורי. דורש הורדה חד־פעמית של רכיב ffmpeg — רץ במחשב, לא נשלח לאינטרנט.</span>
+          </span>
+          <span class="feat-switch" aria-hidden="true"></span>
+        </button>
+      </div>
+
+      <div class="punct-dl" id="videoDl" hidden>
+        <div class="punct-dl-bar"><div class="punct-dl-fill" id="videoDlFill"></div></div>
+        <span class="punct-dl-label" id="videoDlLabel" role="status" aria-live="polite"></span>
+      </div>
+
+      <p class="hint dim">לא חובה — אפשר לדלג ולהוריד מאוחר יותר בהגדרות ‹ כתוביות לווידאו.</p>
+    </section>
+
+    <!-- ── Step 8 — Ready + mic test + creator seal ── -->
+    <section id="step8" class="step">
       <div class="step-icon">🎉</div>
       <h1 class="title" tabindex="-1">מוכן לתמלל!</h1>
 

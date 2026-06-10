@@ -1,8 +1,8 @@
-import { invoke } from '@tauri-apps/api/core';
-import { emit } from '@tauri-apps/api/event';
+import { invoke, Channel } from '@tauri-apps/api/core';
+import { emit, listen } from '@tauri-apps/api/event';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 const win = getCurrentWindow();
-const TOTAL_STEPS = 6;
+const TOTAL_STEPS = 8;
 
 // Custom title-bar close (decorations:false). Closing hides the window (lib.rs
 // intercepts CloseRequested); onboarding_done stays unset, so it reappears next
@@ -744,6 +744,270 @@ function renderTips() {
   });
 }
 
+// ══════════════════════════════════════════════════════════════════════════════
+// Step 6 — Output polish: Hebrew auto-punctuation (+ one-line-per-sentence).
+//   Opting in kicks off the ~283 MB model download in the BACKGROUND — the user can
+//   advance immediately. The download runs in a Rust task independent of this window,
+//   and on completion Rust persists `punctuation_enabled` + loads the engine
+//   (enableOnFinish:true), so the feature activates with no restart and the settings
+//   toggle shows on — even if this window already closed.
+// ══════════════════════════════════════════════════════════════════════════════
+const punctCard = document.getElementById('punctCard');
+const newlineCard = document.getElementById('newlineCard');
+const punctPreviewBody = document.getElementById('punctPreviewBody');
+const punctDl = document.getElementById('punctDl');
+const punctDlFill = document.getElementById('punctDlFill');
+const punctDlLabel = document.getElementById('punctDlLabel');
+
+// Demo transcript: raw run-on (engine off) → punctuated with marks highlighted (on).
+const PUNCT_SENTENCES = [
+  { punct: 'היי, מה קורה', end: '?', raw: 'היי מה קורה' },
+  { punct: 'הכול טוב אצלי', end: '.', raw: 'הכול טוב אצלי' },
+  { punct: 'תכף נצא לדרך', end: '.', raw: 'תכף נצא לדרך' },
+];
+const hlMarks = (s) => s.replace(/([.,?!])/g, '<span class="pmark">$1</span>');
+
+let punctChosen = !!currentSettings.punctuation_enabled;
+let newlineChosen = !!currentSettings.punctuation_newline;
+let punctInstalled = false;
+let punctDownloading = false;
+
+try {
+  const ps = await invoke('get_punctuation_status');
+  punctInstalled = !!ps.installed;
+  punctDownloading = !!ps.downloading;
+  if (ps.enabled) punctChosen = true;
+} catch (_) {}
+
+function renderPunctPreview() {
+  if (!punctPreviewBody) return;
+  if (!punctChosen) {
+    punctPreviewBody.classList.remove('lines');
+    punctPreviewBody.textContent = PUNCT_SENTENCES.map((s) => s.raw).join(' ');
+    return;
+  }
+  const parts = PUNCT_SENTENCES.map((s) => hlMarks(s.punct + s.end));
+  if (newlineChosen) {
+    punctPreviewBody.classList.add('lines');
+    punctPreviewBody.innerHTML = parts.map((p) => `<span class="pline">${p}</span>`).join('');
+  } else {
+    punctPreviewBody.classList.remove('lines');
+    punctPreviewBody.innerHTML = parts.join(' ');
+  }
+}
+
+function updatePunctCards() {
+  punctCard.classList.toggle('on', punctChosen);
+  punctCard.setAttribute('aria-checked', punctChosen ? 'true' : 'false');
+  // New-line only does anything alongside punctuation → gate it on punctChosen.
+  const nlOn = punctChosen && newlineChosen;
+  newlineCard.classList.toggle('on', nlOn);
+  newlineCard.setAttribute('aria-checked', nlOn ? 'true' : 'false');
+  newlineCard.classList.toggle('disabled', !punctChosen);
+  newlineCard.setAttribute('aria-disabled', punctChosen ? 'false' : 'true');
+  // Status line: only meaningful once the user opted in.
+  if (punctInstalled) {
+    punctDl.hidden = false;
+    punctDl.classList.add('done');
+    punctDlFill.style.width = '100%';
+    punctDlLabel.textContent = punctChosen
+      ? '✓ מודל הפיסוק מותקן — הפיסוק יופעל אוטומטית.'
+      : 'מודל הפיסוק כבר מותקן.';
+  } else if (!punctChosen && !punctDownloading) {
+    punctDl.hidden = true;
+  }
+}
+
+function startPunctBgDownload() {
+  if (punctDownloading || punctInstalled) return;
+  punctDownloading = true;
+  punctDl.hidden = false;
+  punctDl.classList.remove('done');
+  punctDlFill.style.width = '0%';
+  punctDlLabel.textContent = 'מתחיל הורדה…';
+  const channel = new Channel();
+  channel.onmessage = (p) => {
+    if (!punctDownloading) return;
+    const pct = p.totalBytes > 0 ? Math.round((p.downloadedBytes / p.totalBytes) * 100) : 0;
+    punctDlFill.style.width = `${pct}%`;
+    const mbDone = Math.round(p.downloadedBytes / 1e6);
+    const mbTotal = Math.round(p.totalBytes / 1e6);
+    punctDlLabel.textContent = `מוריד מודל ברקע… ${pct}% (${mbDone}/${mbTotal}MB) · אפשר להמשיך`;
+  };
+  // The invoke returns as soon as the download *starts* (it runs in a Rust task);
+  // completion arrives via the channel + the punct-model-installed event below.
+  invoke('download_punctuation_model', { onProgress: channel, enableOnFinish: true }).catch(() => {
+    punctDownloading = false;
+    punctDl.classList.remove('done');
+    punctDlLabel.textContent = 'לא הצלחנו להתחיל הורדה — אפשר להפעיל מאוחר יותר בהגדרות.';
+  });
+}
+
+async function onPunctToggle() {
+  punctChosen = !punctChosen;
+  if (punctChosen) {
+    if (punctInstalled) {
+      // Already downloaded (e.g. re-running onboarding) → just turn it on now.
+      invoke('set_punctuation_enabled', { enabled: true }).catch(() => {});
+    } else {
+      startPunctBgDownload();
+    }
+  } else {
+    // Turned back off: stop the background download and disable if it was active.
+    newlineChosen = false;
+    persist({ punctuation_newline: false });
+    if (punctDownloading) {
+      invoke('cancel_punctuation_download').catch(() => {});
+      punctDownloading = false;
+      punctDl.hidden = true;
+    }
+    if (punctInstalled) {
+      invoke('set_punctuation_enabled', { enabled: false }).catch(() => {});
+    }
+  }
+  updatePunctCards();
+  renderPunctPreview();
+}
+
+function onNewlineToggle() {
+  if (!punctChosen) return; // gated — newline rides on top of punctuation
+  newlineChosen = !newlineChosen;
+  persist({ punctuation_newline: newlineChosen });
+  updatePunctCards();
+  renderPunctPreview();
+}
+
+punctCard?.addEventListener('click', onPunctToggle);
+newlineCard?.addEventListener('click', onNewlineToggle);
+[punctCard, newlineCard].forEach((c) => c?.addEventListener('keydown', (e) => {
+  if (e.key === ' ' || e.key === 'Enter') { e.preventDefault(); c.click(); }
+}));
+
+function renderPunctStep() {
+  updatePunctCards();
+  renderPunctPreview();
+}
+
+// Background download finished (Rust persisted + loaded it). Best-effort UI update —
+// may fire while the user is on a later step.
+await listen('speakly://punct-model-installed', () => {
+  punctInstalled = true;
+  punctDownloading = false;
+  if (punctChosen) {
+    punctDl.hidden = false;
+    punctDl.classList.add('done');
+    punctDlFill.style.width = '100%';
+    punctDlLabel.textContent = '✓ מודל הפיסוק הותקן — הפיסוק יופעל אוטומטית.';
+  }
+});
+
+// Self-heal: opted-in previously but the model isn't here yet → resume the download.
+if (punctChosen && !punctInstalled && !punctDownloading) startPunctBgDownload();
+renderPunctStep();
+
+// ── Video transcription (background ffmpeg download) ───────────────────────────────
+// Mirrors the punctuation step: opting in kicks off `download_ffmpeg` in a Rust task
+// so the user can advance while it streams. ffmpeg presence IS the feature — there's
+// no setting to flip (video_subtitles_enabled already defaults true), so the card only
+// drives the download. Off by default (opt-in).
+const videoCard = document.getElementById('videoCard');
+const videoDl = document.getElementById('videoDl');
+const videoDlFill = document.getElementById('videoDlFill');
+const videoDlLabel = document.getElementById('videoDlLabel');
+
+let videoChosen = false;
+let ffmpegInstalled = false;
+let ffmpegDownloading = false;
+
+try {
+  const fs = await invoke('get_ffmpeg_status');
+  ffmpegInstalled = !!fs.installed;
+  ffmpegDownloading = !!fs.downloading;
+  if (ffmpegInstalled || ffmpegDownloading) videoChosen = true;
+} catch (_) {}
+
+function updateVideoCard() {
+  videoCard.classList.toggle('on', videoChosen);
+  videoCard.setAttribute('aria-checked', videoChosen ? 'true' : 'false');
+  if (ffmpegInstalled) {
+    videoDl.hidden = false;
+    videoDl.classList.add('done');
+    videoDlFill.style.width = '100%';
+    videoDlLabel.textContent = '✓ ffmpeg מותקן — תמלול וידאו מוכן.';
+  } else if (!videoChosen && !ffmpegDownloading) {
+    videoDl.hidden = true;
+  }
+}
+
+function startFfmpegBgDownload() {
+  if (ffmpegDownloading || ffmpegInstalled) return;
+  ffmpegDownloading = true;
+  videoDl.hidden = false;
+  videoDl.classList.remove('done');
+  videoDlFill.style.width = '0%';
+  videoDlLabel.textContent = 'מתחיל הורדה…';
+  const channel = new Channel();
+  channel.onmessage = (p) => {
+    if (!ffmpegDownloading) return;
+    const pct = p.totalBytes > 0 ? Math.round((p.downloadedBytes / p.totalBytes) * 100) : 0;
+    videoDlFill.style.width = `${pct}%`;
+    const mbDone = Math.round(p.downloadedBytes / 1e6);
+    const mbTotal = Math.round(p.totalBytes / 1e6);
+    videoDlLabel.textContent = `מוריד ffmpeg ברקע… ${pct}% (${mbDone}/${mbTotal}MB) · אפשר להמשיך`;
+  };
+  // Returns as soon as the download *starts* (it runs in a Rust task); completion
+  // arrives via the channel + the ffmpeg-installed event below.
+  invoke('download_ffmpeg', { onProgress: channel }).catch(() => {
+    ffmpegDownloading = false;
+    videoDl.classList.remove('done');
+    videoDlLabel.textContent = 'לא הצלחנו להתחיל הורדה — אפשר להפעיל מאוחר יותר בהגדרות.';
+  });
+}
+
+function onVideoToggle() {
+  videoChosen = !videoChosen;
+  if (videoChosen) {
+    if (!ffmpegInstalled) startFfmpegBgDownload();
+  } else if (ffmpegDownloading) {
+    // Turned back off mid-download → cancel it.
+    invoke('cancel_ffmpeg_download').catch(() => {});
+    ffmpegDownloading = false;
+    videoDl.hidden = true;
+  }
+  updateVideoCard();
+}
+
+videoCard?.addEventListener('click', onVideoToggle);
+videoCard?.addEventListener('keydown', (e) => {
+  if (e.key === ' ' || e.key === 'Enter') { e.preventDefault(); videoCard.click(); }
+});
+
+function renderVideoStep() {
+  updateVideoCard();
+}
+
+// Background download finished (Rust verified + installed it). Best-effort UI update —
+// may fire while the user is on a later step.
+await listen('speakly://ffmpeg-installed', () => {
+  ffmpegInstalled = true;
+  ffmpegDownloading = false;
+  if (videoChosen) {
+    videoDl.hidden = false;
+    videoDl.classList.add('done');
+    videoDlFill.style.width = '100%';
+    videoDlLabel.textContent = '✓ ffmpeg הותקן — תמלול וידאו מוכן.';
+  }
+});
+
+// A download was already in flight (e.g. started from Settings) → reflect it; the
+// ffmpeg-installed event finalizes the bar. No persisted opt-in flag to resume from.
+if (ffmpegDownloading && !ffmpegInstalled) {
+  videoDl.hidden = false;
+  videoDl.classList.remove('done');
+  videoDlLabel.textContent = 'מוריד ffmpeg ברקע…';
+}
+renderVideoStep();
+
 // ── Step navigation ─────────────────────────────────────────────────────────────
 let currentStep = 1;
 const stepAnnounce = document.getElementById('stepAnnounce');
@@ -751,7 +1015,7 @@ const stepAnnounce = document.getElementById('stepAnnounce');
 function goTo(n) {
   if (recording) stopRecording(true);
   if (currentStep === 5 && n !== 5) leaveDemo();
-  if (currentStep === 6 && n !== 6) stopMicTest();
+  if (currentStep === 8 && n !== 8) stopMicTest();
 
   document.querySelectorAll('.step').forEach((s, i) => s.classList.toggle('active', i + 1 === n));
   for (let i = 1; i <= TOTAL_STEPS; i++) {
@@ -769,7 +1033,9 @@ function goTo(n) {
   currentStep = n;
 
   if (n === 5) enterDemo();
-  if (n === 6) renderTips();
+  if (n === 6) renderPunctStep();
+  if (n === 7) renderVideoStep();
+  if (n === 8) renderTips();
   stepAnnounce.textContent = `שלב ${n} מתוך ${TOTAL_STEPS}`;
 
   // Move focus to the step heading for screen-reader + keyboard users.

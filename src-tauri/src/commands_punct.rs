@@ -133,7 +133,14 @@ pub async fn download_punctuation_model(
     app: AppHandle,
     state: State<'_, AppState>,
     on_progress: Channel<DownloadProgress>,
+    // When true, turn the feature on (persist + load the engine) once the model is
+    // verified and installed. Used by the onboarding wizard: the user opts in, then
+    // moves on while the ~283 MB model downloads in the background — and it activates
+    // with no restart and the settings toggle shows on. Defaults to false (the
+    // settings download row never auto-enables; the toggle drives that there).
+    enable_on_finish: Option<bool>,
 ) -> Result<(), String> {
+    let enable_on_finish = enable_on_finish.unwrap_or(false);
     let token = CancellationToken::new();
     state
         .active_downloads
@@ -150,7 +157,21 @@ pub async fn download_punctuation_model(
             .remove(DOWNLOAD_KEY);
         match result {
             Ok(()) => {
+                // Only ever flips `enabled` true *after* a verified install, so the
+                // settings UI never shows a half-installed "on". Robust to the
+                // onboarding window having closed mid-download: this runs in the
+                // spawned task, independent of any window.
+                if enable_on_finish {
+                    if let Ok(mut stg) = settings::load_or_init(&app_clone) {
+                        if !stg.punctuation_enabled {
+                            stg.punctuation_enabled = true;
+                            let _ = settings::save(&app_clone, &stg);
+                        }
+                    }
+                    autoload_punctuation(&app_clone).await;
+                }
                 let _ = app_clone.emit_to("settings", "speakly://punct-model-installed", ());
+                let _ = app_clone.emit_to("onboarding", "speakly://punct-model-installed", ());
             }
             Err(e) => {
                 log::error!("punctuation download: {e}");

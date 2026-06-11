@@ -211,6 +211,11 @@ fn merge_outcome(
 
 const SYSTEM_PROMPT_SUBTITLE: &str = "You are a professional subtitle translator.\nYou receive a JSON object whose keys are subtitle IDs and values are subtitle texts.\nTranslate every value into {target_language}.\nRules:\n- Preserve every JSON key exactly as given.\n- Preserve line breaks ('\\n') inside a value at the same positions.\n- Keep leading speaker dashes ('-') if present.\n- Keep proper nouns of people and places as-is unless they have a well-known {target_language} form.\n- Use natural spoken tone suitable for subtitles.\n- Respond with ONLY the JSON object. No commentary, no markdown code fences.";
 
+/// Appended to the subtitle system prompt only when at least one unit carries a
+/// gender tag (see `gender_tags_for_chunks`). Phrased as likelihood, not fact —
+/// the addressee heuristic is wrong in multi-speaker scenes (documented risk).
+const GENDER_PROMPT_ADDENDUM: &str = "\nSome values begin with a speaker-gender tag: '[M]' = male speaker, '[F]' = female speaker.\nGender rules:\n- Inflect first-person verbs, adjectives and self-references according to the speaker's tagged gender.\n- When a tagged segment is adjacent to a segment with the opposite tag, it is likely a dialogue: second-person address ('you') in each segment is probably directed at the other speaker — inflect second-person forms to the other speaker's gender when the context supports it.\n- Untagged values have unknown speaker gender — translate them as you normally would.\n- NEVER include the tags '[M]' or '[F]' (or any bracketed gender marker) in the translated output.";
+
 pub(crate) const SYSTEM_PROMPT_DOCUMENT: &str = "You are a professional document translator.\nYou receive a JSON object whose keys are paragraph IDs and values are source paragraphs.\nTranslate every value into {target_language}.\nRules:\n- Preserve every JSON key exactly as given.\n- Preserve line breaks ('\\n') and blank lines inside a value at the same positions.\n- Preserve markdown syntax (**bold**, *italic*, `code`, [links](...), # headings, lists, tables) exactly as-is.\n- Keep proper nouns of people, places, brands, and code identifiers as-is unless a well-known {target_language} form exists.\n- Use natural tone appropriate for the document.\n- Respond with ONLY the JSON object. No commentary, no markdown code fences.";
 
 /// Builds the output path `<stem>.<lang>.<ext>` next to `basis`.
@@ -221,6 +226,57 @@ fn output_path_with_ext(basis: &Path, target_language: &str, ext: &str) -> PathB
         .and_then(|s| s.to_str())
         .unwrap_or("output");
     basis.with_file_name(format!("{stem}.{suffix}.{ext}"))
+}
+
+/// Matches the sidecar's labeled time windows against the document's subtitle
+/// chunks: a chunk is tagged when one entry covers ≥50% of its duration. The
+/// sidecar was written from the very cue list the SRT was rendered from, so an
+/// unedited file matches exactly; a hand-edited one degrades to fewer tags,
+/// never to wrong ones (overlap-gated).
+fn gender_tags_for_chunks(
+    doc: &parser::ParsedDoc,
+    entries: &[crate::gender_f0::CueGender],
+) -> HashMap<usize, &'static str> {
+    let mut tags = HashMap::new();
+    for chunk in doc.chunks.iter().filter(|c| c.translatable) {
+        let Some((t0, t1)) = chunk.time_ms() else { continue };
+        let (t0, t1) = (t0 as i64, t1 as i64);
+        let dur = t1 - t0;
+        if dur <= 0 {
+            continue;
+        }
+        let best = entries
+            .iter()
+            .map(|e| {
+                let overlap = (t1.min(e.t1_cs * 10) - t0.max(e.t0_cs * 10)).max(0);
+                (overlap, e.gender)
+            })
+            .max_by_key(|(overlap, _)| *overlap);
+        if let Some((overlap, gender)) = best {
+            if overlap * 2 >= dur {
+                let g = match gender {
+                    crate::gender_f0::SegmentGender::Male => "M",
+                    crate::gender_f0::SegmentGender::Female => "F",
+                    crate::gender_f0::SegmentGender::Unknown => continue,
+                };
+                tags.insert(chunk.id, g);
+            }
+        }
+    }
+    tags
+}
+
+/// Removes every `[M]`/`[F]` speaker tag (and the space gluing it to a word)
+/// from translated text — the defensive layer behind the prompt's "never echo
+/// the tags" rule.
+fn strip_gender_tags(s: &str) -> String {
+    let mut out = s.to_string();
+    for tag in ["[M] ", "[F] ", " [M]", " [F]", "[M]", "[F]"] {
+        if out.contains(tag) {
+            out = out.replace(tag, "");
+        }
+    }
+    out
 }
 
 /// Removes Unicode directional formatting marks (LRM/RLM, embeddings, overrides,
@@ -242,6 +298,53 @@ fn strip_directional_marks(s: &str) -> String {
             )
         })
         .collect()
+}
+
+#[cfg(test)]
+mod gender_tag_tests {
+    use super::{gender_tags_for_chunks, strip_gender_tags, parser};
+    use crate::gender_f0::{CueGender, SegmentGender};
+
+    #[test]
+    fn leaked_tags_are_stripped_from_output() {
+        assert_eq!(strip_gender_tags("[F] את יודעת"), "את יודעת");
+        assert_eq!(strip_gender_tags("[M] אתה יודע"), "אתה יודע");
+        assert_eq!(strip_gender_tags("שלום [F] עולם"), "שלום עולם");
+        assert_eq!(strip_gender_tags("בלי תגית"), "בלי תגית");
+        // Multi-line subtitle value with a tag on each line.
+        assert_eq!(strip_gender_tags("[F] שורה\n[M] שנייה"), "שורה\nשנייה");
+    }
+
+    #[test]
+    fn chunks_match_sidecar_by_time_overlap() {
+        let doc = parser::parse(
+            parser::Format::Srt,
+            "1\n00:00:00,000 --> 00:00:02,000\nHello\n\n\
+             2\n00:00:02,500 --> 00:00:04,000\nHi there\n\n\
+             3\n00:00:10,000 --> 00:00:12,000\nLater\n\n",
+        );
+        let entries = vec![
+            // Exact match for cue 1 (cs units).
+            CueGender { t0_cs: 0, t1_cs: 200, gender: SegmentGender::Male },
+            // Exact match for cue 2.
+            CueGender { t0_cs: 250, t1_cs: 400, gender: SegmentGender::Female },
+            // Covers <50% of cue 3 → must NOT tag it.
+            CueGender { t0_cs: 1000, t1_cs: 1050, gender: SegmentGender::Male },
+        ];
+        let tags = gender_tags_for_chunks(&doc, &entries);
+        assert_eq!(tags.get(&1), Some(&"M"));
+        assert_eq!(tags.get(&2), Some(&"F"));
+        assert_eq!(tags.get(&3), None, "sub-50% overlap must stay untagged");
+    }
+
+    #[test]
+    fn no_entries_means_no_tags() {
+        let doc = parser::parse(
+            parser::Format::Srt,
+            "1\n00:00:00,000 --> 00:00:02,000\nHello\n\n",
+        );
+        assert!(gender_tags_for_chunks(&doc, &[]).is_empty());
+    }
 }
 
 #[cfg(test)]
@@ -346,17 +449,43 @@ async fn translate_text_format(
         return Err("לא נמצא תוכן לתרגום בקובץ".into());
     }
 
-    let system_prompt = match doc.category() {
+    // Speaker-gender tags (opt-in, experimental): when a `<stem>.genders.json`
+    // sidecar sits next to the subtitle (written by the video→SRT pipeline) and
+    // the target is gendered (Hebrew in V1), tagged cues are prefixed `[M]`/`[F]`
+    // so the model picks correct gender inflections. No sidecar / feature off /
+    // other target ⇒ empty map ⇒ behavior identical to today.
+    let gender_tags: HashMap<usize, &'static str> = if matches!(doc.category(), Category::Subtitle)
+        && target.eq_ignore_ascii_case("hebrew")
+        && crate::settings::load_or_init(app)?.gender_aware_translation
+    {
+        crate::gender_f0::load_for_srt(input)
+            .map(|entries| gender_tags_for_chunks(&doc, &entries))
+            .unwrap_or_default()
+    } else {
+        HashMap::new()
+    };
+
+    let mut system_prompt = match doc.category() {
         Category::Subtitle => SYSTEM_PROMPT_SUBTITLE,
         Category::Document => SYSTEM_PROMPT_DOCUMENT,
-    };
+    }
+    .to_string();
+    if !gender_tags.is_empty() {
+        system_prompt.push_str(GENDER_PROMPT_ADDENDUM);
+    }
     let batch_size = doc.batch_size();
 
     let units: Vec<(usize, String)> = doc
         .chunks
         .iter()
         .filter(|c| c.translatable && !c.text.trim().is_empty())
-        .map(|c| (c.id, c.text.clone()))
+        .map(|c| {
+            let text = match gender_tags.get(&c.id) {
+                Some(g) => format!("[{g}] {}", c.text),
+                None => c.text.clone(),
+            };
+            (c.id, text)
+        })
         .collect();
 
     let out = output_path_with_ext(input, target, ext);
@@ -364,7 +493,7 @@ async fn translate_text_format(
     let mut map = if units.is_empty() {
         HashMap::new()
     } else {
-        translate_units(app, target, system_prompt, batch_size, &units).await?
+        translate_units(app, target, &system_prompt, batch_size, &units).await?
     };
 
     // Subtitle output must be plain logical-order text so it renders RTL correctly:
@@ -373,6 +502,14 @@ async fn translate_text_format(
     if matches!(doc.category(), Category::Subtitle) {
         for v in map.values_mut() {
             *v = strip_directional_marks(v);
+        }
+    }
+
+    // Defensive tag strip: the prompt forbids echoing `[M]`/`[F]`, but a model
+    // may still leak one — they must never reach the output file.
+    if !gender_tags.is_empty() {
+        for v in map.values_mut() {
+            *v = strip_gender_tags(v);
         }
     }
 

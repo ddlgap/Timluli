@@ -66,7 +66,8 @@ pub async fn transcribe_video_to_srt(
         "להפקת כתוביות מווידאו יש להתקין את ffmpeg. הורד אותו בהגדרות → מנוע תמלול.".to_string()
     })?;
 
-    let backend = crate::settings::load_or_init(app)?.audio_file_engine;
+    let stg = crate::settings::load_or_init(app)?;
+    let backend = stg.audio_file_engine;
     let tmp = std::env::temp_dir();
     let uid = uuid::Uuid::new_v4();
 
@@ -76,6 +77,9 @@ pub async fn transcribe_video_to_srt(
     // `words.json` sidecar — both engines produce them at zero extra cost.
     let mut timed_words: Vec<words::TimedWord> = Vec::new();
     let engine_name: &str;
+    // PCM kept for the gender-classification pass (local path already decodes
+    // it; the cloud path extracts FLAC only, so it re-extracts on demand below).
+    let mut gender_pcm: Option<Vec<f32>> = None;
 
     let mut segments: Vec<Segment> = match backend.as_str() {
         "whisper-local" => {
@@ -119,6 +123,7 @@ pub async fn transcribe_video_to_srt(
                 }
                 offset_samples += chunk_len;
             }
+            gender_pcm = Some(pcm);
             segs
         }
         // Default to the cloud backend for any other value (mirrors the .txt path).
@@ -150,9 +155,42 @@ pub async fn transcribe_video_to_srt(
         seg.text = crate::commands_punct::punctuate_if_ready(state.inner(), t, false, false).await;
     }
 
-    let srt = srt::build_srt(&segments);
+    let cues = srt::build_cues(&segments);
+    let srt = srt::render_srt(&cues);
     let out_path = output_srt_path(&input);
     std::fs::write(&out_path, srt).map_err(|e| format!("שגיאה בכתיבת קובץ הכתוביות: {e}"))?;
+
+    // A genders sidecar from a previous run describes the *old* cue timings —
+    // remove it unconditionally so a regenerated SRT can't pair with stale tags.
+    let genders_path = crate::gender_f0::sidecar_path(&out_path);
+    let _ = std::fs::remove_file(&genders_path);
+
+    // Speaker-gender classification (opt-in, experimental): per-cue F0 analysis
+    // over the extracted PCM, persisted as `<stem>.genders.json` for the subtitle
+    // translation path. Strictly best-effort — any failure logs and moves on.
+    if stg.gender_aware_translation {
+        match gender_pcm_or_extract(gender_pcm, &ffmpeg, &input, &tmp, uid).await {
+            Ok(pcm) => {
+                let windows: Vec<(i64, i64)> = cues.iter().map(|(s, e, _)| (*s, *e)).collect();
+                // Pure CPU work, seconds for a full movie — off the async runtime.
+                let classified = tokio::task::spawn_blocking(move || {
+                    let mut cg = crate::gender_f0::classify_cues(&pcm, &windows);
+                    crate::gender_f0::smooth(&mut cg);
+                    cg
+                })
+                .await;
+                match classified {
+                    Ok(cg) => match crate::gender_f0::write_sidecar(&genders_path, &cg) {
+                        Ok(true) => log::info!("gender sidecar written: {}", genders_path.display()),
+                        Ok(false) => log::info!("gender analysis: no confident cues, no sidecar"),
+                        Err(e) => log::warn!("gender sidecar write failed (SRT unaffected): {e}"),
+                    },
+                    Err(e) => log::warn!("gender analysis thread failed (SRT unaffected): {e}"),
+                }
+            }
+            Err(e) => log::warn!("gender analysis skipped — PCM unavailable: {e}"),
+        }
+    }
 
     // Best-effort `words.json` sidecar (karaoke burn-in style). The words carry
     // the raw (pre-punctuation) text — the burn side normalizes punctuation away
@@ -165,6 +203,30 @@ pub async fn transcribe_video_to_srt(
     }
 
     Ok(out_path.to_string_lossy().into_owned())
+}
+
+/// PCM for the gender pass: the local path's already-decoded samples when
+/// available, otherwise a fresh ffmpeg extraction (the cloud path only produced
+/// a FLAC, which was uploaded and deleted). The extra extraction is the cheap
+/// part of the pipeline and only runs when the feature is enabled.
+async fn gender_pcm_or_extract(
+    existing: Option<Vec<f32>>,
+    ffmpeg: &Path,
+    input: &Path,
+    tmp: &Path,
+    uid: uuid::Uuid,
+) -> Result<Vec<f32>, String> {
+    if let Some(pcm) = existing {
+        return Ok(pcm);
+    }
+    let pcm_tmp = tmp.join(format!("timluli-gen-{uid}.pcm"));
+    let (ff, inp, out) = (ffmpeg.to_path_buf(), input.to_path_buf(), pcm_tmp.clone());
+    tokio::task::spawn_blocking(move || ffmpeg::extract_pcm_f32le(&ff, &inp, &out))
+        .await
+        .map_err(|e| format!("שגיאת thread בחילוץ אודיו: {e}"))??;
+    let pcm = ffmpeg::read_pcm_f32le(&pcm_tmp);
+    let _ = std::fs::remove_file(&pcm_tmp);
+    pcm
 }
 
 /// Returns the loaded local engine, lazy-loading the previously-active (or first

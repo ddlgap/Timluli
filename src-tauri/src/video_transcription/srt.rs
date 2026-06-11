@@ -25,8 +25,19 @@ const MAX_CUE_CHARS: usize = MAX_LINE_CHARS * MAX_CUE_LINES;
 const MAX_CUE_CS: i64 = 600;
 
 /// Builds an SRT document from timed segments. Infallible — empty input yields an
-/// empty string (the caller decides whether that is an error).
+/// empty string (the caller decides whether that is an error). The production
+/// pipeline calls `build_cues` + `render_srt` separately (it needs the cue list
+/// for gender classification); this composition remains the test-facing entry.
+#[cfg(test)]
 pub fn build_srt(segments: &[Segment]) -> String {
+    render_srt(&build_cues(segments))
+}
+
+/// The final cue list `(start_cs, end_cs, text)` exactly as `build_srt` numbers
+/// it (cue N = index N-1). Exposed so the gender-classification pass can analyze
+/// the audio window of each *rendered* cue — segment indices don't survive the
+/// dedup/split below.
+pub fn build_cues(segments: &[Segment]) -> Vec<(i64, i64, String)> {
     let deduped = dedup_consecutive(segments);
 
     let mut raw: Vec<(i64, i64, String)> = Vec::new();
@@ -35,14 +46,16 @@ pub fn build_srt(segments: &[Segment]) -> String {
     }
     // Strip a stray leading mark some transcriptions emit at a cue start (e.g. ", "),
     // and drop any cue that becomes empty — before numbering, so indices stay gap-free.
-    let cues: Vec<(i64, i64, String)> = raw
-        .into_iter()
+    raw.into_iter()
         .filter_map(|(s, e, t)| {
             let cleaned = trim_cue_lead(&t).to_string();
             (!cleaned.is_empty()).then_some((s, e, cleaned))
         })
-        .collect();
+        .collect()
+}
 
+/// Renders numbered SRT text from a final cue list.
+pub fn render_srt(cues: &[(i64, i64, String)]) -> String {
     let mut out = String::new();
     for (i, (start, end, text)) in cues.iter().enumerate() {
         out.push_str(&(i + 1).to_string());

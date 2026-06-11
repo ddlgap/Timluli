@@ -332,6 +332,7 @@ async function loadSettings() {
   // Translation tab
   $('translate_target_language').value = stg.translate_target_language || 'Hebrew';
   $('pdf_rtl_layout').value = stg.pdf_rtl_layout || 'same-box';
+  setToggle('gender_aware_translation', !!stg.gender_aware_translation);
   // Each provider's tier maps to its own paid flag (independent free/paid).
   setSpeed('groq', stg.groq_paid ? 'fast' : 'normal');
   setSpeed('cerebras', stg.cerebras_paid ? 'fast' : 'normal');
@@ -585,6 +586,7 @@ async function saveSettings() {
     silence_timeout_ms: Number(silence.value),
     translate_target_language: $('translate_target_language').value,
     pdf_rtl_layout: $('pdf_rtl_layout').value,
+    gender_aware_translation: getToggle('gender_aware_translation'),
     groq_model: $('groq_model').value || null,
     cerebras_model: $('cerebras_model').value || null,
     // Independent per-provider tiers: the backend uses each model's own flag for

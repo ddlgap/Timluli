@@ -63,6 +63,48 @@ pub struct Chunk {
     meta: Meta,
 }
 
+impl Chunk {
+    /// The cue's time window in milliseconds, for subtitle chunks whose timing
+    /// parses cleanly (`None` for documents or malformed timings). Used to match
+    /// cues against the time-keyed `<stem>.genders.json` sidecar.
+    pub fn time_ms(&self) -> Option<(u64, u64)> {
+        match &self.meta {
+            Meta::Srt { timing } | Meta::Vtt { timing, .. } => {
+                let (a, b) = timing.split_once("-->")?;
+                // VTT may append cue settings after the end time, e.g.
+                // "00:00:01.000 --> 00:00:02.000 line:0" — keep the first token.
+                let end = b.split_whitespace().next()?;
+                Some((parse_ts_ms(a.trim())?, parse_ts_ms(end)?))
+            }
+            Meta::Sbv { timing } => {
+                let (a, b) = timing.trim().split_once(',')?;
+                Some((parse_ts_ms(a.trim())?, parse_ts_ms(b.trim())?))
+            }
+            _ => None,
+        }
+    }
+}
+
+/// Parses `HH:MM:SS,mmm` (SRT), `HH:MM:SS.mmm` / `MM:SS.mmm` (VTT), or
+/// `H:MM:SS.mmm` (SBV) into milliseconds.
+fn parse_ts_ms(ts: &str) -> Option<u64> {
+    let (hms, millis) = ts
+        .split_once(',')
+        .or_else(|| ts.split_once('.'))
+        .unwrap_or((ts, "0"));
+    let millis: u64 = millis.trim().parse().ok()?;
+    let parts: Vec<u64> = hms
+        .split(':')
+        .map(|p| p.trim().parse().ok())
+        .collect::<Option<_>>()?;
+    let secs = match parts.as_slice() {
+        [h, m, s] => h * 3600 + m * 60 + s,
+        [m, s] => m * 60 + s,
+        _ => return None,
+    };
+    Some(secs * 1000 + millis)
+}
+
 pub struct ParsedDoc {
     format: Format,
     pub chunks: Vec<Chunk>,

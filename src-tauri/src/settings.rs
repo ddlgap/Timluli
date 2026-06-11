@@ -119,6 +119,12 @@ pub struct Settings {
     /// Unknown values fall back to classic at burn time (`ass::Preset::from_id`).
     #[serde(default = "default_burn_style")]
     pub burn_style: String,
+    /// Experimental: acoustic speaker-gender detection (per-cue F0) feeding
+    /// `[M]`/`[F]` tags into Hebrew subtitle translation for correct gender
+    /// inflections. Off by default — it changes translation output. See
+    /// `src/gender_f0.rs`.
+    #[serde(default)]
+    pub gender_aware_translation: bool,
 }
 
 impl Default for Settings {
@@ -154,6 +160,7 @@ impl Default for Settings {
             punctuation_newline: false,
             video_subtitles_enabled: true,
             burn_style: default_burn_style(),
+            gender_aware_translation: false,
         }
     }
 }

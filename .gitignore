@@ -31,6 +31,7 @@ src-tauri/sidecar/build/
 src-tauri/sidecar/dist/
 src-tauri/sidecar/*.spec
 src-tauri/sidecar/__pycache__/
+src-tauri/sidecar/tests/__pycache__/
 src-tauri/resources/timluli-pdf.exe
 
 # Speakly local state
@@ -51,3 +52,6 @@ CLAUDE.md
 
 # Internal documentation (historical specs, not for public repo)
 docs/
+
+# Machine-migration kit (personal paths + Claude memory, not for public repo)
+migration/

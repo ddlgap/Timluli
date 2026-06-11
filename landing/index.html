@@ -477,6 +477,159 @@ footer{border-top:1px solid var(--border-soft);padding:64px 0 40px;margin-top:96
   margin-top:48px;padding-top:28px;border-top:1px solid var(--border-soft);color:var(--text-dimmer);font-size:14px}
 .foot-bottom img{height:56px;width:auto;opacity:.9}
 
+/* ============================================================
+   LIVE FEATURE DEMOS (.ax*) — faithful in-page animations.
+   Every visual token here is copied from the app's real CSS:
+   mic.css (64px graphite mic, red pulse-ring, neumorphic bubble)
+   and panel.css (neon radial menu, exact SVG + palette).
+   ============================================================ */
+.ax{position:relative;aspect-ratio:1140/900;direction:rtl;overflow:hidden;
+  background:
+    radial-gradient(640px 420px at 72% -12%,rgba(59,130,246,.10),transparent 60%),
+    radial-gradient(520px 360px at 8% 110%,rgba(34,211,238,.07),transparent 60%),
+    linear-gradient(180deg,#0e1424,#090d18)}
+
+/* —— the real floating mic (mic.css verbatim) —— */
+.ax .mic64{position:absolute;width:64px;height:64px;border-radius:50%;z-index:6;
+  background:rgba(27,31,39,.92);border:1px solid rgba(255,255,255,.08);
+  display:grid;place-items:center;
+  box-shadow:0 0 24px rgba(0,0,0,.55),0 0 6px rgba(0,0,0,.35);
+  transition:transform .12s ease,background .3s ease,box-shadow .3s ease}
+.ax .mic64 svg{width:28px;height:28px}
+.ax .mic64 svg path{fill:#cbd5e1;transition:fill .12s ease}
+.ax .mic64.listen{animation:ax-pulse 1.4s ease-in-out infinite}
+.ax .mic64.listen svg path{fill:#fff}
+.ax .mic64.click{transform:scale(.92)}
+.ax .mic64.busy{animation:ax-busy 1.2s ease-in-out infinite}
+@keyframes ax-pulse{
+  0%,100%{box-shadow:0 0 24px rgba(0,0,0,.55),0 0 6px rgba(0,0,0,.35),0 0 0 0 rgba(239,68,68,.55)}
+  50%{box-shadow:0 0 24px rgba(0,0,0,.55),0 0 6px rgba(0,0,0,.35),0 0 0 18px rgba(239,68,68,0)}}
+@keyframes ax-busy{
+  0%,100%{box-shadow:0 0 24px rgba(0,0,0,.55),0 0 6px rgba(0,0,0,.35),0 0 0 0 rgba(34,211,238,.5)}
+  50%{box-shadow:0 0 24px rgba(0,0,0,.55),0 0 6px rgba(0,0,0,.35),0 0 0 16px rgba(34,211,238,0)}}
+
+/* —— the real interim bubble (mic.css verbatim: #f5f7fb, neumorphic) —— */
+.ax .bub{position:absolute;z-index:7;background:#f5f7fb;color:#0b0d12;border-radius:16px;
+  padding:8px 14px;font-size:14px;line-height:1.4;font-weight:500;max-width:230px;width:max-content;
+  direction:rtl;text-align:start;opacity:0;transform:translateY(6px);
+  transition:opacity .25s ease,transform .25s ease;pointer-events:none;
+  box-shadow:6px 6px 14px rgba(13,17,28,.2),-6px -6px 12px rgba(255,255,255,.85),
+    inset 1px 1px 2px rgba(255,255,255,.7),inset -1px -1px 3px rgba(13,17,28,.06)}
+.ax .bub.show{opacity:1;transform:none}
+
+/* —— mouse cursor —— */
+.ax .cur{position:absolute;z-index:9;width:22px;height:22px;transition:top 1s var(--ease),left 1s var(--ease);
+  filter:drop-shadow(0 2px 4px rgba(0,0,0,.6))}
+.ax .cur svg{width:100%;height:100%}
+
+/* ════ AX1 — live dictation into a document ════ */
+.ax1 .doc{position:absolute;inset:7% 6% 34% 6%;background:#f7f8fc;border-radius:12px;
+  box-shadow:0 18px 44px -16px rgba(0,0,0,.6);overflow:hidden}
+.ax1 .doc-bar{height:34px;background:#e9ecf4;border-bottom:1px solid #dde1ec;display:flex;align-items:center;
+  padding-inline:12px;gap:7px;direction:ltr}
+.ax1 .doc-bar i{width:10px;height:10px;border-radius:50%;background:#cfd5e3}
+.ax1 .doc-bar span{margin-inline-start:auto;font-size:11.5px;color:#8a93a8;font-weight:600}
+.ax1 .doc-text{padding:20px 24px;font-size:17px;line-height:1.8;color:#171a22;font-weight:500}
+.ax1 .skel{height:11px;border-radius:6px;background:#e3e7f1;margin:13px 0}
+.ax1 .skel.s1{width:92%}.ax1 .skel.s2{width:84%}.ax1 .skel.s3{width:56%;margin-bottom:20px}
+.ax1 .doc-text .w{opacity:0;animation:ax-win .18s ease forwards}
+@keyframes ax-win{to{opacity:1}}
+.ax1 .doc-text .punct{color:var(--cyan);font-weight:800;animation:ax-punct .9s ease forwards}
+@keyframes ax-punct{0%{color:var(--cyan);text-shadow:0 0 10px rgba(34,211,238,.7)}100%{color:#171a22;text-shadow:none}}
+.ax1 .dcaret{display:inline-block;width:2px;height:1.05em;background:#3b82f6;vertical-align:-2px;
+  margin-inline-start:1px;animation:blink 1s step-end infinite}
+.ax1 .mic64{bottom:7%;left:10%}
+.ax1 .bub{bottom:calc(7% + 76px);left:10%}
+.ax1 .kbd-hint{position:absolute;bottom:9%;right:7%;display:flex;gap:5px;align-items:center;
+  color:var(--text-dimmer);font-size:12.5px;font-weight:600}
+.ax1 .kbd-hint kbd{font-family:"Heebo",monospace;font-size:12px;font-weight:700;color:var(--text);
+  background:var(--surface-2);border:1px solid var(--border);border-bottom-width:3px;border-radius:7px;padding:3px 9px}
+
+/* ════ AXD — drag-a-file scenes (translation / transcription) ════ */
+.axd .shelf{position:absolute;top:8%;right:7%;display:flex;gap:14px;align-items:flex-start}
+.axd .file{display:flex;align-items:center;gap:9px;background:#141b2d;border:1px solid rgba(160,190,255,.18);
+  border-radius:12px;padding:10px 13px;font-size:13.5px;font-weight:700;direction:ltr;color:var(--text);
+  box-shadow:0 12px 30px -12px rgba(0,0,0,.75);white-space:nowrap}
+.axd .file svg{width:22px;height:26px;flex-shrink:0}
+.axd .file.ghost{position:absolute;top:8%;right:7%;z-index:8;margin:0;
+  transition:transform 1.25s var(--ease),opacity .3s ease}
+.axd .file.result{opacity:0;transform:scale(.6);transition:opacity .35s ease,transform .45s var(--ease)}
+.axd .file.result.show{opacity:1;transform:scale(1)}
+.axd .file .new{background:var(--grad);color:#04101c;font-size:10px;font-weight:900;border-radius:6px;
+  padding:1px 6px;letter-spacing:.5px}
+.axd .mic64{bottom:10%;left:12%}
+.axd .bub{bottom:calc(10% + 76px);left:12%}
+.axd .preview{position:absolute;bottom:9%;right:7%;width:46%;background:#10162a;border:1px solid rgba(160,190,255,.16);
+  border-radius:14px;padding:14px 16px;box-shadow:0 18px 40px -16px rgba(0,0,0,.8);
+  opacity:0;transform:translateY(14px);transition:opacity .4s ease,transform .45s var(--ease)}
+.axd .preview.show{opacity:1;transform:none}
+.axd .preview .pv-name{font-size:11.5px;font-weight:700;color:var(--text-dimmer);direction:ltr;text-align:left;margin-bottom:8px}
+.axd .preview .ts{font-family:ui-monospace,Consolas,monospace;font-size:11.5px;color:var(--cyan);direction:ltr;text-align:left}
+.axd .preview .idx{font-family:ui-monospace,Consolas,monospace;font-size:11.5px;color:var(--text-dimmer);direction:ltr;text-align:left}
+.axd .preview .he{font-size:14.5px;font-weight:600;color:var(--text);margin:2px 0 8px}
+
+/* ════ AX5 — radial side panel (panel.css verbatim) + theme mic ════ */
+.ax5{background:
+  radial-gradient(560px 400px at 22% -10%,rgba(59,130,246,.08),transparent 60%),
+  linear-gradient(180deg,#0c1120,#080b14)}
+.ax5 .open5{position:absolute;right:0;top:50%;height:88%;aspect-ratio:1/2;transform:translateY(-50%);
+  opacity:0;pointer-events:none;transition:opacity .28s ease-in}
+.ax5.expanded .open5{opacity:1;transition:opacity .34s ease-out}
+.ax5 .menu-inner5{position:absolute;inset:0;transform:scale(.6);transform-origin:right center;transition:transform .32s ease-in}
+.ax5.expanded .menu-inner5{transform:scale(1);transition:transform .38s ease-out}
+.ax5 .menu-inner5::after{content:"";position:absolute;right:0;top:2.5%;height:95%;width:1px;background:#16D6F3;opacity:.55}
+.ax5 .radial5{position:absolute;inset:0;width:100%;height:100%;overflow:visible}
+.ax5 .radial5 .base{fill:rgba(0,4,14,.9);stroke:rgba(22,214,243,.12);stroke-width:2}
+.ax5 .radial5 .sector{fill:url(#axGlass);stroke:rgba(22,214,243,.55);stroke-width:2.5;transition:fill .16s ease,filter .16s ease}
+.ax5 .radial5 .sector.active{fill:rgba(32,241,253,.3);filter:drop-shadow(0 0 14px rgba(32,241,253,.75))}
+.ax5 .radial5 .neon-arc{fill:none;stroke:#20F1FD;stroke-width:4;stroke-linecap:butt;opacity:.95}
+.ax5 .radial5 .inner{fill:url(#axInner);stroke:rgba(22,214,243,.5);stroke-width:2.5;filter:drop-shadow(0 0 8px rgba(0,0,0,.6))}
+.ax5 .ov5{position:absolute;inset:0;pointer-events:none;font-family:"Rubik","Heebo","Noto Sans Hebrew",sans-serif}
+.ax5 .wedge5{position:absolute;transform:translate(-50%,-50%);display:flex;flex-direction:column;align-items:center;gap:4px;text-align:center}
+.ax5 .wedge5 svg{width:clamp(20px,9%,34px);min-width:20px;height:auto;aspect-ratio:1;fill:none;stroke:#EEF6F9;stroke-width:9;
+  stroke-linecap:round;stroke-linejoin:round;filter:drop-shadow(0 0 6px rgba(32,241,253,.42))}
+.ax5 .wedge5 b{font-size:clamp(9px,1.6vw,13px);font-weight:600;color:#EEF6F9;white-space:nowrap;
+  text-shadow:0 0 8px rgba(32,241,253,.45),0 1px 2px rgba(0,0,0,.6)}
+.ax5 .wedge5.active svg{stroke:#fff;filter:drop-shadow(0 0 14px rgba(32,241,253,.95));animation:ax5-live 1.3s ease-in-out infinite}
+.ax5 .wedge5.active b{color:#20F1FD;text-shadow:0 0 14px rgba(32,241,253,.95)}
+@keyframes ax5-live{0%,100%{opacity:1}50%{opacity:.55}}
+.ax5 .chev5{position:absolute;top:50%;left:76%;transform:translate(-50%,-50%)}
+.ax5 .chev5 svg{width:16px;height:16px;fill:none;stroke:#20F1FD;stroke-width:10;stroke-linecap:round;stroke-linejoin:round;
+  filter:drop-shadow(0 0 6px rgba(32,241,253,.85))}
+/* closed trigger — the half-circle on the wall (panel.css verbatim) */
+.ax5 .trig5{position:absolute;top:50%;right:0;transform:translateY(-50%);width:38px;height:76px;border:none;
+  border-top-left-radius:38px;border-bottom-left-radius:38px;z-index:3;
+  background:radial-gradient(120% 100% at 100% 50%,rgba(1,55,102,.55) 0%,rgba(1,15,38,.92) 70%);
+  box-shadow:inset 2px 0 0 rgba(32,241,253,.1),0 0 14px 2px rgba(22,214,243,.45),0 0 30px 4px rgba(0,151,201,.3);
+  display:grid;place-items:center;transition:opacity .22s ease}
+.ax5 .trig5::before{content:"";position:absolute;inset:0;border-top-left-radius:38px;border-bottom-left-radius:38px;
+  border-left:2px solid #16D6F3;border-top:2px solid rgba(22,214,243,.4);border-bottom:2px solid rgba(22,214,243,.4)}
+.ax5 .trig5 svg{width:17px;height:17px;margin-right:3px;fill:none;stroke:#20F1FD;stroke-width:10;
+  stroke-linecap:round;stroke-linejoin:round;filter:drop-shadow(0 0 6px rgba(32,241,253,.85))}
+.ax5.expanded .trig5{opacity:0}
+/* theme-cycling mic on the left (themes from mic.css verbatim) */
+.ax5 .mic64{top:50%;left:16%;transform:translateY(-50%)}
+.ax5 .mic64[data-theme="azure"]{background:linear-gradient(135deg,#1e40af,#3b82f6);border-color:rgba(255,255,255,.15)}
+.ax5 .mic64[data-theme="sunset"]{background:linear-gradient(135deg,#f97316 0%,#ec4899 100%);border-color:rgba(255,255,255,.18);
+  box-shadow:0 0 24px rgba(249,115,22,.45),0 0 8px rgba(0,0,0,.4)}
+.ax5 .mic64[data-theme="orb-aurora"]{background:#0a1424;border:none;overflow:hidden;isolation:isolate;
+  box-shadow:0 0 28px rgba(34,211,238,.5),0 0 14px rgba(168,85,247,.35),inset 0 0 14px rgba(0,0,0,.4)}
+.ax5 .mic64[data-theme="orb-aurora"]::before{content:"";position:absolute;inset:-40%;z-index:0;
+  background:conic-gradient(from 0deg,#06ffaa 0%,#06b6d4 20%,#3b82f6 40%,#8b5cf6 60%,#ec4899 80%,#06ffaa 100%);
+  filter:blur(6px) saturate(1.5);animation:ax5-orb 8s linear infinite}
+.ax5 .mic64[data-theme="orb-aurora"]::after{content:"";position:absolute;inset:0;z-index:1;border-radius:50%;
+  background:radial-gradient(circle at 35% 30%,rgba(255,255,255,.35) 0%,transparent 35%),
+    radial-gradient(circle at 50% 50%,transparent 45%,rgba(0,0,0,.55) 100%)}
+.ax5 .mic64 svg{position:relative;z-index:2}
+@keyframes ax5-orb{to{transform:rotate(360deg)}}
+.ax5 .theme-tag{position:absolute;top:calc(50% + 52px);left:16%;transform:translateX(-50%);
+  color:var(--text-dimmer);font-size:12.5px;font-weight:600;direction:rtl;white-space:nowrap}
+
+@media(max-width:560px){
+  .axd .preview{width:60%}
+  .ax1 .doc-text{font-size:14px;padding:14px 16px}
+}
+
 /* ============================================================ REVEAL */
 .js .reveal{opacity:0;transform:translateY(30px);transition:opacity .7s var(--ease),transform .7s var(--ease)}
 .js .reveal.in{opacity:1;transform:none}
@@ -652,8 +805,20 @@ footer{border-top:1px solid var(--border-soft);padding:64px 0 40px;margin-top:96
         </ul>
       </div>
       <div class="window float">
-        <div class="window-bar"><div class="dots"><i></i><i></i><i></i></div><span class="wt">Timluli — מנוע תמלול</span></div>
-        <img src="assets/shot-engine-new.png" alt="בחירת מנוע תמלול — מקוון או אופליין" loading="lazy" />
+        <div class="window-bar"><div class="dots"><i></i><i></i><i></i></div><span class="wt">Timluli — תמלול לייב</span></div>
+        <div class="ax ax1" id="ax1" role="img" aria-label="הדגמה: לחיצה על המיקרופון, דיבור, והטקסט מוזרק למסמך עם פיסוק אוטומטי">
+          <div class="doc">
+            <div class="doc-bar"><i></i><i></i><i></i><span>Document1 — Word</span></div>
+            <div class="doc-text">
+              <div class="skel s1"></div><div class="skel s2"></div><div class="skel s3"></div>
+              <span id="ax1doc"></span><i class="dcaret"></i>
+            </div>
+          </div>
+          <div class="kbd-hint"><kbd>Ctrl</kbd><span>+</span><kbd>Ctrl</kbd> או לחיצה על המיקרופון</div>
+          <div class="bub" id="ax1bub"></div>
+          <div class="mic64" id="ax1mic"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 14a3 3 0 0 0 3-3V6a3 3 0 1 0-6 0v5a3 3 0 0 0 3 3zm5-3a5 5 0 0 1-10 0H5a7 7 0 0 0 6 6.92V21h2v-3.08A7 7 0 0 0 19 11h-2z"/></svg></div>
+          <div class="cur" id="ax1cur"><svg viewBox="0 0 24 24"><path d="M5 3l14 9-6.5 1L9 20z" fill="#fff" stroke="#0a0d14" stroke-width="1.6"/></svg></div>
+        </div>
       </div>
     </div>
 
@@ -671,13 +836,57 @@ footer{border-top:1px solid var(--border-soft);padding:64px 0 40px;margin-top:96
         </ul>
       </div>
       <div class="window float">
-        <div class="window-bar"><div class="dots"><i></i><i></i><i></i></div><span class="wt">Timluli — תרגום מסמכים</span></div>
-        <img src="assets/shot-translate-new.png" alt="הגדרות תרגום מסמכים — Groq ו-Cerebras" loading="lazy" />
+        <div class="window-bar"><div class="dots"><i></i><i></i><i></i></div><span class="wt">Timluli — תרגום קובץ בגרירה</span></div>
+        <div class="ax axd" id="ax2" role="img" aria-label="הדגמה: גרירת קובץ כתוביות אל המיקרופון מפיקה קובץ מתורגם לעברית">
+          <div class="shelf">
+            <div class="file"><svg viewBox="0 0 24 28"><path d="M4 1h11l6 6v19a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1z" fill="#1d2740" stroke="#3b82f6" stroke-width="1.4"/><path d="M15 1v6h6" fill="none" stroke="#3b82f6" stroke-width="1.4"/><path d="M7 14h10M7 18h10M7 22h6" stroke="#9ab" stroke-width="1.6" stroke-linecap="round"/></svg><span class="en">movie.srt</span></div>
+            <div class="file result" id="ax2res"><svg viewBox="0 0 24 28"><path d="M4 1h11l6 6v19a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1z" fill="#0f2a1e" stroke="#4ade80" stroke-width="1.4"/><path d="M15 1v6h6" fill="none" stroke="#4ade80" stroke-width="1.4"/><path d="M7 14h10M7 18h10M7 22h6" stroke="#9cb" stroke-width="1.6" stroke-linecap="round"/></svg><span class="en">movie.hebrew.srt</span><span class="new">חדש</span></div>
+          </div>
+          <div class="file ghost" id="ax2ghost"><svg viewBox="0 0 24 28"><path d="M4 1h11l6 6v19a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1z" fill="#1d2740" stroke="#3b82f6" stroke-width="1.4"/><path d="M15 1v6h6" fill="none" stroke="#3b82f6" stroke-width="1.4"/><path d="M7 14h10M7 18h10M7 22h6" stroke="#9ab" stroke-width="1.6" stroke-linecap="round"/></svg><span class="en">movie.srt</span></div>
+          <div class="preview" id="ax2pv">
+            <div class="pv-name">movie.hebrew.srt</div>
+            <div class="idx">2</div>
+            <div class="ts">00:00:04,200 --> 00:00:06,800</div>
+            <div class="he">ברוכים הבאים, נעים להכיר</div>
+            <div class="idx">3</div>
+            <div class="ts">00:00:07,100 --> 00:00:09,400</div>
+            <div class="he">הכתוביות מתורגמות, ישר לעברית</div>
+          </div>
+          <div class="bub" id="ax2bub"></div>
+          <div class="mic64" id="ax2mic"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 14a3 3 0 0 0 3-3V6a3 3 0 1 0-6 0v5a3 3 0 0 0 3 3zm5-3a5 5 0 0 1-10 0H5a7 7 0 0 0 6 6.92V21h2v-3.08A7 7 0 0 0 19 11h-2z"/></svg></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Row 2.5: file transcription (audio/video → text/SRT) -->
+    <div class="frow h-green reveal">
+      <div class="ftext">
+        <span class="ftag"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M9 13v4M12 11v8M15 13v4"/></svg>תמלול קבצים — אודיו ווידאו</span>
+        <h3>גוררים הקלטה או סרטון — מקבלים טקסט או <span class="en">SRT</span></h3>
+        <p>קובץ אודיו הופך לתמלול מלא; קובץ וידאו הופך לכתוביות <span class="en">SRT</span> מסונכרנות עם חותמות זמן — בענן או לגמרי מקומית.</p>
+        <ul class="flist">
+          <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg><span><b>אודיו → טקסט —</b> <span class="en">MP3 · WAV · M4A · OGG</span> ועוד, בעברית ובאנגלית.</span></li>
+          <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg><span><b>וידאו → <span class="en">SRT</span> —</b> כתוביות עם חותמות זמן מדויקות, מוכנות ל-<span class="en">VLC</span> וליוטיוב.</span></li>
+          <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg><span><b>תזמוני מילים —</b> נשמרים לצד ה-<span class="en">SRT</span> ומאפשרים הבלטת מילים בצריבה.</span></li>
+        </ul>
+      </div>
+      <div class="window float">
+        <div class="window-bar"><div class="dots"><i></i><i></i><i></i></div><span class="wt">Timluli — תמלול קבצים</span></div>
+        <div class="ax axd" id="ax3" role="img" aria-label="הדגמה: גרירת וידאו מפיקה קובץ כתוביות, גרירת אודיו מפיקה קובץ טקסט">
+          <div class="shelf">
+            <div class="file" id="ax3src"><svg viewBox="0 0 24 28"><path d="M4 1h11l6 6v19a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1z" fill="#251d3d" stroke="#a855f7" stroke-width="1.4"/><path d="M15 1v6h6" fill="none" stroke="#a855f7" stroke-width="1.4"/><path d="M9 14l7 4.5-7 4.5z" fill="#c4b5fd" stroke="none"/></svg><span class="en" id="ax3srcName">video.mp4</span></div>
+            <div class="file result" id="ax3res"><svg viewBox="0 0 24 28"><path d="M4 1h11l6 6v19a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1z" fill="#0f2a1e" stroke="#4ade80" stroke-width="1.4"/><path d="M15 1v6h6" fill="none" stroke="#4ade80" stroke-width="1.4"/><path d="M7 14h10M7 18h10M7 22h6" stroke="#9cb" stroke-width="1.6" stroke-linecap="round"/></svg><span class="en" id="ax3resName">video.srt</span><span class="new">חדש</span></div>
+          </div>
+          <div class="file ghost" id="ax3ghost"><svg viewBox="0 0 24 28"><path d="M4 1h11l6 6v19a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1z" fill="#251d3d" stroke="#a855f7" stroke-width="1.4"/><path d="M15 1v6h6" fill="none" stroke="#a855f7" stroke-width="1.4"/><path d="M9 14l7 4.5-7 4.5z" fill="#c4b5fd" stroke="none"/></svg><span class="en" id="ax3ghostName">video.mp4</span></div>
+          <div class="preview" id="ax3pv"></div>
+          <div class="bub" id="ax3bub"></div>
+          <div class="mic64" id="ax3mic"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 14a3 3 0 0 0 3-3V6a3 3 0 1 0-6 0v5a3 3 0 0 0 3 3zm5-3a5 5 0 0 1-10 0H5a7 7 0 0 0 6 6.92V21h2v-3.08A7 7 0 0 0 19 11h-2z"/></svg></div>
+        </div>
       </div>
     </div>
 
     <!-- Row 3: subtitle burn-in -->
-    <div class="frow h-green reveal">
+    <div class="frow rev h-blue reveal">
       <div class="ftext">
         <span class="ftag"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="14" rx="2"/><path d="M9 8.5l4.5 2.5L9 13.5z"/><path d="M6 15h12"/></svg>צריבת כתוביות על וידאו</span>
         <h3>וידאו + <span class="en">SRT</span> נכנסים — סרטון עם כתוביות צרובות יוצא</h3>
@@ -695,7 +904,7 @@ footer{border-top:1px solid var(--border-soft);padding:64px 0 40px;margin-top:96
     </div>
 
     <!-- Row 4: customization -->
-    <div class="frow rev h-blue reveal">
+    <div class="frow h-cyan reveal">
       <div class="ftext">
         <span class="ftag"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="13.5" cy="6.5" r="2.5"/><circle cx="17.5" cy="10.5" r="2.5"/><circle cx="8.5" cy="7.5" r="2.5"/><circle cx="6.5" cy="12.5" r="2.5"/><path d="M12 2a10 10 0 1 0 0 20c1.1 0 2-.9 2-2 0-1.9 1.6-2 3-2a5 5 0 0 0 5-5c0-5.5-4.5-9-10-9z"/></svg>עיצוב אישי</span>
         <h3>מיקרופון שנראה בדיוק כמו שאתם אוהבים</h3>
@@ -707,8 +916,52 @@ footer{border-top:1px solid var(--border-soft);padding:64px 0 40px;margin-top:96
         </ul>
       </div>
       <div class="window float">
-        <div class="window-bar"><div class="dots"><i></i><i></i><i></i></div><span class="wt">Timluli — תצוגה</span></div>
-        <img src="assets/shot-appearance.png" alt="עיצוב המיקרופון — צבעים, גרדיאנטים וספירת תלת-ממד" loading="lazy" />
+        <div class="window-bar"><div class="dots"><i></i><i></i><i></i></div><span class="wt">Timluli — תפריט צד + ערכות נושא</span></div>
+        <div class="ax ax5" id="ax5" role="img" aria-label="הדגמה: תפריט הצד הרדיאלי נפתח מהקיר עם ארבעה פלחים, והמיקרופון מחליף ערכות נושא">
+          <div class="mic64" id="ax5mic" data-theme="graphite"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 14a3 3 0 0 0 3-3V6a3 3 0 1 0-6 0v5a3 3 0 0 0 3 3zm5-3a5 5 0 0 1-10 0H5a7 7 0 0 0 6 6.92V21h2v-3.08A7 7 0 0 0 19 11h-2z"/></svg></div>
+          <div class="theme-tag" id="ax5tag">גרפיט</div>
+          <button class="trig5" id="ax5trig" tabindex="-1" aria-hidden="true"><svg viewBox="0 0 128 128"><path d="M78 32L42 64l36 32"/></svg></button>
+          <div class="open5">
+           <div class="menu-inner5">
+            <svg class="radial5" viewBox="0 0 640 1280" preserveAspectRatio="xMaxYMid meet" aria-hidden="true">
+              <defs>
+                <radialGradient id="axGlass" gradientUnits="userSpaceOnUse" cx="640" cy="640" r="600">
+                  <stop offset="0%" stop-color="#012D45" stop-opacity="0.55"/><stop offset="55%" stop-color="#013766" stop-opacity="0.62"/><stop offset="85%" stop-color="#0097C9" stop-opacity="0.70"/><stop offset="100%" stop-color="#16D6F3" stop-opacity="0.85"/>
+                </radialGradient>
+                <radialGradient id="axInner" gradientUnits="userSpaceOnUse" cx="640" cy="640" r="250">
+                  <stop offset="0%" stop-color="#010F26" stop-opacity="0.97"/><stop offset="100%" stop-color="#00040E" stop-opacity="0.97"/>
+                </radialGradient>
+              </defs>
+              <path class="base" d="M640 1248 A608 608 0 0 1 640 32 Z"/>
+              <path class="sector" data-s="burn" d="M640 1240 A600 600 0 0 1 230.8 1078.8 L469.5 822.9 A250 250 0 0 0 640 890 Z"/>
+              <path class="sector" data-s="bottom" d="M201.2 1049.2 A600 600 0 0 1 40.4 660.9 L390.2 648.7 A250 250 0 0 0 457.1 810.5 Z"/>
+              <path class="sector" data-s="middle" d="M40.4 619.1 A600 600 0 0 1 201.2 230.8 L457.1 469.5 A250 250 0 0 0 390.2 631.3 Z"/>
+              <path class="sector" data-s="top" d="M230.8 201.2 A600 600 0 0 1 640 40 L640 390 A250 250 0 0 0 469.5 457.1 Z"/>
+              <path class="neon-arc" d="M640 1240 A600 600 0 0 1 640 40"/>
+              <path class="inner" d="M640 890 A250 250 0 0 1 640 390 Z"/>
+            </svg>
+            <div class="ov5">
+              <div class="wedge5" data-s="top" style="top:19.5%;left:66.8%">
+                <svg viewBox="0 0 256 256"><circle cx="128" cy="128" r="89"/><rect x="102" y="62" width="52" height="94" rx="26"/><path d="M126 84h25M126 103h25M126 122h25M128 156v39M93 198h70"/></svg>
+                <b>תמלול לייב</b>
+              </div>
+              <div class="wedge5" data-s="middle" style="top:37.3%;left:38.6%">
+                <svg viewBox="0 0 256 256"><path d="M47 34h67l36 36v113H47z"/><path d="M114 34v36h36"/><path d="M67 88h67M67 111h82M67 134h70M67 157h48"/><circle cx="160" cy="165" r="48"/></svg>
+                <b>תרגום קובץ</b>
+              </div>
+              <div class="wedge5" data-s="bottom" style="top:62.7%;left:38.6%">
+                <svg viewBox="0 0 256 256"><path d="M47 34h67l36 36v113H47z"/><path d="M114 34v36h36"/><path d="M67 88h67M67 111h82M67 134h70M67 157h48"/><circle cx="160" cy="165" r="48"/><path d="M140 145v40M125 165h30" stroke-width="11"/></svg>
+                <b>תמלול קובץ</b>
+              </div>
+              <div class="wedge5" data-s="burn" style="top:80.5%;left:66.8%">
+                <svg viewBox="0 0 256 256"><rect x="40" y="58" width="176" height="124" rx="14"/><path d="M106 92l40 24-40 24z"/><path d="M68 154h120M92 170h72"/></svg>
+                <b>צריבת כתוביות</b>
+              </div>
+              <span class="chev5"><svg viewBox="0 0 128 128"><path d="M78 32L42 64l36 32"/></svg></span>
+            </div>
+           </div>
+          </div>
+        </div>
       </div>
     </div>
   </div>
@@ -1046,6 +1299,120 @@ function tw(){
   setTimeout(tw,d);
 }
 tw();
+
+/* ============================================================
+   LIVE FEATURE DEMOS — looping timelines. Each scene pauses when
+   off-screen (IntersectionObserver) and renders a static final
+   frame under prefers-reduced-motion.
+   ============================================================ */
+const axRM=matchMedia('(prefers-reduced-motion: reduce)').matches;
+function axLoop(rootId,makeSchedule,total,finalState){
+  const root=document.getElementById(rootId);if(!root)return;
+  if(axRM){finalState&&finalState();return;}
+  let timers=[],running=false;
+  const clear=()=>{timers.forEach(clearTimeout);timers=[];};
+  const cycle=()=>{makeSchedule().forEach(([t,fn])=>timers.push(setTimeout(fn,t)));timers.push(setTimeout(cycle,total));};
+  new IntersectionObserver(es=>es.forEach(e=>{
+    if(e.isIntersecting&&!running){running=true;cycle();}
+    else if(!e.isIntersecting&&running){running=false;clear();}
+  }),{threshold:.15}).observe(root);
+}
+const $id=s=>document.getElementById(s);
+
+/* ---- AX1: live dictation + auto punctuation ---- */
+(()=>{
+  const doc=$id('ax1doc'),bub=$id('ax1bub'),mic=$id('ax1mic'),cur=$id('ax1cur');
+  if(!doc)return;
+  const RAW=['שלום','מה','שלומך','היום'];
+  const PUNCT='שלום<span class="punct">,</span> מה שלומך היום<span class="punct">?</span>';
+  const sched=()=>{
+    const s=[[0,()=>{doc.textContent='';bub.textContent='';bub.classList.remove('show');
+      mic.classList.remove('listen','click');cur.style.left='58%';cur.style.top='34%';}],
+      [350,()=>{cur.style.left='15%';cur.style.top='82%';}],
+      [1450,()=>mic.classList.add('click')],
+      [1620,()=>{mic.classList.remove('click');mic.classList.add('listen');}]];
+    RAW.forEach((w,i)=>s.push([2150+i*620,()=>{
+      bub.textContent+=(i?' ':'')+w;bub.classList.add('show');
+      const sp=document.createElement('span');sp.className='w';sp.textContent=(i?' ':'')+w;doc.appendChild(sp);}]));
+    s.push([4900,()=>{doc.innerHTML=PUNCT;bub.classList.remove('show');}]);
+    s.push([5700,()=>mic.classList.remove('listen')]);
+    return s;
+  };
+  axLoop('ax1',sched,7400,()=>{doc.innerHTML=PUNCT;});
+})();
+
+/* ---- AXD: drag-a-file scenes (translate / transcribe) ---- */
+function axFly(ghost,mic){
+  const g=ghost.getBoundingClientRect(),m=mic.getBoundingClientRect();
+  ghost.style.transform=`translate(${m.left+m.width/2-(g.left+g.width/2)}px,${m.top+m.height/2-(g.top+g.height/2)}px) scale(.62)`;
+}
+(()=>{ /* AX2 — translation */
+  const ghost=$id('ax2ghost'),res=$id('ax2res'),pv=$id('ax2pv'),bub=$id('ax2bub'),mic=$id('ax2mic');
+  if(!ghost)return;
+  const COUNTS=[9,27,46,71,93,112,124];
+  const sched=()=>{
+    const s=[[0,()=>{ghost.style.transition='none';ghost.style.transform='none';ghost.style.opacity='1';
+      void ghost.offsetWidth;ghost.style.transition='';
+      res.classList.remove('show');pv.classList.remove('show');bub.classList.remove('show');mic.classList.remove('busy');}],
+      [500,()=>axFly(ghost,mic)],
+      [1800,()=>{ghost.style.opacity='0';mic.classList.add('busy');bub.textContent='מתרגם… 0/124';bub.classList.add('show');}]];
+    COUNTS.forEach((n,i)=>s.push([2150+i*330,()=>bub.textContent=`מתרגם… ${n}/124`]));
+    s.push([4700,()=>{mic.classList.remove('busy');bub.classList.remove('show');res.classList.add('show');}]);
+    s.push([5250,()=>pv.classList.add('show')]);
+    return s;
+  };
+  axLoop('ax2',sched,9400,()=>{res.classList.add('show');pv.classList.add('show');});
+})();
+(()=>{ /* AX3 — transcription, alternating video→SRT / audio→TXT */
+  const ghost=$id('ax3ghost'),gname=$id('ax3ghostName'),sname=$id('ax3srcName'),
+        res=$id('ax3res'),rname=$id('ax3resName'),pv=$id('ax3pv'),bub=$id('ax3bub'),mic=$id('ax3mic'),
+        src=$id('ax3src');
+  if(!ghost)return;
+  const PV_SRT='<div class="pv-name">video.srt</div><div class="idx">1</div><div class="ts">00:00:00,000 --> 00:00:02,400</div><div class="he">ברוכים הבאים להרצאה</div><div class="idx">2</div><div class="ts">00:00:02,600 --> 00:00:05,100</div><div class="he">נתחיל בסקירה קצרה</div>';
+  const PV_TXT='<div class="pv-name">recording.txt</div><div class="he" style="margin:0">סיכום הפגישה: נתחיל בעדכון קצר על הפרויקט, ואחר כך נעבור למשימות להמשך השבוע.</div>';
+  const VID='<path d="M4 1h11l6 6v19a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1z" fill="#251d3d" stroke="#a855f7" stroke-width="1.4"/><path d="M15 1v6h6" fill="none" stroke="#a855f7" stroke-width="1.4"/><path d="M9 14l7 4.5-7 4.5z" fill="#c4b5fd" stroke="none"/>';
+  const AUD='<path d="M4 1h11l6 6v19a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1z" fill="#3d2a14" stroke="#f59e0b" stroke-width="1.4"/><path d="M15 1v6h6" fill="none" stroke="#f59e0b" stroke-width="1.4"/><path d="M8 16v6M11 13v9M14 15v7M17 17v5" stroke="#fcd34d" stroke-width="1.7" stroke-linecap="round"/>';
+  const setNames=(g,sn,r,icon)=>{gname.textContent=g;sname.textContent=sn;rname.textContent=r;
+    ghost.querySelector('svg').innerHTML=icon;src.querySelector('svg').innerHTML=icon;};
+  const half=(off,names,busy,pvHtml)=>{
+    const s=[[off,()=>{ghost.style.transition='none';ghost.style.transform='none';ghost.style.opacity='1';
+      void ghost.offsetWidth;ghost.style.transition='';
+      res.classList.remove('show');pv.classList.remove('show');bub.classList.remove('show');mic.classList.remove('busy');
+      setNames(...names);}],
+      [off+550,()=>axFly(ghost,mic)],
+      [off+1850,()=>{ghost.style.opacity='0';mic.classList.add('busy');bub.textContent=busy(0);bub.classList.add('show');}],
+      [off+2500,()=>bub.textContent=busy(1)],[off+3200,()=>bub.textContent=busy(2)],
+      [off+4000,()=>{mic.classList.remove('busy');bub.classList.remove('show');res.classList.add('show');}],
+      [off+4550,()=>{pv.innerHTML=pvHtml;pv.classList.add('show');}]];
+    return s;
+  };
+  const sched=()=>[
+    ...half(0,['video.mp4','video.mp4','video.srt',VID],n=>`מתמלל… ${n}/3`,PV_SRT),
+    ...half(8700,['recording.mp3','recording.mp3','recording.txt',AUD],n=>`מתמלל… ${n}/2`,PV_TXT)];
+  axLoop('ax3',sched,17400,()=>{res.classList.add('show');pv.innerHTML=PV_SRT;pv.classList.add('show');});
+})();
+
+/* ---- AX5: radial side panel + theme cycling ---- */
+(()=>{
+  const root=$id('ax5');if(!root)return;
+  const mic=$id('ax5mic'),tag=$id('ax5tag');
+  const wedges=[...root.querySelectorAll('.wedge5')],sectors=[...root.querySelectorAll('.sector')];
+  const setActive=k=>{wedges.forEach(w=>w.classList.toggle('active',w.dataset.s===k));
+    sectors.forEach(p=>p.classList.toggle('active',p.dataset.s===k));};
+  const THEMES=[['graphite','גרפיט'],['azure','כחול'],['sunset','שקיעה'],['orb-aurora','זוהר הצפון']];
+  const sched=()=>{
+    const s=[[0,()=>{root.classList.remove('expanded');setActive(null);}],
+      [800,()=>root.classList.add('expanded')],
+      [1800,()=>setActive('top')],
+      [3100,()=>setActive('middle')],
+      [4400,()=>setActive('burn')],
+      [5700,()=>setActive(null)],
+      [6200,()=>root.classList.remove('expanded')]];
+    THEMES.forEach(([t,n],i)=>s.push([400+i*1800,()=>{mic.dataset.theme=t;tag.textContent=n;}]));
+    return s;
+  };
+  axLoop('ax5',sched,7600,()=>{root.classList.add('expanded');mic.dataset.theme='orb-aurora';tag.textContent='זוהר הצפון';});
+})();
 
 /* ---- lightbox ---- */
 const lb=document.getElementById('lb'),lbImg=document.getElementById('lbImg'),lbClose=document.getElementById('lbClose');

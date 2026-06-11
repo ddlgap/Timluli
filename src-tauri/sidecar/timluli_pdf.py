@@ -197,8 +197,10 @@ BATCH_SYSTEM_PROMPT = build_batch_system_prompt("Hebrew")
 
 # Batch sizing: cap by item count AND character budget so a batch stays well under
 # free-tier TPM limits and its JSON output comfortably fits in max_tokens.
-BATCH_MAX_ITEMS = 12
-BATCH_CHAR_BUDGET = 1800
+# 16/2600 ≈ 2.4K tokens per request round-trip — fewer, fatter requests than the
+# old 12/1800 (≈30% fewer round-trips on a dense page) while still 429-safe.
+BATCH_MAX_ITEMS = 16
+BATCH_CHAR_BUDGET = 2600
 # Parallel translation batches per page. Overridden by --concurrency (paid keys →
 # >1). 1 = conservative sequential behavior safe for free-tier rate limits.
 MAX_CONCURRENCY = 1
@@ -593,6 +595,24 @@ def _protect_tokens(text):
     return _PROTECT_RE.sub(_sub, text), mapping
 
 
+def _masked_is_verbatim(masked):
+    """True when nothing translatable survived the masking — only sentinels
+    (Q<n>Q9Z), icon placeholders (Q<n>Q8Z), digits, whitespace and punctuation.
+
+    Such a unit (e.g. the title 'Yealink T31G' = brand + SKU, both protected)
+    must NEVER be sent to the model: with zero real words for context it either
+    hallucinates ('איור 6-9') or transliterates the sentinels into Hebrew
+    ('קי21קי9ז') — the title-destruction bug. The caller restores the tokens
+    directly instead."""
+    rest = _ICON_RE.sub("", _SENTINEL_RE.sub("", masked or ""))
+    return not any(c.isalpha() for c in rest)
+
+
+# A sentinel the model TRANSLITERATED into Hebrew script (Q→'קי', Z→'ז':
+# 'Q21Q9Z' → 'קי21קי9ז'). Resolved through the global map like an ASCII leak.
+_HEB_SENTINEL_RE = re.compile(r"קי(\d+)קי9ז")
+
+
 def _restore_tokens(text, mapping):
     for key, val in mapping.items():
         text = text.replace(key, val)
@@ -602,6 +622,11 @@ def _restore_tokens(text, mapping):
     # (model hallucination, never minted) is dropped rather than shown.
     if "Q" in text and _SENTINEL_RE.search(text):
         text = _SENTINEL_RE.sub(lambda m: _GLOBAL_TOKENS.get(m.group(0), ""), text)
+    # Defense-in-depth: restore Hebrew-transliterated sentinels the ASCII regex
+    # can't see. An unknown index is dropped, same policy as above.
+    if "קי" in text:
+        text = _HEB_SENTINEL_RE.sub(
+            lambda m: _GLOBAL_TOKENS.get(f"Q{m.group(1)}Q9Z", ""), text)
     return text
 
 
@@ -715,6 +740,11 @@ def translate_text(text: str) -> str:
     # Clean up math-font prime encoding (S9 -> S') before translation
     text = _defragment_urls(_fix_primes(text))
     text, _masks = _protect_tokens(text)
+
+    # Nothing translatable left (e.g. 'Yealink T31G' → two sentinels)? Skip the
+    # model entirely — it can only hallucinate or transliterate. Restore verbatim.
+    if _masked_is_verbatim(text):
+        return _restore_tokens(text, _masks)
 
     last_err = None
     for provider, model in FALLBACK_CHAIN:
@@ -884,8 +914,13 @@ def translate_batch(pairs):
             result[pid] = text  # numbers/symbols/empty: keep as-is
         else:
             masked, m = _protect_tokens(_defragment_urls(_fix_primes(t)))
-            todo[str(pid)] = masked
-            masks[str(pid)] = m
+            if _masked_is_verbatim(masked):
+                # All-sentinel unit (product names, SKUs): the model can only
+                # hallucinate on it — restore verbatim, never send it.
+                result[pid] = _restore_tokens(masked, m)
+            else:
+                todo[str(pid)] = masked
+                masks[str(pid)] = m
     if not todo:
         return result
 
@@ -1507,6 +1542,94 @@ def _split_numbered_sections(text):
 
 
 # ── Hebrew rendering (Phase 4) ───────────────────────────────────────────────
+def _vertical_rules(page, min_len=50.0):
+    """Long vertical vector lines/bars — drawn column separators — as
+    (x, y0, y1) tuples.
+
+    Column BANDS are detected from text gutters, so a band edge can land a few
+    points past the drawn rule; Hebrew right-aligned to that edge then crosses
+    the rule (QRG p2: 23 spans over the separators). The bands get clamped to
+    these rule positions instead."""
+    rules = []
+    try:
+        drawings = page.get_drawings()
+    except Exception:
+        return rules
+    for d in drawings:
+        for item in d.get("items", []):
+            if item[0] == "l":
+                p1, p2 = item[1], item[2]
+                if abs(p1.x - p2.x) < 1.0 and abs(p2.y - p1.y) >= min_len:
+                    rules.append((0.5 * (p1.x + p2.x), min(p1.y, p2.y), max(p1.y, p2.y)))
+            elif item[0] == "re":
+                r = item[1]
+                if r.width < 2.0 and r.height >= min_len:
+                    rules.append((0.5 * (r.x0 + r.x1), r.y0, r.y1))
+    return sorted(rules)
+
+
+def _vertical_rules_x(page, min_len=50.0):
+    """Just the x positions of the page's vertical separator rules."""
+    return [x for x, _, _ in _vertical_rules(page, min_len)]
+
+
+def _clamp_band_to_rules(tx0, tx1, unit_center_x, rules_x, inset=6.0):
+    """Trim a target band so it stays on the unit's own side of any drawn
+    vertical rule that falls inside the band."""
+    for rx in rules_x:
+        if tx0 < rx < tx1:
+            if unit_center_x < rx:
+                tx1 = min(tx1, rx - inset)
+            else:
+                tx0 = max(tx0, rx + inset)
+    return tx0, tx1
+
+
+def _compute_height_budgets(units, obstacle_rects=()):
+    """Collision pre-pass: set each unit's allowed growth bottom (`max_y1`).
+
+    `_render_htmlbox_unit` grows a unit's box downward (list items need real
+    line height; paragraphs get slack) — without a budget that growth plows
+    into the unit below and overprints it (the QRG p2/p4 bug: 10 colliding
+    span pairs). The budget is the top edge of the nearest unit/figure BELOW
+    that shares horizontal range with this unit's target band, minus a 2pt
+    gap. Growth clamps there and insert_htmlbox's scale-to-fit (scale_low=0)
+    shrinks the text instead — smaller beats unreadable-overprint."""
+    boxes = []
+    for u in units:
+        boxes.append((u.get("target_x0", u["block_x0"]), u["block_y0"],
+                      u.get("target_x1", u["block_x1"]), u["block_y1"]))
+    obs = [(float(r.x0), float(r.y0), float(r.x1), float(r.y1))
+           for r in obstacle_rects]
+    for i, u in enumerate(units):
+        x0, _, x1, y1 = boxes[i]
+        width = max(x1 - x0, 1.0)
+        best = None
+        for j, (ox0, oy0, ox1, oy1) in enumerate(boxes):
+            if j == i or oy0 < y1 - 1.0:
+                continue  # not below this unit
+            ov = min(x1, ox1) - max(x0, ox0)
+            if ov < 0.3 * min(width, max(ox1 - ox0, 1.0)):
+                continue  # different column / no real horizontal overlap
+            best = oy0 if best is None else min(best, oy0)
+        for ox0, oy0, ox1, oy1 in obs:
+            if oy0 < y1 - 1.0 or min(x1, ox1) - max(x0, ox0) <= 0:
+                continue
+            best = oy0 if best is None else min(best, oy0)
+        if best is not None:
+            u["max_y1"] = best - 2.0
+
+
+def _grow_cap(unit, y1, page):
+    """The bottom limit for downward box growth: the collision budget when one
+    was computed (never tighter than the source box itself — the source layout
+    was collision-free), else the page edge."""
+    cap = unit.get("max_y1")
+    if cap is None:
+        return page.rect.y1 - 2
+    return min(max(float(cap), float(y1)), page.rect.y1 - 2)
+
+
 def _render_htmlbox_unit(page, unit, translated, archive, page_w):
     """Render one translated unit with page.insert_htmlbox.
 
@@ -1539,7 +1662,14 @@ def _render_htmlbox_unit(page, unit, translated, archive, page_w):
     # explicit `text-align:right` re-LEFT-aligns it (the documented swap). So emit an
     # explicit text-align ONLY to CENTER a centered title/banner; right-aligned
     # body/headings/lists rely on the dir-attribute default.
-    ta = "text-align:center;" if is_centered_rect(src_rect, page_w) else ""
+    # A block whose target was widened to a COLUMN band is column text, never a
+    # centered banner — without this guard every middle-column block of a
+    # 3-column page looks "page-centered" and renders ragged-both-sides
+    # (text-align:center) instead of flush right.
+    widened = (abs(x0 - float(unit["block_x0"])) > 0.5
+               or abs(x1 - float(unit["block_x1"])) > 0.5)
+    ta = ("text-align:center;"
+          if not widened and is_centered_rect(src_rect, page_w) else "")
     base_style = (f'margin:0;padding:0;{ta}'
                   f'color:{color_hex};font-weight:{weight};font-size:{size:.1f}pt;'
                   f'line-height:1.2')
@@ -1561,11 +1691,12 @@ def _render_htmlbox_unit(page, unit, translated, archive, page_w):
         # The marker is passed as the lead token of _html_with_icons so the RTL+<img>
         # compensation (token reversal) keeps it at the right edge.
         inner = _html_with_icons(b, archive, size, _added, lead_html=mk + '&#160;')
-        # §polish-3: hanging indent — marker hangs at the RIGHT edge, wrapped lines indent
-        # under the body (padding-right pulls the block in; the negative text-indent pushes
-        # the first line's marker back out to the edge).
-        return (f'<div dir="rtl" style="{base_style};margin-top:1.5px;'
-                f'padding-right:1.2em;text-indent:-1.2em">{inner}</div>')
+        # NO hanging indent: this MuPDF build ignores a negative text-indent under
+        # dir="rtl", so `padding-right:1.2em;text-indent:-1.2em` insets EVERY list
+        # line (marker included) by 1.2em — list blocks then sit visibly left of
+        # flush paragraphs (mixed right edges across the column). Flush-right
+        # items with the marker on the right edge match the source's clean margin.
+        return (f'<div dir="rtl" style="{base_style};margin-top:1.5px">{inner}</div>')
 
     items = None
     if unit.get("is_list") and not _is_multi_numbered(translated):
@@ -1594,7 +1725,7 @@ def _render_htmlbox_unit(page, unit, translated, archive, page_w):
                 n_rows += 1
         html_str = "".join(rows)
         need = n_rows * size * 1.55
-        bottom = min(max(y1, y0 + need), page.rect.y1 - 2)
+        bottom = min(max(y1, y0 + need), _grow_cap(unit, y1, page))
         rect = fitz.Rect(x0, y0, x1, bottom)
     elif items is not None:
         rows = []
@@ -1606,13 +1737,14 @@ def _render_htmlbox_unit(page, unit, translated, archive, page_w):
         html_str = "".join(rows)
         n_rows = len(items) + (1 if lead else 0)
         need = n_rows * size * 1.55
-        bottom = min(max(y1, y0 + need), page.rect.y1 - 2)
+        bottom = min(max(y1, y0 + need), _grow_cap(unit, y1, page))
         rect = fitz.Rect(x0, y0, x1, bottom)
     else:
         # Modest downward slack so longer Hebrew isn't shrunk too hard (the box fills
-        # top-down, so unused slack is harmless), bounded and clamped to the page.
+        # top-down, so unused slack is harmless), bounded and clamped to the page —
+        # and to the collision budget, so slack never bleeds into the unit below.
         slack = min((y1 - y0) * 0.5, 14)
-        rect = fitz.Rect(x0, y0, x1, min(y1 + slack, page.rect.y1 - 1))
+        rect = fitz.Rect(x0, y0, x1, min(y1 + slack, _grow_cap(unit, y1, page)))
         html_str = f'<div dir="rtl" style="{base_style}">' \
                    f'{_html_with_icons(translated, archive, size, _added)}</div>'
 
@@ -1914,30 +2046,44 @@ def _overlay_inline_icons(page, src_page, icon_rects, units):
             iy0 = min(r.y0 for r in row)
             iy1 = max(r.y1 for r in row)
             dests = [(r, r) for r in row]  # default: keep source position
+            # The collision window must be the unit's TARGET band, not its source
+            # block: §G2 widening re-flows the Hebrew across the whole column, so
+            # checking against the (narrow) source bbox missed the very words the
+            # icon was about to cover ("מקש" → "קש"). Hostless icons check the
+            # full page row instead of skipping the check entirely.
             if u is not None:
-                bx0, bx1 = float(u["block_x0"]), float(u["block_x1"])
-                line_heb = [w for w in heb_words
-                            if iy0 - 3 <= 0.5 * (w[1] + w[3]) <= iy1 + 3
-                            and w[2] > bx0 - 2 and w[0] < bx1 + 2]
-                collides = bool(line_heb) and any(
-                    any(r.x1 > w[0] and r.x0 < w[2] for w in line_heb) for r in row)
-                if collides:
-                    hl = min(w[0] for w in line_heb)
-                    hr = max(w[2] for w in line_heb)
-                    gap = 3.0
-                    need = sum(r.width for r in row) + gap * (len(row) - 1)
-                    start = None
-                    if bx1 - (hr + gap) >= need:       # room after Hebrew (preferred)
-                        start = hr + gap
-                    elif (hl - gap) - bx0 >= need:      # room before Hebrew
-                        start = hl - gap - need
-                    if start is not None:
-                        packed = []
-                        x = start
-                        for r in row:                  # keep left-to-right key order
-                            packed.append((r, fitz.Rect(x, r.y0, x + r.width, r.y1)))
-                            x += r.width + gap
-                        dests = packed
+                bx0 = float(u.get("target_x0", u["block_x0"]))
+                bx1 = float(u.get("target_x1", u["block_x1"]))
+            else:
+                bx0, bx1 = float(page.rect.x0) + 6, float(page.rect.x1) - 6
+            line_heb = [w for w in heb_words
+                        if iy0 - 3 <= 0.5 * (w[1] + w[3]) <= iy1 + 3
+                        and w[2] > bx0 - 2 and w[0] < bx1 + 2]
+            collides = bool(line_heb) and any(
+                any(r.x1 > w[0] and r.x0 < w[2] for w in line_heb) for r in row)
+            if collides:
+                hl = min(w[0] for w in line_heb)
+                hr = max(w[2] for w in line_heb)
+                gap = 3.0
+                need = sum(r.width for r in row) + gap * (len(row) - 1)
+                start = None
+                if bx1 - (hr + gap) >= need:       # room after Hebrew (preferred)
+                    start = hr + gap
+                elif (hl - gap) - bx0 >= need:      # room before Hebrew
+                    start = hl - gap - need
+                if start is not None:
+                    packed = []
+                    x = start
+                    for r in row:                  # keep left-to-right key order
+                        packed.append((r, fitz.Rect(x, r.y0, x + r.width, r.y1)))
+                        x += r.width + gap
+                    dests = packed
+                else:
+                    # No safe spot on this line — skip the icons rather than
+                    # stamp them over a word (a missing key-cap beats an
+                    # unreadable one).
+                    _tprint("  [icon overlay skipped: no clear spot on line]")
+                    continue
             for r, dest in dests:
                 try:
                     pix = src_page.get_pixmap(matrix=fitz.Matrix(4, 4), clip=r, alpha=False)
@@ -2213,6 +2359,101 @@ def _assemble_paragraph_with_icons(lines, blk_icons, capture_page, font_size):
     return paragraph, n_icons
 
 
+# A text block that is ONLY a list marker — "1." / "2)" / a bullet glyph.
+# Hanging-indent layouts emit these as their own blocks, detached from the item
+# text body.
+_MARKER_BLOCK_RE = re.compile(r'^\s*(?:\d{1,2}[.)]|[•·▪‣◦*–-])\s*$')
+
+
+def _absorb_marker_blocks(blocks):
+    """Splice marker-only blocks ('1.' hanging in the margin) into their row-mate
+    body block.
+
+    Such markers never pass Phase 1's ≤3-char filter, so they were neither
+    translated NOR redacted: the English-position marker survived at the left
+    edge while its item text right-aligned as Hebrew — the detached-number bug.
+    Spliced into the body block, the marker translates, redacts and renders
+    WITH its item. Mutates blocks in place; consumed markers lose their lines
+    (the empty shell is skipped by the no-text filter)."""
+    text_blocks = [b for b in blocks if b.get("type") == 0 and b.get("lines")]
+    for mb in text_blocks:
+        if not _MARKER_BLOCK_RE.match(_block_full_text(mb) or ""):
+            continue
+        mx0, my0, mx1, my1 = mb["bbox"]
+        mcy = 0.5 * (my0 + my1)
+        best = None
+        for bb in text_blocks:
+            if bb is mb or not bb.get("lines"):
+                continue
+            if _MARKER_BLOCK_RE.match(_block_full_text(bb) or ""):
+                continue
+            bx0, by0, bx1, by1 = bb["bbox"]
+            if not (by0 - 2 <= mcy <= by1 + 2):
+                continue  # not on this block's rows
+            # Body starts at/near the marker's right edge. Its left edge may
+            # already REACH BACK over the marker column (hanging indents; a body
+            # whose bbox grew when it absorbed the previous marker) — so allow
+            # overlap, just never a body that lies left of the marker.
+            gap = bx0 - mx1
+            if gap > 40 or bx0 < mx0 - 2:
+                continue
+            if best is None or abs(gap) < best[0]:
+                best = (abs(gap), bb)
+        if best is None:
+            continue
+        bb = best[1]
+        # Insert the marker's line right before the body line it sits beside, so
+        # the assembled paragraph reads "… 2. Enter the number …" in order.
+        idx = len(bb["lines"])
+        for i, ln in enumerate(bb["lines"]):
+            if 0.5 * (ln["bbox"][1] + ln["bbox"][3]) >= my0 - 1:
+                idx = i
+                break
+        bb["lines"][idx:idx] = mb["lines"]
+        bx0, by0, bx1, by1 = bb["bbox"]
+        bb["bbox"] = (min(bx0, mx0), min(by0, my0), max(bx1, mx1), max(by1, my1))
+        mb["lines"] = []
+
+
+def _split_side_by_side_block(block):
+    """Split one extraction block whose lines live in horizontally DISJOINT bands
+    (≥25pt gutter no line crosses) into one block per band.
+
+    PyMuPDF groups same-baseline runs into one block even across a wide gap —
+    the icon-legend row 'Redial last        Speakerphone' arrived as ONE block,
+    so it translated as one (nonsense) phrase and rendered across the icons.
+    Returns [block] unchanged when there is no clean gutter (normal paragraphs:
+    their lines all span the column, so the intervals merge into one band)."""
+    lines = block.get("lines") or []
+    if len(lines) < 2:
+        return [block]
+    bands = []  # merged [x0, x1] coverage intervals
+    for x0, x1 in sorted((ln["bbox"][0], ln["bbox"][2]) for ln in lines):
+        if bands and x0 - bands[-1][1] < 25:
+            bands[-1][1] = max(bands[-1][1], x1)
+        else:
+            bands.append([x0, x1])
+    if len(bands) < 2:
+        return [block]
+    groups = [[] for _ in bands]
+    for ln in lines:
+        c = 0.5 * (ln["bbox"][0] + ln["bbox"][2])
+        for gi, (a, b) in enumerate(bands):
+            if a - 1 <= c <= b + 1:
+                groups[gi].append(ln)
+                break
+    subs = []
+    for g in groups:
+        if not g:
+            continue
+        nb = dict(block)
+        nb["lines"] = g
+        nb["bbox"] = (min(l["bbox"][0] for l in g), min(l["bbox"][1] for l in g),
+                      max(l["bbox"][2] for l in g), max(l["bbox"][3] for l in g))
+        subs.append(nb)
+    return subs if len(subs) > 1 else [block]
+
+
 def _merge_continuation_units(units, page_w):
     """Merge consecutive BODY units in the same column that are continuation fragments of
     one logical block (#1). The source splits multi-step procedures (Warm/Blind/Voicemail
@@ -2231,7 +2472,18 @@ def _merge_continuation_units(units, page_w):
             if merged:
                 a = merged[-1]
                 gap = u["block_y0"] - a["block_y1"]
+                # A continuation fragment shares its predecessor's column, so it
+                # must overlap it horizontally. The page-half bucketing above is
+                # too coarse for a 3-column page (two columns share a half):
+                # without this, a heading in column 1 merged with body text in
+                # column 2 and the merged bbox spanned both — the cross-column
+                # overprint bug.
+                x_ov = (min(a["block_x1"], u["block_x1"])
+                        - max(a["block_x0"], u["block_x0"]))
+                narrower = max(1.0, min(a["block_x1"] - a["block_x0"],
+                                        u["block_x1"] - u["block_x0"]))
                 if (not a["is_label"] and not u["is_label"]
+                        and x_ov >= 0.5 * narrower
                         and abs(a["font_size"] - u["font_size"]) <= 1.5
                         and -3.0 <= gap < 0.7 * a["font_size"]):
                     a["paragraph"] = (a["paragraph"] + " " + u["paragraph"]).strip()
@@ -2372,7 +2624,24 @@ def translate_page(page: fitz.Page, page_num: int, source_page: fitz.Page = None
                    if not any(r.intersects(fr) for fr in figure_rects)]
     _block_icons = _assign_icons_to_blocks(blocks, _page_icons)
 
+    # Detached '1.'/bullet marker blocks rejoin their item text (must run before
+    # the ≤3-char filter below silently drops them, leaving unredacted markers).
+    _absorb_marker_blocks(blocks)
+
+    # Blocks whose same-baseline lines sit in disjoint x-bands (icon-legend label
+    # pairs) split into per-band blocks so each label translates independently.
+    # Icon-hosting blocks keep their original line flow (the §G1 inline path).
+    _phase1_blocks = []
     for block in blocks:
+        if block.get("type") == 0 and not _block_icons.get(id(block)):
+            subs = _split_side_by_side_block(block)
+            if len(subs) > 1 and id(block) in label_block_ids:
+                label_block_ids.update(id(s) for s in subs)
+            _phase1_blocks.extend(subs)
+        else:
+            _phase1_blocks.append(block)
+
+    for block in _phase1_blocks:
         if block["type"] != 0:
             continue
         block_rect = fitz.Rect(block["bbox"])
@@ -2612,19 +2881,61 @@ def translate_page(page: fitz.Page, page_num: int, source_page: fitz.Page = None
     # stops the overlap, while still hugging the column's right edge (RTL).
     if len(boundaries) > 2:
         _pw = page.rect.width
+        # Drawn column-separator rules: the text bands get clamped to them so
+        # right-aligned Hebrew hugs (and never crosses) the printed separator.
+        _rules_x = _vertical_rules_x(page)
 
         def _band_for(xc):
             for a, b in zip(boundaries, boundaries[1:]):
                 if a <= xc <= b:
                     return a, b
             return None
+
+        # Each band's alignment edge = the column's ORIGINAL content right margin
+        # (max source x1 of its units), not the gutter edge — a text-gutter band
+        # can overshoot the printed margin by ~10pt, leaving widened blocks
+        # right of the un-widened ones (mixed right edges).
+        _band_content_x1 = {}
+        for u in units:
+            band = _band_for(0.5 * (u["block_x0"] + u["block_x1"]))
+            if band:
+                cur = _band_content_x1.get(band[0], -1.0)
+                _band_content_x1[band[0]] = max(cur, float(u["block_x1"]))
         for unit in units:
             bx0, bx1 = unit["block_x0"], unit["block_x1"]
             if (bx1 - bx0) >= _pw * 0.55 or unit.get("is_label"):
                 continue  # full-width banners/footers and figure labels stay put
             band = _band_for(0.5 * (bx0 + bx1))
-            if band:
-                unit["target_x0"], unit["target_x1"] = band[0] + 3, band[1] - 3
+            if not band:
+                continue
+            # Units sharing a ROW inside one band (icon-legend label pairs like
+            # 'Mute | Voicemail') must keep their own boxes: widening both to
+            # the band right-aligns them onto the same edge → overprint.
+            row_mate = any(
+                u2 is not unit and _units_side_by_side(unit, u2)
+                and band[0] <= 0.5 * (u2["block_x0"] + u2["block_x1"]) <= band[1]
+                for u2 in units)
+            if row_mate:
+                _tprint(f"  [g2] skip row-mate x=({bx0:.0f},{bx1:.0f}) "
+                        f"'{unit['paragraph'][:25]}'")
+                continue
+            band_x1 = band[1] - 3
+            content_x1 = _band_content_x1.get(band[0])
+            if content_x1 is not None:
+                band_x1 = min(band_x1, content_x1 + 1)
+            tx0, tx1 = _clamp_band_to_rules(
+                band[0] + 3, band_x1, 0.5 * (bx0 + bx1), _rules_x)
+            if tx1 - tx0 < 10:
+                continue  # degenerate after clamping — keep the source box
+            _tprint(f"  [g2] widen ({bx0:.0f},{bx1:.0f})->({tx0:.0f},{tx1:.0f}) "
+                    f"'{unit['paragraph'][:25]}'")
+            unit["target_x0"], unit["target_x1"] = tx0, tx1
+
+    # Collision budgets: every unit learns how far down it may grow before hitting
+    # the next unit/figure in its column (consumed by _render_htmlbox_unit). Must
+    # run AFTER target_x assignment + the §G2 column widening so budgets use the
+    # final horizontal bands.
+    _compute_height_budgets(units, [r for r, _ in figure_images])
 
     # Delete the ORIGINAL inline key/button icons now (redaction with IMAGE_NONE keeps
     # them in place, where they'd show through — and partly under — the Hebrew drawn on
@@ -2987,6 +3298,64 @@ def _qa_hebrew_count(t):
     return sum(1 for c in t if "֐" <= c <= "׿")
 
 
+def _qa_page_rule_crossings(op):
+    """Count text spans whose bbox crosses a drawn vertical column separator —
+    right-aligned text that escaped its column band. Y-aware: a footer line
+    passing the rule's x BELOW the rule's extent is not a crossing."""
+    rules = _vertical_rules(op)
+    if not rules:
+        return 0
+    n = 0
+    try:
+        d = op.get_text("dict")
+    except Exception:
+        return 0
+    for b in d.get("blocks", []):
+        if b.get("type") != 0:
+            continue
+        for ln in b.get("lines", []):
+            for sp in ln.get("spans", []):
+                if not sp.get("text", "").strip():
+                    continue
+                x0, y0, x1, y1 = sp["bbox"]
+                if any(x0 < rx - 1 and x1 > rx + 1 and y0 < ry1 and y1 > ry0
+                       for rx, ry0, ry1 in rules):
+                    n += 1
+    return n
+
+
+def _qa_page_collisions(op):
+    """Count text-span pairs overprinting each other (>30% of the smaller
+    span's area) on one rendered page. A healthy page has 0."""
+    spans = []
+    try:
+        d = op.get_text("dict")
+    except Exception:
+        return 0
+    for b in d.get("blocks", []):
+        if b.get("type") != 0:
+            continue
+        for ln in b.get("lines", []):
+            for sp in ln.get("spans", []):
+                if sp.get("text", "").strip():
+                    spans.append(sp["bbox"])
+    n = 0
+    for i in range(len(spans)):
+        ax0, ay0, ax1, ay1 = spans[i]
+        area_a = max(0.0, ax1 - ax0) * max(0.0, ay1 - ay0)
+        for j in range(i + 1, len(spans)):
+            bx0, by0, bx1, by1 = spans[j]
+            ov = (max(0.0, min(ax1, bx1) - max(ax0, bx0))
+                  * max(0.0, min(ay1, by1) - max(ay0, by0)))
+            if ov <= 0:
+                continue
+            area_b = max(0.0, bx1 - bx0) * max(0.0, by1 - by0)
+            smaller = min(area_a, area_b)
+            if smaller > 0 and ov / smaller > 0.3:
+                n += 1
+    return n
+
+
 def run_qa_gate(src_path, out_path, mode, pages=None):
     """Production QA gate: open the source + final PDF and validate the Hebrew output.
 
@@ -3008,6 +3377,8 @@ def run_qa_gate(src_path, out_path, mode, pages=None):
         "english_leakage": [],
         "clipped_blocks": [],
         "sentinel_leaks": [],
+        "text_collisions": [],
+        "rule_crossings": [],
         "icon_warnings": [],
         "glossary_warnings": list(_GLOSSARY_WARNINGS),
         "fallbacks_used": sorted(_exhausted_models),
@@ -3039,11 +3410,23 @@ def run_qa_gate(src_path, out_path, mode, pages=None):
         heb = _qa_hebrew_count(ot)
         nun = ot.count("נ")
         nun_total += nun
-        # Leftover protected-token sentinels (intact 'Q0Q9Z' or a mangled 'Q0Q'Z'):
-        # a restoration failure that must never reach the user.
-        sents = re.findall(r"Q\d+Q['9]?Z", ot)
+        # Leftover protected-token sentinels (intact 'Q0Q9Z' or a mangled 'Q0Q'Z')
+        # — INCLUDING ones the model transliterated into Hebrew script
+        # ('קי21קי9ז'), which the ASCII pattern is blind to: a restoration
+        # failure that must never reach the user.
+        sents = re.findall(r"Q\d+Q['89]?Z|קי\d+קי['9]?ז", ot)
         if sents:
             report["sentinel_leaks"].append({"page": i + 1, "found": sents[:8]})
+        # Overprinted text: span pairs covering >30% of the smaller one. The
+        # source PDF has ~0; any in the output mean unreadable stacked text
+        # (the box-growth / cross-column-merge class of bugs).
+        pc = _qa_page_collisions(op)
+        if pc:
+            report["text_collisions"].append({"page": i + 1, "pairs": pc})
+        # Text crossing a drawn column-separator rule (band edge past the rule).
+        rc = _qa_page_rule_crossings(op)
+        if rc:
+            report["rule_crossings"].append({"page": i + 1, "spans": rc})
         src_alpha = sum(c.isalpha() and c.isascii() for c in st)
         if src_alpha > 200 and heb < 20:
             report["pages_without_hebrew"].append(i + 1)
@@ -3093,6 +3476,7 @@ def run_qa_gate(src_path, out_path, mode, pages=None):
     if hard_fail:
         report["status"] = "failed"
     elif (report["english_leakage"] or report["clipped_blocks"]
+          or report["text_collisions"] or report["rule_crossings"]
           or report["glossary_warnings"] or report["icon_warnings"]):
         report["status"] = "warning"
     else:
@@ -3268,6 +3652,8 @@ def main():
           f"nun={report['nun_total']} leakage={len(report['english_leakage'])} "
           f"clipped={len(report['clipped_blocks'])} "
           f"sentinels={len(report['sentinel_leaks'])} "
+          f"collisions={sum(c['pairs'] for c in report['text_collisions'])} "
+          f"rule_cross={sum(c['spans'] for c in report['rule_crossings'])} "
           f"icons={len(report['icon_warnings'])} "
           f"glossary_fixes={len(report['glossary_warnings'])}")
     if RTL_LAYOUT_MODE != "same-box" and report["status"] == "failed":

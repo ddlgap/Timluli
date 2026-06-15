@@ -1,7 +1,7 @@
 {
   "name": "timluli",
   "private": true,
-  "version": "1.15.0",
+  "version": "1.15.1",
   "type": "module",
   "description": "Hebrew speech-to-text system-wide for Windows",
   "scripts": {

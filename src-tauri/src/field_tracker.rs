@@ -95,6 +95,38 @@ pub fn dock_position(mic: &WebviewWindow, rect: FieldRect) -> (i32, i32) {
     (cx - half, cy - half)
 }
 
+/// True when `rect` overlaps the visible area of at least one connected monitor.
+///
+/// Some editors don't expose a normal on-screen text field to UI Automation: Google
+/// Docs renders the page on a `<canvas>` and routes keystrokes through a hidden,
+/// off-screen contenteditable, so the "focused field" UIA hands us is positioned far
+/// outside every display. Docking the mic to such a rect flings it off-screen, where
+/// it reads to the user as "the mic disappeared." Callers treat an off-screen (or
+/// degenerate) rect as "no usable field" and fall back to a sane on-screen position.
+///
+/// Conservative on uncertainty: if monitors can't be enumerated we return `true`
+/// (don't reject), so a probing failure never *causes* the mic to vanish.
+fn rect_on_screen(app: &AppHandle, rect: FieldRect) -> bool {
+    if rect.right <= rect.left || rect.bottom <= rect.top {
+        return false; // zero/negative area — never a real field box
+    }
+    let Some(mic) = app.get_webview_window("mic") else {
+        return true;
+    };
+    let monitors = match mic.available_monitors() {
+        Ok(m) if !m.is_empty() => m,
+        _ => return true,
+    };
+    monitors.iter().any(|m| {
+        let p = m.position();
+        let s = m.size();
+        let (ml, mt) = (p.x, p.y);
+        let (mr, mb) = (p.x + s.width as i32, p.y + s.height as i32);
+        // Axis-aligned overlap: the field must share some area with this monitor.
+        rect.left < mr && rect.right > ml && rect.top < mb && rect.bottom > mt
+    })
+}
+
 /// What the focus landed on. `Other` (a non-editable, non-own element) is only
 /// acted on in auto-hide mode, where it triggers hiding the mic.
 #[derive(Debug, Clone, Copy)]
@@ -204,7 +236,14 @@ pub fn focused_field_rect(app: &AppHandle) -> Option<FieldRect> {
         })
         .ok()?;
 
-    rx.recv_timeout(Duration::from_millis(400)).ok().flatten()
+    let rect = rx.recv_timeout(Duration::from_millis(400)).ok().flatten()?;
+    // Reject off-screen fields (e.g. Google Docs' hidden input) so callers fall back
+    // to a visible default instead of docking the mic where it can't be seen.
+    if rect_on_screen(app, rect) {
+        Some(rect)
+    } else {
+        None
+    }
 }
 
 fn run_tracker(app: AppHandle, shutdown: Arc<AtomicBool>, auto_hide: bool) {
@@ -263,6 +302,11 @@ fn apply_rect(app: &AppHandle, rect: FieldRect, auto_hide: bool) {
     let Some(mic) = app.get_webview_window("mic") else {
         return;
     };
+    // An off-screen "field" (e.g. Google Docs' hidden input) would dock the mic
+    // where it can't be seen; leave it at its current visible spot instead.
+    if !rect_on_screen(app, rect) {
+        return;
+    }
     // Dock the disc horizontally centered over the field, snug above its top edge.
     let (x, y) = dock_position(&mic, rect);
     let _ = mic.set_position(Position::Physical(PhysicalPosition::new(x, y)));

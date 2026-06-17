@@ -117,13 +117,18 @@ pub async fn burn_subtitles(
     result
 }
 
+/// Transcribes a video to `<stem>.srt`. `lang` selects the STT language: `None` /
+/// `"auto"` auto-detects the source language (the "transcription only — keep source
+/// language" drop mode); a specific ISO-639-1 code (e.g. `"he"`) pins it.
 #[tauri::command]
 pub async fn transcribe_video_to_srt(
     app: AppHandle,
     state: State<'_, AppState>,
     path: String,
+    lang: Option<String>,
 ) -> Result<String, String> {
-    let result = video_transcription::transcribe_video_to_srt(&app, state, &path).await;
+    let lang = lang.unwrap_or_else(|| "auto".into());
+    let result = video_transcription::transcribe_video_to_srt(&app, state, &path, &lang).await;
     match &result {
         Ok(out) => {
             let _ = app.emit_to("mic", "speakly://transcribe-done", out.clone());
@@ -135,6 +140,72 @@ pub async fn transcribe_video_to_srt(
         }
     }
     result
+}
+
+/// Two-stage drop mode: transcribe the video in its source language, then translate
+/// the resulting `<stem>.srt` into `target_language`, writing `<stem>.<lang>.srt`
+/// next to it. Speaker-gender tagging applies automatically for a Hebrew target
+/// (the transcription stage writes the `<stem>.genders.json` sidecar). Returns the
+/// translated SRT path.
+#[tauri::command]
+pub async fn transcribe_and_translate_video(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    path: String,
+    target_language: String,
+) -> Result<String, String> {
+    // Stage 1 — source-language transcription (auto-detect).
+    let srt = match video_transcription::transcribe_video_to_srt(&app, state, &path, "auto").await {
+        Ok(s) => s,
+        Err(e) => {
+            let _ = app.emit_to("mic", "speakly://transcribe-error", e.clone());
+            let _ = app.emit_to("panel", "speakly://transcribe-error", e.clone());
+            return Err(e);
+        }
+    };
+    // Stage 2 — translate the SRT into the chosen language.
+    let result = crate::translation::translate_file_to(&app, &srt, &target_language).await;
+    match &result {
+        Ok(out) => {
+            let _ = app.emit_to("mic", "speakly://translate-done", out.clone());
+            let _ = app.emit_to("panel", "speakly://translate-done", out.clone());
+        }
+        Err(e) => {
+            let _ = app.emit_to("mic", "speakly://translate-error", e.clone());
+            let _ = app.emit_to("panel", "speakly://translate-error", e.clone());
+        }
+    }
+    result
+}
+
+/// Stashes the dropped video path(s) and shows the drop-mode chooser window. The
+/// chooser reads them back via `get_pending_video`, then invokes either
+/// `transcribe_video_to_srt` (source language) or `transcribe_and_translate_video`.
+#[tauri::command]
+pub fn show_video_options(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    paths: Vec<String>,
+) -> Result<(), String> {
+    *state.pending_video.lock() = paths;
+    if let Some(w) = app.get_webview_window("video-options") {
+        let _ = w.show();
+        let _ = w.center();
+        let _ = w.set_focus();
+    }
+    Ok(())
+}
+
+#[tauri::command]
+pub fn get_pending_video(state: State<'_, AppState>) -> Vec<String> {
+    state.pending_video.lock().clone()
+}
+
+#[tauri::command]
+pub fn close_video_options(app: AppHandle) {
+    if let Some(w) = app.get_webview_window("video-options") {
+        let _ = w.hide();
+    }
 }
 
 /// Streams the single ffmpeg.exe asset to `ffmpeg.exe.part`, verifies SHA-256 (when

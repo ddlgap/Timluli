@@ -7,8 +7,7 @@
 //! a normalized mark is appended after each word, taken from the `post_preds` of the
 //! word's last subtoken. We use only the `post_preds` head (ignore pre/cap/seg).
 
-use std::path::{Path, PathBuf};
-use std::sync::OnceLock;
+use std::path::Path;
 
 use ort::session::Session;
 use ort::value::Value;
@@ -210,7 +209,7 @@ impl PunctEngine {
     /// executable (bundled app-locally, like the vcruntime DLLs) and handed to `ort`
     /// once via load-dynamic.
     pub fn load(model_path: &Path, tokenizer_path: &Path) -> Result<Self, String> {
-        init_ort()?;
+        crate::onnx_runtime::init()?;
         let session = Session::builder()
             .map_err(|e| format!("ort builder: {e}"))?
             .with_intra_threads(num_cpus::get().min(4))
@@ -317,37 +316,10 @@ impl PunctEngine {
     }
 }
 
-/// Resolve `onnxruntime.dll` next to the exe (bundled app-locally) and register it
-/// with `ort` exactly once. Falls back to a few dev-layout candidates.
-fn init_ort() -> Result<(), String> {
-    static INIT: OnceLock<Result<(), String>> = OnceLock::new();
-    INIT.get_or_init(|| match resolve_onnxruntime_dll() {
-        Some(p) => ort::init_from(p.to_string_lossy().to_string())
-            .commit()
-            .map(|_| ())
-            .map_err(|e| format!("אתחול ONNX Runtime נכשל: {e}")),
-        None => Err("onnxruntime.dll לא נמצא ליד קובץ ההפעלה".to_string()),
-    })
-    .clone()
-}
-
-fn resolve_onnxruntime_dll() -> Option<PathBuf> {
-    let mut candidates: Vec<PathBuf> = Vec::new();
-    if let Ok(exe) = std::env::current_exe() {
-        if let Some(dir) = exe.parent() {
-            candidates.push(dir.join("onnxruntime.dll"));
-            candidates.push(dir.join("onnxruntime").join("onnxruntime.dll"));
-        }
-    }
-    if let Ok(cwd) = std::env::current_dir() {
-        candidates.push(cwd.join("onnxruntime.dll"));
-    }
-    candidates.into_iter().find(|p| p.exists())
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::path::PathBuf;
 
     // End-to-end check of the real app code path against the validated INT8 model.
     // Needs the local artifacts + onnxruntime.dll next to the test exe — not in CI.

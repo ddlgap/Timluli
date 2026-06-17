@@ -137,10 +137,20 @@ async function pickAndRun(kind) {
   }
   if (!selected) return; // user cancelled
   const path = typeof selected === 'string' ? selected : selected.path || selected;
-  let command;
-  if (kind === 'translate') command = 'translate_file';
-  else if (videoOn && isVideo(path)) command = 'transcribe_video_to_srt';
-  else command = 'transcribe_audio_file';
+  // A picked video goes through the chooser (transcribe only / + translate), same
+  // as a drop; audio and documents run straight through.
+  if (videoOn && isVideo(path)) {
+    chooserActive = true;
+    showStatus('בחר פעולה…', { busy: true });
+    try {
+      await invoke('show_video_options', { paths: [path] });
+    } catch (e) {
+      chooserActive = false;
+      console.warn('show_video_options failed:', e);
+    }
+    return;
+  }
+  const command = kind === 'translate' ? 'translate_file' : 'transcribe_audio_file';
   await runFile(command, path);
 }
 
@@ -211,6 +221,25 @@ await listen('speakly://burn-progress', (e) => {
   showStatus(percent ? `צורב כתוביות… ${percent}%` : 'צורב כתוביות…', { busy: true });
 });
 
+// A video drop hands off to the chooser window, which drives the backend; the panel
+// only mirrors progress (above) and the final result here. `chooserActive` gates
+// these so they never collide with the inline audio/doc path's own status updates.
+let chooserActive = false;
+const onChooserDone = () => {
+  if (!chooserActive) return;
+  chooserActive = false;
+  showStatus('✓ נשמר');
+};
+const onChooserError = () => {
+  if (!chooserActive) return;
+  chooserActive = false;
+  showStatus('שגיאה');
+};
+await listen('speakly://transcribe-done', onChooserDone);
+await listen('speakly://translate-done', onChooserDone);
+await listen('speakly://transcribe-error', onChooserError);
+await listen('speakly://translate-error', onChooserError);
+
 // ── Drag-and-drop onto the panel ─────────────────────────────────────────────
 // The collapsed strip is a tiny target, so when a file is dragged over the panel
 // we auto-open the radial menu (a big, obvious drop zone) and highlight the file
@@ -242,6 +271,7 @@ async function handleDrag(event) {
   if (type !== 'drop') return;
   body.classList.remove('drag-over');
   openedForDrag = false; // keep the menu open to show progress + result
+  chooserActive = false;
 
   const paths = event.payload.paths || [];
   // Video + SRT pair → subtitle burn-in (style from settings).
@@ -264,7 +294,18 @@ async function handleDrag(event) {
     showStatus('פורמט לא נתמך');
     return;
   }
-  for (const p of videoPaths) await runFile('transcribe_video_to_srt', p);
+  // Video → open the chooser (transcribe only / transcribe + translate).
+  if (videoPaths.length) {
+    chooserActive = true;
+    showStatus('בחר פעולה…', { busy: true });
+    try {
+      await invoke('show_video_options', { paths: videoPaths });
+    } catch (e) {
+      chooserActive = false;
+      console.warn('show_video_options failed:', e);
+    }
+    return;
+  }
   for (const p of audioPaths) await runFile('transcribe_audio_file', p);
   for (const p of docPaths) await runFile('translate_file', p);
 }

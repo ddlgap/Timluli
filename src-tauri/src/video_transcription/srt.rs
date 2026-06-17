@@ -48,8 +48,25 @@ pub fn build_cues(segments: &[Segment]) -> Vec<(i64, i64, String)> {
     // and drop any cue that becomes empty — before numbering, so indices stay gap-free.
     raw.into_iter()
         .filter_map(|(s, e, t)| {
-            let cleaned = trim_cue_lead(&t).to_string();
+            let cleaned = strip_directional_marks(trim_cue_lead(&t));
             (!cleaned.is_empty()).then_some((s, e, cleaned))
+        })
+        .collect()
+}
+
+/// Removes Unicode directional-formatting marks (LRM/RLM, embeddings, overrides,
+/// isolates, BOM) that the STT engine sometimes injects into Hebrew/Arabic text.
+/// VLC renders RLM/LRM as a stray on-screen glyph (vlc#13059) and a bidi-capable
+/// player lays RTL out correctly without them — the same "plain logical order, no
+/// marks" guarantee `wrap_lines` documents (and the translation pipeline applies).
+fn strip_directional_marks(s: &str) -> String {
+    s.chars()
+        .filter(|c| {
+            !matches!(*c,
+                '\u{200E}' | '\u{200F}'        // LRM, RLM
+                | '\u{202A}'..='\u{202E}'      // LRE, RLE, PDF, LRO, RLO
+                | '\u{2066}'..='\u{2069}'      // LRI, RLI, FSI, PDI
+                | '\u{FEFF}')                  // BOM / zero-width no-break space
         })
         .collect()
 }
@@ -348,6 +365,17 @@ mod tests {
         assert!(!srt.contains(", שלום"), "leading comma survived:\n{srt}");
         // a cue that is *only* punctuation is dropped entirely
         assert_eq!(build_srt(&[seg(0, 100, " . , ")]), "");
+    }
+
+    #[test]
+    fn strips_directional_marks_emitted_by_the_transcriber() {
+        // Groq/whisper sometimes prefixes Hebrew segments with RLE/RLM; they must not
+        // survive into the SRT (VLC renders them as a stray glyph, vlc#13059).
+        let srt = build_srt(&[seg(0, 300, "\u{202B}\u{200F}שלום עולם\u{202C}")]);
+        assert!(srt.contains("שלום עולם"), "text lost:\n{srt}");
+        for mark in ['\u{200E}', '\u{200F}', '\u{202A}', '\u{202B}', '\u{202C}', '\u{2066}', '\u{feff}'] {
+            assert!(!srt.contains(mark), "directional mark U+{:04X} survived", mark as u32);
+        }
     }
 
     #[test]

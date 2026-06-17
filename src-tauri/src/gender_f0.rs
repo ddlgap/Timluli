@@ -508,4 +508,176 @@ mod tests {
         assert!(load_for_srt(&srt).is_none(), "unknown gender letter");
         let _ = std::fs::remove_dir_all(&dir);
     }
+
+    /// Reads a 16 kHz mono PCM-s16LE WAV into f32 [-1,1]. Locates the `data` chunk
+    /// so a non-44-byte header still works.
+    fn read_wav_16k_mono(path: &str) -> Vec<f32> {
+        let bytes = std::fs::read(path).unwrap_or_else(|e| panic!("read {path}: {e}"));
+        let data_pos = bytes
+            .windows(4)
+            .position(|w| w == b"data")
+            .expect("no `data` chunk in WAV");
+        bytes[data_pos + 8..] // skip "data" tag (4) + chunk size (4)
+            .chunks_exact(2)
+            .map(|b| i16::from_le_bytes([b[0], b[1]]) as f32 / 32768.0)
+            .collect()
+    }
+
+    /// Baselines the EXISTING F0 classifier on the canonical labeled clip
+    /// (`michael_21-24.wav`, 16 kHz mono). Prints a 3 s median-F0 + M/F timeline and
+    /// a per-ground-truth-segment verdict so we can compare against the user's labels
+    /// (0:22–0:44 two boys=M; 0:44–1:11 two men=M; 1:13–3:00 boy=M + mother=F).
+    /// `#[ignore]`d — needs the clip on disk:
+    ///   cargo test --lib f0_baseline_on_clip -- --ignored --nocapture
+    #[test]
+    #[ignore]
+    fn f0_baseline_on_clip() {
+        let path = std::env::var("TIMLULI_TEST_CLIP")
+            .unwrap_or_else(|_| r"C:\Users\Lenovo\Desktop\gender-clips\michael_21-24.wav".to_string());
+        let samples = read_wav_16k_mono(&path);
+        let total_cs = (samples.len() * 100 / SR) as i64;
+        println!("\nclip: {} samples = {:.1}s\n", samples.len(), samples.len() as f32 / SR as f32);
+
+        println!("=== 3 s sweep (median F0 / voiced ratio / gender) ===");
+        let win = 300i64;
+        let mut t = 0i64;
+        while t < total_cs {
+            let end = (t + win).min(total_cs);
+            let (f0, vr) = analyze_window(&samples, t, end);
+            let g = classify(f0, vr, ((end - t) * 10) as f32);
+            println!(
+                "  {:3}-{:3}s  {:>7}  vr={:4.2}  {:?}",
+                t / 100,
+                end / 100,
+                f0.map(|v| format!("{v:.0}Hz")).unwrap_or_else(|| "-".into()),
+                vr,
+                g
+            );
+            t += win;
+        }
+
+        println!("\n=== per ground-truth segment ===");
+        for (a, b, who, expect) in [
+            (22i64, 44i64, "two boys", "M"),
+            (44, 71, "two men", "M"),
+            (73, 180, "boy + mother", "M/F"),
+        ] {
+            let (f0, vr) = analyze_window(&samples, a * 100, b * 100);
+            let g = classify(f0, vr, ((b - a) * 1000) as f32);
+            println!(
+                "  {a:3}-{b:3}s  {who:14} expect {expect:3}  medianF0={:>7}  vr={vr:4.2}  -> {:?}",
+                f0.map(|v| format!("{v:.0}Hz")).unwrap_or_else(|| "-".into()),
+                g
+            );
+        }
+    }
+
+    /// Groups above-floor 64 ms frames into speech regions (cs), bridging gaps
+    /// < 0.3 s, keeping regions >= 0.6 s — utterance-level windows like a VAD/whisper
+    /// cue, so `analyze_window` sees speech-dense windows (unlike blind fixed windows
+    /// diluted by inter-line silence/music).
+    fn detect_speech_regions(samples: &[f32], floor: f32) -> Vec<(i64, i64)> {
+        let frame_cs = (FRAME as i64 * 100) / SR as i64;
+        let max_gap_frames = 30 / frame_cs.max(1);
+        let min_len_cs = 60i64;
+        let mut regions = Vec::new();
+        let mut cur_start: Option<i64> = None;
+        let mut last_voiced = -999i64;
+        let mut fi = 0i64;
+        let mut i = 0;
+        while i + FRAME <= samples.len() {
+            let rms = (samples[i..i + FRAME].iter().map(|s| s * s).sum::<f32>() / FRAME as f32).sqrt();
+            if rms > floor {
+                if cur_start.is_none() {
+                    cur_start = Some(fi);
+                }
+                last_voiced = fi;
+            } else if let Some(start) = cur_start {
+                if fi - last_voiced > max_gap_frames {
+                    let (s_cs, e_cs) = (start * frame_cs, (last_voiced + 1) * frame_cs);
+                    if e_cs - s_cs >= min_len_cs {
+                        regions.push((s_cs, e_cs));
+                    }
+                    cur_start = None;
+                }
+            }
+            fi += 1;
+            i += FRAME;
+        }
+        if let Some(start) = cur_start {
+            let (s_cs, e_cs) = (start * frame_cs, (last_voiced + 1) * frame_cs);
+            if e_cs - s_cs >= min_len_cs {
+                regions.push((s_cs, e_cs));
+            }
+        }
+        regions
+    }
+
+    /// Decisive test: F0 gender on SPEECH-ALIGNED regions (not blind windows), showing
+    /// current-gate vs a film-relaxed gate (vr>=0.15) per region with its ground-truth
+    /// zone. Answers whether adults (men->M, mother->F) get tagged once windows are
+    /// speech-aligned, and confirms boys->F (wrong, fundamental). `#[ignore]`d:
+    ///   cargo test --lib f0_speech_regions_on_clip -- --ignored --nocapture
+    #[test]
+    #[ignore]
+    fn f0_speech_regions_on_clip() {
+        let path = std::env::var("TIMLULI_TEST_CLIP")
+            .unwrap_or_else(|_| r"C:\Users\Lenovo\Desktop\gender-clips\michael_21-24.wav".to_string());
+        let samples = read_wav_16k_mono(&path);
+        let rms = (samples.iter().map(|s| s * s).sum::<f32>() / samples.len().max(1) as f32).sqrt();
+        let peak = samples.iter().fold(0f32, |m, &s| m.max(s.abs()));
+        let floor = (0.6 * rms).max(0.005);
+        println!(
+            "\nlevel: rms={rms:.4} ({:.1} dBFS), peak={peak:.3}; speech floor={floor:.4}",
+            20.0 * rms.max(1e-9).log10()
+        );
+        let regions = detect_speech_regions(&samples, floor);
+        let g_str = |g: SegmentGender| match g {
+            SegmentGender::Male => "Male",
+            SegmentGender::Female => "Female",
+            SegmentGender::Unknown => "Unknown",
+        };
+        let zone = |t_cs: i64| -> &'static str {
+            let s = t_cs / 100;
+            if (22..44).contains(&s) {
+                "boys(exp M)"
+            } else if (44..71).contains(&s) {
+                "men(exp M)"
+            } else if (73..=180).contains(&s) {
+                "boy+mother(M/F)"
+            } else {
+                "-"
+            }
+        };
+        println!("\n{} speech regions\n", regions.len());
+        println!("  region       dur  f0       vr    current   relaxed   zone");
+        for (s, e) in &regions {
+            let (f0, vr) = analyze_window(&samples, *s, *e);
+            let dur_ms = ((e - s) * 10) as f32;
+            let cur = classify(f0, vr, dur_ms);
+            let relaxed = match f0 {
+                Some(hz) if vr >= 0.15 && vr * dur_ms >= 400.0 => {
+                    if hz < MALE_MAX_HZ {
+                        SegmentGender::Male
+                    } else if hz > FEMALE_MIN_HZ {
+                        SegmentGender::Female
+                    } else {
+                        SegmentGender::Unknown
+                    }
+                }
+                _ => SegmentGender::Unknown,
+            };
+            println!(
+                "  {:3}-{:3}s  {:3}s  {:>6}  {:4.2}  {:8}  {:8}  {}",
+                s / 100,
+                e / 100,
+                (e - s) / 100,
+                f0.map(|v| format!("{v:.0}Hz")).unwrap_or_else(|| "-".into()),
+                vr,
+                g_str(cur),
+                g_str(relaxed),
+                zone((s + e) / 2)
+            );
+        }
+    }
 }

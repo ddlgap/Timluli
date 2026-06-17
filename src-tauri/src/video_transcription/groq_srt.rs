@@ -26,6 +26,13 @@ const GROQ_SUBTITLE_MODEL: &str = "whisper-large-v3";
 /// silence/noise hallucinations — a cheap cloud-side guard (no VAD needed in v1).
 /// Conservative on purpose: real speech sits far below this.
 const NO_SPEECH_DROP: f32 = 0.85;
+/// Max 429/5xx retries per slice before giving up (then the scheduler drops just
+/// that slice). 5 with the cap below tolerates a long free-tier cooldown.
+const MAX_STT_RETRIES: u32 = 5;
+/// Upper bound on a single retry wait (s). Groq's audio-seconds reset can be ~33 min
+/// on the free tier; we never block one slice that long — we retry sooner and let
+/// the budget keep refilling between attempts.
+const RETRY_CAP_SECS: f64 = 180.0;
 
 /// Uploads `input` (a 16 kHz mono FLAC the caller extracted via ffmpeg) and returns
 /// timed segments plus word-level timestamps (for the karaoke burn style's
@@ -34,6 +41,7 @@ const NO_SPEECH_DROP: f32 = 0.85;
 pub async fn transcribe_to_segments(
     app: &AppHandle,
     input: &Path,
+    lang: &str,
 ) -> Result<(Vec<Segment>, Vec<TimedWord>), String> {
     let key = crate::secrets::get_key(app, "groq").ok_or_else(|| {
         "לא הוגדר מפתח Groq. חבר שירות תרגום בהגדרות → תרגום מסמכים כדי לתמלל בענן.".to_string()
@@ -48,33 +56,61 @@ pub async fn transcribe_to_segments(
         .unwrap_or("audio.flac")
         .to_string();
 
-    let file_part = reqwest::multipart::Part::bytes(bytes)
-        .file_name(filename)
-        .mime_str("application/octet-stream")
-        .map_err(|e| format!("שגיאה בהכנת הקובץ: {e}"))?;
-
-    // Requesting granularities replaces the default, so `segment` must be asked
-    // for explicitly alongside `word` (validated live against the API, Phase 0:
-    // segments come back identical, plus a `words` array).
-    let form = reqwest::multipart::Form::new()
-        .part("file", file_part)
-        .text("model", GROQ_SUBTITLE_MODEL)
-        .text("language", "he")
-        .text("response_format", "verbose_json")
-        .text("timestamp_granularities[]", "word")
-        .text("timestamp_granularities[]", "segment");
-
     let client = reqwest::Client::new();
-    let resp = client
-        .post(GROQ_STT_URL)
-        .bearer_auth(&key)
-        .multipart(form)
-        .send()
-        .await
-        .map_err(|e| format!("שגיאת רשת בתמלול בענן: {e}"))?;
 
-    let status = resp.status();
-    if !status.is_success() {
+    // Rate-aware retry: on 429 (or a transient 5xx / network blip) wait exactly what
+    // Groq's `Retry-After` / `x-ratelimit-reset-*` headers say, then retry the same
+    // slice — never drop it. This self-paces against whatever tier the key is on
+    // (free 7200 audio-s/h vs paid 200000) so the parallel scheduler can push to the
+    // limit and let the server throttle, instead of silently losing slices.
+    let mut attempt = 0u32;
+    loop {
+        // The multipart Form is consumed by `send`, so rebuild it each attempt.
+        let file_part = reqwest::multipart::Part::bytes(bytes.clone())
+            .file_name(filename.clone())
+            .mime_str("application/octet-stream")
+            .map_err(|e| format!("שגיאה בהכנת הקובץ: {e}"))?;
+        let mut form = reqwest::multipart::Form::new()
+            .part("file", file_part)
+            .text("model", GROQ_SUBTITLE_MODEL)
+            .text("response_format", "verbose_json")
+            .text("timestamp_granularities[]", "word")
+            .text("timestamp_granularities[]", "segment");
+        // `lang` empty/"auto" ⇒ omit so Whisper auto-detects the source language; a
+        // specific ISO-639-1 code (e.g. "he") pins it.
+        if !lang.is_empty() && !lang.eq_ignore_ascii_case("auto") {
+            form = form.text("language", lang.to_string());
+        }
+
+        let resp = match client.post(GROQ_STT_URL).bearer_auth(&key).multipart(form).send().await {
+            Ok(r) => r,
+            Err(e) => {
+                if attempt < MAX_STT_RETRIES {
+                    attempt += 1;
+                    tokio::time::sleep(std::time::Duration::from_secs(3)).await;
+                    continue;
+                }
+                return Err(format!("שגיאת רשת בתמלול בענן: {e}"));
+            }
+        };
+
+        let status = resp.status();
+        if status.is_success() {
+            let body = resp
+                .text()
+                .await
+                .map_err(|e| format!("שגיאה בקריאת התשובה: {e}"))?;
+            return parse_response(&body);
+        }
+
+        // 429 / transient 5xx → honor the server's stated wait and retry the slice.
+        if (status.as_u16() == 429 || status.is_server_error()) && attempt < MAX_STT_RETRIES {
+            let wait = retry_wait_secs(resp.headers());
+            attempt += 1;
+            tokio::time::sleep(std::time::Duration::from_secs_f64(wait)).await;
+            continue;
+        }
+
         let body = resp.text().await.unwrap_or_default();
         return Err(match status.as_u16() {
             401 | 403 => "מפתח Groq לא תקין. בדוק את החיבור לשירות בהגדרות.".into(),
@@ -83,12 +119,53 @@ pub async fn transcribe_to_segments(
             _ => format!("התמלול בענן נכשל ({status}): {}", body.trim()),
         });
     }
+}
 
-    let body = resp
-        .text()
-        .await
-        .map_err(|e| format!("שגיאה בקריאת התשובה: {e}"))?;
-    parse_response(&body)
+/// Seconds to wait before retrying a 429/5xx, read from Groq's headers: prefer
+/// `Retry-After` (plain seconds), then the audio-seconds / requests reset windows
+/// (Groq's `"1m26.4s"` / `"43.2s"` / `"432ms"` duration format). Clamped to a sane
+/// band so one slice can't stall the job for a full 33-minute free-tier window.
+fn retry_wait_secs(h: &reqwest::header::HeaderMap) -> f64 {
+    let get = |n: &str| h.get(n).and_then(|v| v.to_str().ok()).map(str::to_string);
+    if let Some(ra) = get("retry-after") {
+        if let Ok(s) = ra.trim().parse::<f64>() {
+            return s.clamp(1.0, RETRY_CAP_SECS);
+        }
+        if let Some(d) = parse_groq_duration(&ra) {
+            return d.clamp(1.0, RETRY_CAP_SECS);
+        }
+    }
+    for n in ["x-ratelimit-reset-audio-seconds", "x-ratelimit-reset-requests"] {
+        if let Some(v) = get(n) {
+            if let Some(d) = parse_groq_duration(&v) {
+                return d.clamp(1.0, RETRY_CAP_SECS);
+            }
+        }
+    }
+    5.0
+}
+
+/// Parses Groq's rate-limit duration strings (`"432ms"`, `"5.4s"`, `"1m26.4s"`,
+/// `"32m29.5s"`) into seconds.
+fn parse_groq_duration(s: &str) -> Option<f64> {
+    let s = s.trim();
+    if s.is_empty() {
+        return None;
+    }
+    if let Some(ms) = s.strip_suffix("ms") {
+        return ms.trim().parse::<f64>().ok().map(|v| v / 1000.0);
+    }
+    let mut total = 0.0;
+    let mut rest = s;
+    if let Some(idx) = rest.find('m') {
+        total += rest[..idx].parse::<f64>().ok()? * 60.0;
+        rest = &rest[idx + 1..];
+    }
+    let rest = rest.strip_suffix('s').unwrap_or(rest);
+    if !rest.is_empty() {
+        total += rest.parse::<f64>().ok()?;
+    }
+    Some(total)
 }
 
 /// Shape of the relevant fields in Groq's `verbose_json` transcription response.
@@ -183,6 +260,16 @@ mod tests {
             {"id":3,"seek":2000,"start":20.0,"end":23.0,"text":"[music]","no_speech_prob":0.97}
         ]
     }"#;
+
+    #[test]
+    fn parses_groq_rate_limit_durations() {
+        assert_eq!(super::parse_groq_duration("432ms"), Some(0.432));
+        assert_eq!(super::parse_groq_duration("5.4s"), Some(5.4));
+        assert_eq!(super::parse_groq_duration("43.2s"), Some(43.2));
+        assert_eq!(super::parse_groq_duration("1m26.4s"), Some(86.4));
+        assert_eq!(super::parse_groq_duration("32m29.5s"), Some(1949.5));
+        assert_eq!(super::parse_groq_duration(""), None);
+    }
 
     #[test]
     fn parses_segments_seconds_to_centiseconds() {

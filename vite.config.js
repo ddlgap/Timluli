@@ -26,6 +26,7 @@ export default defineConfig({
         speech: resolve(root, 'speech.html'),
         settings: resolve(root, 'settings.html'),
         onboarding: resolve(root, 'onboarding.html'),
+        'video-options': resolve(root, 'video-options.html'),
       },
     },
   },

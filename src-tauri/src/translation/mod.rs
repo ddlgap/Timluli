@@ -29,12 +29,17 @@ pub use provider::ModelInfo;
 /// (leaks chain-of-thought into the output) and `allam-2-7b` (garbled Hebrew) are
 /// deliberately excluded. A failing model re-walks the chain (see `run_batch` +
 /// `classify`).
+///
+/// Cerebras model ids must track its (now narrow) live catalogue: as of 2026-06-15
+/// the API serves only `gpt-oss-120b` and `zai-glm-4.7` — every older llama/qwen id
+/// (incl. the previously-listed `qwen-3-235b-a22b-instruct-2507`) returns 404
+/// `model_not_found`.
 const FALLBACK_CHAIN: &[(&str, &str)] = &[
     ("groq", "openai/gpt-oss-120b"),
     ("groq", "meta-llama/llama-4-scout-17b-16e-instruct"),
     ("groq", "llama-3.3-70b-versatile"),
     ("cerebras", "gpt-oss-120b"),
-    ("cerebras", "qwen-3-235b-a22b-instruct-2507"),
+    ("cerebras", "zai-glm-4.7"),
     ("groq", "openai/gpt-oss-20b"),
     ("groq", "llama-3.1-8b-instant"),
 ];
@@ -68,22 +73,29 @@ struct Profile {
 /// easy to tune. Rationale per cell is in PLAN/Context.
 fn profile_for(provider: &str, paid: bool) -> Profile {
     match (provider, paid) {
-        // Paid Cerebras: exploit the throughput — fat batches, big output cap,
-        // high concurrency, no fixed sleep (token-budget backpressure handles it).
+        // Paid Cerebras (Developer/PAYG): very high ceilings — gpt-oss-120b is
+        // 1000 rpm / 1M tpm (zai-glm-4.7 500 rpm / 500K tpm), per Cerebras docs
+        // (confirmed 2026-06-15). TPM is the binding limit for fat batches, so the
+        // per-response token-budget backpressure (RateInfo cooldown) — not a fixed
+        // sleep — does the throttling. concurrency 12 is a safe burst ceiling well
+        // under the rpm cap; exploit it with fat batches + a big output cap.
         ("cerebras", true) => Profile {
             batch_multiplier: 3,
             max_output_tokens: 8000,
             concurrency: 12,
             free_sleep_ms: 0,
         },
-        // Free Cerebras: ~5–30 rpm + ~8K context cap. Keep the format-native batch
-        // size, a small output cap that fits the 8K window, and pace requests well
-        // under the rpm ceiling so the new Cerebras-first default doesn't 429.
+        // Free-trial Cerebras: a hard 5 rpm / 30K tpm (1M tpd) on both models, per
+        // Cerebras docs (confirmed 2026-06-15). At 5 rpm, parallelism is pointless
+        // (concurrency 1) and the binding limit is requests, not tokens — so pace
+        // one request per 12 s (60/5) to sit exactly on the ceiling. The loop sleeps
+        // *between* batches, so 12000 ms + request latency stays at/under 5 rpm;
+        // the prior 8000 ms ran ~6–7 rpm and tripped 429s.
         ("cerebras", false) => Profile {
             batch_multiplier: 1,
             max_output_tokens: 3000,
             concurrency: 1,
-            free_sleep_ms: 8000,
+            free_sleep_ms: 12000,
         },
         // Paid Groq: higher than free but below paid Cerebras — moderate scaling.
         ("groq", true) => Profile {
@@ -300,6 +312,19 @@ fn strip_directional_marks(s: &str) -> String {
         .collect()
 }
 
+/// Normalizes a translated subtitle value: trims surrounding whitespace and drops
+/// blank / whitespace-only lines. A model that collapses a multi-line cue onto one
+/// line can leave a trailing `\n` (empty second line); rendered into SRT that
+/// becomes a stray blank line which splits/renumbers the cue in strict parsers.
+/// Dropping empty lines keeps a real `\n` line break but never an empty one.
+fn normalize_subtitle_value(s: &str) -> String {
+    s.lines()
+        .map(|l| l.trim_end())
+        .filter(|l| !l.trim().is_empty())
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
 #[cfg(test)]
 mod gender_tag_tests {
     use super::{gender_tags_for_chunks, strip_gender_tags, parser};
@@ -409,6 +434,14 @@ mod rtl_subtitle_tests {
 
 /// Entry point: dispatches on file extension.
 pub async fn translate_file(app: &AppHandle, path: &str) -> Result<String, String> {
+    let target = crate::settings::load_or_init(app)?.translate_target_language;
+    translate_file_to(app, path, &target).await
+}
+
+/// Like [`translate_file`] but with an explicit target language. Used by the video
+/// "transcribe + translate" drop flow, where the user picks the language in the
+/// chooser instead of relying on the saved default.
+pub async fn translate_file_to(app: &AppHandle, path: &str, target: &str) -> Result<String, String> {
     let input = PathBuf::from(path);
     if !input.exists() {
         return Err(format!("הקובץ לא נמצא: {path}"));
@@ -420,13 +453,11 @@ pub async fn translate_file(app: &AppHandle, path: &str) -> Result<String, Strin
         .unwrap_or("")
         .to_lowercase();
 
-    let target = crate::settings::load_or_init(app)?.translate_target_language;
-
     match ext.as_str() {
-        "docx" => docx::translate_docx(app, &input, &input, &target).await,
-        "pdf" => pdf::translate_pdf(app, &input, &target).await,
-        "doc" => doc_via_libreoffice(app, &input, &target).await,
-        _ => translate_text_format(app, &input, &ext, &target).await,
+        "docx" => docx::translate_docx(app, &input, &input, target).await,
+        "pdf" => pdf::translate_pdf(app, &input, target).await,
+        "doc" => doc_via_libreoffice(app, &input, target).await,
+        _ => translate_text_format(app, &input, &ext, target).await,
     }
 }
 
@@ -501,7 +532,7 @@ async fn translate_text_format(
     // Mirrors the video→SRT pipeline; harmless for LTR targets (no marks to remove).
     if matches!(doc.category(), Category::Subtitle) {
         for v in map.values_mut() {
-            *v = strip_directional_marks(v);
+            *v = normalize_subtitle_value(&strip_directional_marks(v));
         }
     }
 

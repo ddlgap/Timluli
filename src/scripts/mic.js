@@ -170,8 +170,31 @@ await listen('speakly://burn-progress', (e) => {
   showProgress(percent ? `צורב כתוביות… ${percent}%` : 'צורב כתוביות…');
 });
 
+// When a video drop is handed to the chooser window, the actual transcribe/translate
+// runs from there — the mic only mirrors progress (above) and the final result here.
+// `chooserActive` gates these so they never double-fire for the inline audio/doc path.
+let chooserActive = false;
+const onChooserDone = () => {
+  if (!chooserActive) return;
+  chooserActive = false;
+  setState('idle');
+  showBubble('✓ נשמר');
+};
+const onChooserError = () => {
+  if (!chooserActive) return;
+  chooserActive = false;
+  setState('error');
+  showBubble('שגיאה');
+  setTimeout(() => setState('idle'), 1500);
+};
+await listen('speakly://transcribe-done', onChooserDone);
+await listen('speakly://translate-done', onChooserDone);
+await listen('speakly://transcribe-error', onChooserError);
+await listen('speakly://translate-error', onChooserError);
+
 await getCurrentWebview().onDragDropEvent(async (event) => {
   if (event.payload.type !== 'drop' || !event.payload.paths?.length) return;
+  chooserActive = false;
 
   // Video + SRT pair → subtitle burn-in (style from settings).
   const pair = asBurnPair(event.payload.paths);
@@ -212,22 +235,26 @@ await getCurrentWebview().onDragDropEvent(async (event) => {
     return;
   }
 
+  // Video → open the small chooser (transcribe only / transcribe + translate).
+  // The chooser drives the backend; the mic mirrors progress + final result via
+  // the chooserActive-gated listeners above.
+  if (videoPaths.length) {
+    chooserActive = true;
+    setState('listening');
+    showProgress('בחר פעולה…');
+    try {
+      await invoke('show_video_options', { paths: videoPaths });
+    } catch (err) {
+      chooserActive = false;
+      setState('idle');
+      console.warn('show_video_options failed:', err);
+    }
+    return;
+  }
+
   setState('listening');
   let ok = 0;
   let fail = 0;
-
-  if (videoPaths.length) {
-    showProgress('מחלץ אודיו מהסרטון…');
-    for (const p of videoPaths) {
-      try {
-        await invoke('transcribe_video_to_srt', { path: p });
-        ok++;
-      } catch (err) {
-        fail++;
-        console.warn('transcribe_video_to_srt failed:', err);
-      }
-    }
-  }
 
   if (audioPaths.length) {
     showProgress('מתמלל…');

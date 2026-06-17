@@ -6,9 +6,13 @@ use tauri::Manager;
 mod chrome_sidecar;
 mod commands;
 mod commands_local;
+mod commands_gender;
 mod commands_punct;
 mod commands_video;
 mod gender_f0;
+mod gender_onnx;
+mod gender_text;
+mod onnx_runtime;
 mod models;
 mod panel;
 mod punctuation;
@@ -44,8 +48,14 @@ pub struct AppState {
     /// Loaded Hebrew punctuation engine (None until enabled + model present).
     /// Arc allows cloning the handle out of the Mutex before awaiting.
     pub punct_engine: Mutex<Option<Arc<punctuation::PunctuationEngineHandle>>>,
+    /// Loaded acoustic gender classifier (None until enabled + model present).
+    /// Optional ~95 MB ONNX model that augments the always-on F0 path during the
+    /// video → SRT gender pass. Arc allows cloning the handle out before awaiting.
+    pub gender_engine: Mutex<Option<Arc<gender_onnx::GenderEngineHandle>>>,
     /// Active download cancellation tokens, keyed by model id.
     pub active_downloads: Mutex<HashMap<String, tokio_util::sync::CancellationToken>>,
+    /// Video path(s) awaiting a mode choice in the drag-drop chooser window.
+    pub pending_video: Mutex<Vec<String>>,
     /// Shared state driving the hidden Chrome speech sidecar (online engine).
     pub sidecar: Arc<chrome_sidecar::SidecarShared>,
     /// The hidden Chrome process running the online recognizer, if launched.
@@ -67,7 +77,9 @@ impl AppState {
             muted: Mutex::new(false),
             local_engine: Mutex::new(None),
             punct_engine: Mutex::new(None),
+            gender_engine: Mutex::new(None),
             active_downloads: Mutex::new(HashMap::new()),
+            pending_video: Mutex::new(Vec::new()),
             sidecar: Arc::new(chrome_sidecar::SidecarShared::new()),
             chrome_child: Mutex::new(None),
             #[cfg(target_os = "windows")]
@@ -145,8 +157,17 @@ pub fn run() {
             commands_punct::set_punctuation_enabled,
             commands_punct::download_punctuation_model,
             commands_punct::cancel_punctuation_download,
+            // ── acoustic gender-classifier commands ──
+            commands_gender::get_gender_status,
+            commands_gender::set_gender_classifier_enabled,
+            commands_gender::download_gender_model,
+            commands_gender::cancel_gender_download,
             // ── video → SRT subtitle commands ──
             commands_video::transcribe_video_to_srt,
+            commands_video::transcribe_and_translate_video,
+            commands_video::show_video_options,
+            commands_video::get_pending_video,
+            commands_video::close_video_options,
             commands_video::download_ffmpeg,
             commands_video::cancel_ffmpeg_download,
             commands_video::get_ffmpeg_status,
@@ -198,6 +219,13 @@ pub fn run() {
                 let handle = app.handle().clone();
                 tauri::async_runtime::spawn(async move {
                     commands_punct::autoload_punctuation(&handle).await;
+                });
+            }
+            // Auto-load the acoustic gender classifier if enabled + installed.
+            if stg.gender_classifier_enabled {
+                let handle = app.handle().clone();
+                tauri::async_runtime::spawn(async move {
+                    commands_gender::autoload_gender(&handle).await;
                 });
             }
 
@@ -282,7 +310,12 @@ pub fn run() {
             if let tauri::WindowEvent::CloseRequested { api, .. } = event {
                 // Don't actually quit when individual windows close; hide them.
                 let label = window.label();
-                if label == "settings" || label == "mic" || label == "onboarding" || label == "panel" {
+                if label == "settings"
+                    || label == "mic"
+                    || label == "onboarding"
+                    || label == "panel"
+                    || label == "video-options"
+                {
                     api.prevent_close();
                     let _ = window.hide();
                 }

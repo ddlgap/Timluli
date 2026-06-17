@@ -100,7 +100,7 @@ function setDirty(v) {
 }
 
 // Controls that persist on change (so they must NOT mark the form dirty).
-const INSTANT_IDS = new Set(['display_mode', 'punctuation_enabled', 'punctuation_newline', 'video_subtitles_enabled']);
+const INSTANT_IDS = new Set(['display_mode', 'punctuation_enabled', 'punctuation_newline', 'video_subtitles_enabled', 'gender_classifier_enabled']);
 const INSTANT_NAMES = new Set(['engine_id', 'audio_file_engine']);
 document.querySelector('main')?.addEventListener('change', (e) => {
   const t = e.target;
@@ -877,6 +877,97 @@ await listen('speakly://punct-model-installed', () => {
 });
 
 refreshPunctStatus();
+
+// ── Acoustic gender classifier (optional ONNX model) ──────────────────────────
+// Augments the F0 gender pass during video → SRT. Enabling requires the ~95 MB model;
+// if it isn't installed the toggle bounces back and offers to fetch it. Mirrors the
+// punctuation row (same DownloadProgress channel). Has effect only alongside the
+// "gender-aware translation" toggle above.
+const genderToggle = $('gender_classifier_enabled');
+const genderStatusLabel = $('gender-status-label');
+const genderProgress = $('gender-progress');
+const genderFill = $('gender-fill');
+const genderPlabel = $('gender-plabel');
+const genderDownloadBtn = $('gender-download-btn');
+const genderCancelBtn = $('gender-cancel-btn');
+let genderDownloading = false;
+
+async function refreshGenderStatus() {
+  try {
+    const s = await invoke('get_gender_status');
+    setToggle('gender_classifier_enabled', s.enabled);
+    genderDownloading = s.downloading;
+    if (s.installed) {
+      genderStatusLabel.textContent = s.loaded ? 'מודל המגדר מותקן ומוכן ✓' : 'מודל המגדר מותקן';
+    } else {
+      genderStatusLabel.textContent = 'מודל המגדר אינו מותקן';
+    }
+    genderDownloadBtn.style.display = !s.installed && !genderDownloading ? '' : 'none';
+    genderCancelBtn.style.display = genderDownloading ? '' : 'none';
+    if (!genderDownloading) genderProgress.style.display = 'none';
+  } catch (_) {}
+}
+
+async function startGenderDownload() {
+  if (genderDownloading) return;
+  genderDownloading = true;
+  genderProgress.style.display = 'flex';
+  genderDownloadBtn.style.display = 'none';
+  genderCancelBtn.style.display = '';
+  genderPlabel.textContent = 'מתחיל הורדה…';
+  const channel = new Channel();
+  channel.onmessage = (p) => {
+    const pct = p.totalBytes > 0 ? Math.round((p.downloadedBytes / p.totalBytes) * 100) : 0;
+    if (genderFill) genderFill.style.width = `${pct}%`;
+    const mbDone = Math.round(p.downloadedBytes / 1_000_000);
+    const mbTotal = Math.round(p.totalBytes / 1_000_000);
+    const kbps = Math.round(p.speedBps / 1000);
+    if (genderPlabel) genderPlabel.textContent = `${pct}% · ${mbDone}/${mbTotal} MB · ${kbps} KB/s`;
+  };
+  try {
+    await invoke('download_gender_model', { onProgress: channel });
+  } catch (e) {
+    genderDownloading = false;
+    showToast(`שגיאה בהורדת מודל המגדר: ${e}`, 'err');
+    refreshGenderStatus();
+  }
+}
+
+genderToggle?.addEventListener('change', async () => {
+  const enabled = genderToggle.checked;
+  if (enabled) {
+    const s = await invoke('get_gender_status').catch(() => null);
+    if (s && !s.installed) {
+      setToggle('gender_classifier_enabled', false);
+      showToast('יש להוריד תחילה את מודל המגדר', 'err');
+      startGenderDownload();
+      return;
+    }
+  }
+  try {
+    await invoke('set_gender_classifier_enabled', { enabled });
+    showToast(enabled ? 'דיוק מגדר משופר הופעל' : 'דיוק מגדר משופר כובה', 'ok');
+  } catch (e) {
+    setToggle('gender_classifier_enabled', !enabled);
+    showToast(`שגיאה: ${e}`, 'err');
+  }
+  refreshGenderStatus();
+});
+
+genderDownloadBtn?.addEventListener('click', startGenderDownload);
+genderCancelBtn?.addEventListener('click', async () => {
+  await invoke('cancel_gender_download').catch(() => {});
+  genderDownloading = false;
+  refreshGenderStatus();
+});
+
+await listen('speakly://gender-model-installed', () => {
+  genderDownloading = false;
+  showToast('מודל המגדר הותקן ✓', 'ok');
+  refreshGenderStatus();
+});
+
+refreshGenderStatus();
 
 // ── Video subtitles (video → SRT) ─────────────────────────────────────────────
 // The on/off flag applies immediately (saved via save_settings, like the newline

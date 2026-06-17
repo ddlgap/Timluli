@@ -17,8 +17,10 @@ pub mod srt;
 pub mod words;
 
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 
+use futures_util::StreamExt;
 use serde_json::json;
 use tauri::{AppHandle, Emitter, State};
 
@@ -27,6 +29,34 @@ use crate::whisper_local::LocalEngineHandle;
 use crate::AppState;
 
 const SR: usize = 16_000;
+/// Cloud STT slice length (seconds). With `-sample_fmt s16` the FLAC is bounded to
+/// 16000×2 = 32 kB/s, so a 5 min slice is ≤ ~9.6 MB — comfortably under Groq's
+/// 25 MB upload cap [[reference: user requirement]] with margin to spare. Small
+/// slices also let many transcribe in parallel (see `CLOUD_STT_CONCURRENCY`),
+/// cutting wall-clock on a full-length film. Videos at/under this length keep the
+/// original single-request path unchanged.
+const CLOUD_CHUNK_SECS: f64 = 300.0;
+/// Hard ceiling on any uploaded slice (Groq rejects >25 MB). At 32 kB/s a slice can
+/// only reach this past ~13 min, which `CLOUD_CHUNK_SECS` never approaches — so this
+/// is a defensive guard, logged if ever hit.
+const CLOUD_MAX_UPLOAD_BYTES: u64 = 25 * 1024 * 1024;
+/// Bounded parallelism for cloud slice transcription, sized per tier from a measured
+/// concurrency sweep against whisper-large-v3:
+///   - PAID: throughput plateaus at ~8 concurrent (Groq caps one key at ~2 req/s ≈
+///     120× realtime; 8→32 adds <10%), with 0 rate-limits even at 32. 12 sits just
+///     past the knee for headroom — a 2 h film transcribes in ~60 s.
+///   - FREE: the 7200 audio-s/hour budget is the hard ceiling; C=4 is the fastest
+///     burst that stays under it (C=8 already drew 429s in the sweep). The rate-aware
+///     retry in `groq_srt` honors `Retry-After`, so even when the budget is hit no
+///     slice is dropped — it just paces to the refill rate.
+const CLOUD_STT_CONCURRENCY_PAID: usize = 12;
+const CLOUD_STT_CONCURRENCY_FREE: usize = 4;
+/// How far (seconds) a cloud slice boundary may move from its ideal position to
+/// land inside a detected silence, so no spoken word is split across a seam. A
+/// slice can thus reach `CLOUD_CHUNK_SECS + CLOUD_CUT_TOLERANCE`; at ~8 kB/s that
+/// is ~2.6 MB, still far under the 25 MB cap. No silence near a boundary ⇒ the cut
+/// stays at the ideal position (today's fixed slicing).
+const CLOUD_CUT_TOLERANCE: f64 = 30.0;
 /// Hard cap of decoded content per chunk (whisper processes one 30 s window).
 const MAX_CONTENT: usize = 29 * SR;
 /// Preferred chunk length; the cut floats within ±SEARCH of this.
@@ -56,6 +86,7 @@ pub async fn transcribe_video_to_srt(
     app: &AppHandle,
     state: State<'_, AppState>,
     path: &str,
+    lang: &str,
 ) -> Result<String, String> {
     let input = PathBuf::from(path);
     if !input.exists() {
@@ -65,6 +96,13 @@ pub async fn transcribe_video_to_srt(
     let ffmpeg = ffmpeg::resolve(app).ok_or_else(|| {
         "להפקת כתוביות מווידאו יש להתקין את ffmpeg. הורד אותו בהגדרות → מנוע תמלול.".to_string()
     })?;
+
+    // Pick the channel→mono downmix from the source layout: multichannel sources
+    // (5.1/7.1/…) isolate the front-center dialogue (cleaner, ~10 dB louder speech →
+    // better WER + gender); stereo/mono keep the standard mono fold. Probed once and
+    // reused by every extraction below (local PCM, cloud MP3 slices, gender re-extract).
+    let downmix = ffmpeg::probe_downmix(&ffmpeg, &input);
+    log::info!("audio downmix: {downmix:?}");
 
     let stg = crate::settings::load_or_init(app)?;
     let backend = stg.audio_file_engine;
@@ -87,7 +125,7 @@ pub async fn transcribe_video_to_srt(
             let pcm_tmp = tmp.join(format!("timluli-vid-{uid}.pcm"));
             // ffmpeg is a blocking subprocess — keep it off the async runtime.
             let (ff, inp, out) = (ffmpeg.clone(), input.clone(), pcm_tmp.clone());
-            tokio::task::spawn_blocking(move || ffmpeg::extract_pcm_f32le(&ff, &inp, &out))
+            tokio::task::spawn_blocking(move || ffmpeg::extract_pcm_f32le(&ff, &inp, &out, downmix))
                 .await
                 .map_err(|e| format!("שגיאת thread בחילוץ אודיו: {e}"))??;
 
@@ -104,7 +142,7 @@ pub async fn transcribe_video_to_srt(
                 emit_progress(app, i + 1, total, "transcribe");
                 let chunk_len = chunk.len();
                 let (chunk_segs, chunk_words) = engine
-                    .transcribe_segments_words(chunk, "he")
+                    .transcribe_segments_words(chunk, lang.to_string())
                     .await
                     .map_err(|e| e.to_string())?;
                 // Shift chunk-relative timestamps to absolute: samples/16000*100 cs.
@@ -126,21 +164,137 @@ pub async fn transcribe_video_to_srt(
             gender_pcm = Some(pcm);
             segs
         }
-        // Default to the cloud backend for any other value (mirrors the .txt path).
+        // Default to the cloud backend (mirrors the .txt path). Audio is encoded to
+        // compact MP3; anything longer than one slice is transcribed in PARALLEL
+        // slices (bounded concurrency), each slice's timestamps offset back to
+        // absolute time — so a full-length film finishes in a fraction of the
+        // sequential time and every upload stays well under Groq's 25 MB cap. Short
+        // videos take the single-request path.
         _ => {
             engine_name = "groq";
-            let flac_tmp = tmp.join(format!("timluli-vid-{uid}.flac"));
-            let (ff, inp, out) = (ffmpeg.clone(), input.clone(), flac_tmp.clone());
-            tokio::task::spawn_blocking(move || ffmpeg::extract_flac(&ff, &inp, &out))
-                .await
-                .map_err(|e| format!("שגיאת thread בחילוץ אודיו: {e}"))??;
+            let duration = ffmpeg::probe_duration(&ffmpeg, &input).unwrap_or_else(|e| {
+                log::warn!("ffmpeg duration probe failed ({e}); using single request");
+                0.0
+            });
 
-            emit_progress(app, 1, 1, "transcribe");
-            let result = groq_srt::transcribe_to_segments(app, &flac_tmp).await;
-            let _ = std::fs::remove_file(&flac_tmp);
-            let (segs, ws) = result?;
-            timed_words = ws;
-            segs
+            if duration > CLOUD_CHUNK_SECS {
+                // Slice the timeline into ~CLOUD_CHUNK_SECS windows, but land every cut
+                // inside a detected silence when one is near — so no word is split across
+                // a seam (the v1 hard-boundary caveat). One cheap ffmpeg `silencedetect`
+                // analysis pass; an empty result transparently falls back to fixed cuts.
+                let silences = ffmpeg::detect_silences(&ffmpeg, &input);
+                log::info!("cloud chunking: {} silence interval(s) detected", silences.len());
+                let cuts = plan_slice_cuts(duration, CLOUD_CHUNK_SECS, CLOUD_CUT_TOLERANCE, &silences);
+                let mut bounds: Vec<f64> = Vec::with_capacity(cuts.len() + 2);
+                bounds.push(0.0);
+                bounds.extend(cuts);
+                bounds.push(duration);
+                // (index, start, dur) per non-empty window between consecutive bounds.
+                let specs: Vec<(usize, f64, f64)> = bounds
+                    .windows(2)
+                    .filter(|w| w[1] > w[0])
+                    .enumerate()
+                    .map(|(i, w)| (i, w[0], w[1] - w[0]))
+                    .collect();
+                let total = specs.len();
+                let completed = AtomicUsize::new(0);
+                // Concurrency by the key's tier (groq_paid). Each slice self-paces on
+                // 429 via the rate-aware groq_srt retry, so this is the burst size, not
+                // a hard limiter.
+                let concurrency = if stg.groq_paid {
+                    CLOUD_STT_CONCURRENCY_PAID
+                } else {
+                    CLOUD_STT_CONCURRENCY_FREE
+                };
+
+                // Each future extracts its own MP3, transcribes (with retry), deletes
+                // the temp, and returns its index + time-shifted segments/words. Bounded
+                // concurrency overlaps upload + inference across slices.
+                let outcomes: Vec<Result<(usize, Vec<Segment>, Vec<words::TimedWord>), String>> =
+                    futures_util::stream::iter(specs.into_iter().map(|(i, start, dur)| {
+                        let ffmpeg = &ffmpeg;
+                        let input = &input;
+                        let tmp = &tmp;
+                        let completed = &completed;
+                        let dm = downmix;
+                        async move {
+                            let mp3 = tmp.join(format!("timluli-vid-{uid}-{i}.mp3"));
+                            let (ff, inp, out) = (ffmpeg.clone(), input.clone(), mp3.clone());
+                            tokio::task::spawn_blocking(move || {
+                                ffmpeg::extract_mp3_range(&ff, &inp, start, dur, &out, dm)
+                            })
+                            .await
+                            .map_err(|e| format!("שגיאת thread בחילוץ אודיו: {e}"))??;
+
+                            if let Ok(meta) = std::fs::metadata(&mp3) {
+                                if meta.len() > CLOUD_MAX_UPLOAD_BYTES {
+                                    log::warn!("cloud slice {i}: {} bytes exceeds 25 MB", meta.len());
+                                }
+                            }
+
+                            let result = groq_srt::transcribe_to_segments(app, &mp3, lang).await;
+                            let _ = std::fs::remove_file(&mp3);
+                            let (mut cs, mut ws) = result?;
+
+                            let offset_cs = (start * 100.0).round() as i64;
+                            for s in &mut cs {
+                                s.start_cs += offset_cs;
+                                s.end_cs += offset_cs;
+                            }
+                            for w in &mut ws {
+                                w.t0_cs += offset_cs;
+                                w.t1_cs += offset_cs;
+                            }
+                            let done = completed.fetch_add(1, Ordering::Relaxed) + 1;
+                            emit_progress(app, done, total, "transcribe");
+                            Ok((i, cs, ws))
+                        }
+                    }))
+                    .buffer_unordered(concurrency)
+                    .collect()
+                    .await;
+
+                // Reassemble in timeline order. Tolerate a failed slice (a gap) but
+                // not a total wipeout.
+                let mut ok: Vec<(usize, Vec<Segment>, Vec<words::TimedWord>)> = Vec::new();
+                let mut failed = 0usize;
+                let mut last_err = String::new();
+                for outcome in outcomes {
+                    match outcome {
+                        Ok(v) => ok.push(v),
+                        Err(e) => {
+                            failed += 1;
+                            last_err = e;
+                        }
+                    }
+                }
+                if ok.is_empty() {
+                    return Err(format!("התמלול בענן נכשל: {last_err}"));
+                }
+                if failed > 0 {
+                    log::warn!("{failed}/{total} cloud slice(s) failed; subtitles may have gaps");
+                }
+                ok.sort_by_key(|(i, _, _)| *i);
+                let mut segs: Vec<Segment> = Vec::new();
+                for (_, cs, ws) in ok {
+                    segs.extend(cs);
+                    timed_words.extend(ws);
+                }
+                segs
+            } else {
+                let mp3_tmp = tmp.join(format!("timluli-vid-{uid}.mp3"));
+                let (ff, inp, out) = (ffmpeg.clone(), input.clone(), mp3_tmp.clone());
+                tokio::task::spawn_blocking(move || ffmpeg::extract_mp3(&ff, &inp, &out, downmix))
+                    .await
+                    .map_err(|e| format!("שגיאת thread בחילוץ אודיו: {e}"))??;
+
+                emit_progress(app, 1, 1, "transcribe");
+                let result = groq_srt::transcribe_to_segments(app, &mp3_tmp, lang).await;
+                let _ = std::fs::remove_file(&mp3_tmp);
+                let (segs, ws) = result?;
+                timed_words = ws;
+                segs
+            }
         }
     };
 
@@ -165,16 +319,44 @@ pub async fn transcribe_video_to_srt(
     let genders_path = crate::gender_f0::sidecar_path(&out_path);
     let _ = std::fs::remove_file(&genders_path);
 
-    // Speaker-gender classification (opt-in, experimental): per-cue F0 analysis
-    // over the extracted PCM, persisted as `<stem>.genders.json` for the subtitle
-    // translation path. Strictly best-effort — any failure logs and moves on.
+    // Speaker-gender classification (opt-in): per-cue F0 analysis over the extracted
+    // PCM, optionally augmented by the in-process ONNX classifier when installed,
+    // persisted as `<stem>.genders.json` for the subtitle translation path. Strictly
+    // best-effort — any failure logs and moves on.
     if stg.gender_aware_translation {
-        match gender_pcm_or_extract(gender_pcm, &ffmpeg, &input, &tmp, uid).await {
+        match gender_pcm_or_extract(gender_pcm, &ffmpeg, &input, &tmp, uid, downmix).await {
             Ok(pcm) => {
                 let windows: Vec<(i64, i64)> = cues.iter().map(|(s, e, _)| (*s, *e)).collect();
-                // Pure CPU work, seconds for a full movie — off the async runtime.
+                // Cue texts for the transcript-based (grammar) gender signal.
+                let texts: Vec<String> = cues.iter().map(|(_, _, t)| t.clone()).collect();
+                // Optional ONNX gender classifier (loaded only when enabled +
+                // installed): clone the handle out before the blocking pass.
+                let gender_engine = state.gender_engine.lock().as_ref().map(Arc::clone);
+                // CPU work off the async runtime — seconds for F0 alone, a few
+                // minutes when the ONNX classifier also runs over a full movie.
                 let classified = tokio::task::spawn_blocking(move || {
                     let mut cg = crate::gender_f0::classify_cues(&pcm, &windows);
+                    // When the model is loaded, its confident labels override the F0
+                    // guess for the cases F0 misses (adult-male octave errors, the
+                    // 155–175 Hz overlap). Quiet/short cues yield None → F0 stands.
+                    if let Some(eng) = gender_engine {
+                        for (c, o) in cg.iter_mut().zip(eng.classify_windows(&pcm, &windows)) {
+                            if let Some((g, conf)) = o {
+                                if conf >= crate::gender_onnx::ACCEPT_CONFIDENCE {
+                                    c.gender = g;
+                                }
+                            }
+                        }
+                    }
+                    // Highest-priority signal: the transcript's own first-person gender
+                    // morphology (Hebrew). A near-certain linguistic fact about the
+                    // speaker — and the ONLY cue that can correct children, whom audio
+                    // fundamentally cannot sex. Overrides the acoustic guess.
+                    for (c, txt) in cg.iter_mut().zip(&texts) {
+                        if let Some(g) = crate::gender_text::infer_speaker_gender(txt) {
+                            c.gender = g;
+                        }
+                    }
                     crate::gender_f0::smooth(&mut cg);
                     cg
                 })
@@ -215,13 +397,14 @@ async fn gender_pcm_or_extract(
     input: &Path,
     tmp: &Path,
     uid: uuid::Uuid,
+    dm: ffmpeg::Downmix,
 ) -> Result<Vec<f32>, String> {
     if let Some(pcm) = existing {
         return Ok(pcm);
     }
     let pcm_tmp = tmp.join(format!("timluli-gen-{uid}.pcm"));
     let (ff, inp, out) = (ffmpeg.to_path_buf(), input.to_path_buf(), pcm_tmp.clone());
-    tokio::task::spawn_blocking(move || ffmpeg::extract_pcm_f32le(&ff, &inp, &out))
+    tokio::task::spawn_blocking(move || ffmpeg::extract_pcm_f32le(&ff, &inp, &out, dm))
         .await
         .map_err(|e| format!("שגיאת thread בחילוץ אודיו: {e}"))??;
     let pcm = ffmpeg::read_pcm_f32le(&pcm_tmp);
@@ -268,17 +451,20 @@ async fn ensure_local_engine(
     Ok(handle)
 }
 
-/// Splits 16 kHz mono samples into ≤MAX_CONTENT windows, cutting at the quietest
-/// 100 ms frame near each TARGET boundary. Duplicated from `transcription::local`
-/// to avoid touching the audio-file path.
+/// Splits 16 kHz mono samples into ≤MAX_CONTENT windows, cutting inside a real
+/// speech pause near each TARGET boundary when one exists (else the quietest
+/// frame), so a chunk seam never falls mid-word. Duplicated from
+/// `transcription::local` to avoid touching the audio-file path.
 fn split_chunks(samples: &[f32]) -> Vec<Vec<f32>> {
     let n = samples.len();
     let mut chunks = Vec::new();
     let mut start = 0;
     while n - start > MAX_CONTENT {
-        let lo = start + TARGET - SEARCH;
+        // Widen the search below TARGET so an early pause is preferred before
+        // falling back to the quietest frame.
+        let lo = start + TARGET - 2 * SEARCH;
         let hi = (start + TARGET + SEARCH).min(start + MAX_CONTENT).min(n);
-        let cut = quietest_boundary(samples, lo, hi);
+        let cut = silence_boundary(samples, lo, hi);
         chunks.push(samples[start..cut].to_vec());
         start = cut;
     }
@@ -302,6 +488,130 @@ fn quietest_boundary(samples: &[f32], lo: usize, hi: usize) -> usize {
         i += FRAME;
     }
     (best + FRAME / 2).min(hi)
+}
+
+/// Picks a chunk boundary in `[lo, hi)` at the centre of the longest real speech
+/// pause — a run of consecutive 100 ms frames whose RMS is below a silence floor
+/// (~-34 dBFS, mirroring the cloud path's ffmpeg `silencedetect`). When the window
+/// holds no such pause it falls back to [`quietest_boundary`] (the previous
+/// behaviour), so a cut is never worse than before, only better when a true pause
+/// exists.
+fn silence_boundary(samples: &[f32], lo: usize, hi: usize) -> usize {
+    const SILENCE_RMS: f32 = 0.02; // ≈ -34 dBFS over a 100 ms frame
+    let (mut best_start, mut best_len) = (0usize, 0usize);
+    let (mut run_start, mut run_len) = (0usize, 0usize);
+    let mut i = lo;
+    while i + FRAME <= hi {
+        let rms = (samples[i..i + FRAME].iter().map(|s| s * s).sum::<f32>() / FRAME as f32).sqrt();
+        if rms < SILENCE_RMS {
+            if run_len == 0 {
+                run_start = i;
+            }
+            run_len += 1;
+            if run_len > best_len {
+                best_len = run_len;
+                best_start = run_start;
+            }
+        } else {
+            run_len = 0;
+        }
+        i += FRAME;
+    }
+    if best_len > 0 {
+        (best_start + best_len * FRAME / 2).min(hi)
+    } else {
+        quietest_boundary(samples, lo, hi)
+    }
+}
+
+/// Plans cloud-slice cut points (absolute seconds, ascending) so each slice is
+/// about `target` seconds, but every cut lands inside a detected silence when one
+/// lies within `tol` of the ideal boundary — so no word straddles a seam. With no
+/// silence near a boundary the cut stays at the ideal position (identical to fixed
+/// slicing). `silences` are `(start, end)` seconds from [`ffmpeg::detect_silences`].
+fn plan_slice_cuts(duration: f64, target: f64, tol: f64, silences: &[(f64, f64)]) -> Vec<f64> {
+    let mut cuts = Vec::new();
+    let mut prev = 0.0_f64;
+    while prev + target < duration - tol {
+        let ideal = prev + target;
+        let cut = silences
+            .iter()
+            .map(|&(s, e)| ideal.clamp(s, e)) // nearest point inside this silence
+            .filter(|&c| c > prev + 1.0 && c < duration && (c - ideal).abs() <= tol)
+            .min_by(|a, b| {
+                (a - ideal)
+                    .abs()
+                    .partial_cmp(&(b - ideal).abs())
+                    .unwrap_or(std::cmp::Ordering::Equal)
+            })
+            .unwrap_or(ideal);
+        if cut <= prev + 1.0 {
+            break;
+        }
+        cuts.push(cut);
+        prev = cut;
+    }
+    cuts
+}
+
+#[cfg(test)]
+mod chunk_tests {
+    use super::{plan_slice_cuts, silence_boundary, CLOUD_CUT_TOLERANCE, SR};
+
+    #[test]
+    fn cut_snaps_to_nearby_silence() {
+        let cuts = plan_slice_cuts(600.0, 300.0, CLOUD_CUT_TOLERANCE, &[(305.0, 307.0)]);
+        assert_eq!(cuts.len(), 1);
+        assert!((cuts[0] - 305.0).abs() < 1e-6, "cut should snap into the silence: {cuts:?}");
+    }
+
+    #[test]
+    fn no_silence_uses_ideal_boundary() {
+        assert_eq!(plan_slice_cuts(600.0, 300.0, 30.0, &[]), vec![300.0]);
+    }
+
+    #[test]
+    fn silence_outside_tolerance_is_ignored() {
+        assert_eq!(plan_slice_cuts(600.0, 300.0, 30.0, &[(400.0, 402.0)]), vec![300.0]);
+    }
+
+    #[test]
+    fn multiple_cuts_stay_ordered_and_within_duration() {
+        let sil = vec![(298.0, 299.0), (596.0, 599.0), (900.0, 902.0)];
+        let cuts = plan_slice_cuts(1000.0, 300.0, 30.0, &sil);
+        assert!(cuts.windows(2).all(|w| w[1] > w[0]), "ascending: {cuts:?}");
+        assert!(*cuts.last().unwrap() < 1000.0);
+        assert_eq!(cuts, vec![299.0, 599.0, 900.0]);
+    }
+
+    /// Fills `[lo_t, hi_t)` seconds of `buf` with a 150 Hz tone (speech stand-in).
+    fn tone(buf: &mut [f32], lo_t: f32, hi_t: f32) {
+        for i in 0..buf.len() {
+            let t = i as f32 / SR as f32;
+            if t >= lo_t && t < hi_t {
+                buf[i] = 0.3 * (2.0 * std::f32::consts::PI * 150.0 * t).sin();
+            }
+        }
+    }
+
+    #[test]
+    fn boundary_lands_in_silent_gap() {
+        // Speech everywhere except a 1 s silent gap [5 s, 6 s).
+        let mut s = vec![0.0f32; 10 * SR];
+        tone(&mut s, 0.0, 5.0);
+        tone(&mut s, 6.0, 10.0);
+        let cut_t = silence_boundary(&s, 4 * SR, 7 * SR) as f32 / SR as f32;
+        assert!((5.0..6.0).contains(&cut_t), "cut at {cut_t}s not in the silent gap");
+    }
+
+    #[test]
+    fn boundary_without_silence_stays_in_window() {
+        let mut s = vec![0.0f32; 10 * SR];
+        tone(&mut s, 0.0, 10.0);
+        let (lo, hi) = (4 * SR, 7 * SR);
+        let cut = silence_boundary(&s, lo, hi);
+        assert!(cut >= lo && cut <= hi, "fallback cut must stay in window");
+    }
 }
 
 #[cfg(test)]
@@ -418,5 +728,100 @@ mod e2e_tests {
             srt.matches(" --> ").count()
         );
         println!("{}", &srt[..srt.len().min(1800)]);
+    }
+
+    /// Stage-1 verification on a real film: extract a chunk from the MIDDLE, then
+    /// exercise the actual silence-aware chunking code — `ffmpeg::detect_silences` +
+    /// `plan_slice_cuts` (cloud path) and `silence_boundary` vs `quietest_boundary`
+    /// (local path) — showing cuts land in real silences (no word-clipping). Reads
+    /// the bundled ffmpeg from `%APPDATA%`. `#[ignore]`d — set the film path:
+    ///   TIMLULI_TEST_VIDEO = path to a video file
+    ///   cargo test --manifest-path src-tauri/Cargo.toml stage1_silence_chunking_probe -- --ignored --nocapture
+    #[test]
+    #[ignore]
+    fn stage1_silence_chunking_probe() {
+        let ff = PathBuf::from(std::env::var("APPDATA").expect("APPDATA"))
+            .join(r"studio.oliel.timluli\ffmpeg\ffmpeg.exe");
+        let movie = PathBuf::from(
+            std::env::var("TIMLULI_TEST_VIDEO").expect("set TIMLULI_TEST_VIDEO to a video path"),
+        );
+        assert!(ff.exists(), "ffmpeg not found at {}", ff.display());
+        assert!(movie.exists(), "movie not found at {}", movie.display());
+
+        let dur = ffmpeg::probe_duration(&ff, &movie).expect("probe duration");
+        let mid = (dur / 2.0).floor();
+        let chunk_secs = 600.0_f64;
+        println!(
+            "\n=== film {:.0}s ({:.0} min); chunk {:.0}s from the middle @ {:.0}s ===",
+            dur,
+            dur / 60.0,
+            chunk_secs,
+            mid
+        );
+
+        let tmp = std::env::temp_dir();
+        let chunk_mp3 = tmp.join("stage1-mid.mp3");
+        ffmpeg::extract_mp3_range(&ff, &movie, mid, chunk_secs, &chunk_mp3, ffmpeg::Downmix::Plain)
+            .expect("extract mp3");
+
+        // ── Cloud path: detect silences + plan slice cuts over the 600 s chunk ──────
+        let silences = ffmpeg::detect_silences(&ff, &chunk_mp3);
+        println!("\n[cloud] detected {} silence interval(s); first few:", silences.len());
+        for s in silences.iter().take(6) {
+            println!("    {:.2}-{:.2}s  ({:.2}s)", s.0, s.1, s.1 - s.0);
+        }
+        let cuts = plan_slice_cuts(chunk_secs, CLOUD_CHUNK_SECS, CLOUD_CUT_TOLERANCE, &silences);
+        println!("[cloud] planned cuts: {:?}", cuts);
+        let naive = CLOUD_CHUNK_SECS;
+        let naive_in = silences.iter().any(|&(s, e)| naive >= s && naive <= e);
+        println!("[cloud] naive fixed cut @ {:.0}s lands in a silence? {naive_in}", naive);
+        for &c in &cuts {
+            let inside = silences.iter().any(|&(s, e)| c >= s - 0.05 && c <= e + 0.05);
+            println!("    cut @ {:.2}s inside a silence? {inside}  (Δ from naive {:.0}s = {:.2}s)", c, naive, c - naive);
+        }
+        assert!(!silences.is_empty(), "no silences in a 10-min film chunk — silencedetect misconfigured");
+        assert!(
+            cuts.iter().all(|&c| (c - CLOUD_CHUNK_SECS).abs() <= CLOUD_CUT_TOLERANCE + 0.001),
+            "a cut drifted beyond tolerance: {cuts:?}"
+        );
+
+        // ── Local path: PCM of the chunk → silence_boundary vs the old quietest cut ─
+        let chunk_pcm = tmp.join("stage1-mid.pcm");
+        ffmpeg::extract_pcm_f32le(&ff, &chunk_mp3, &chunk_pcm, ffmpeg::Downmix::Plain)
+            .expect("extract pcm");
+        let pcm = ffmpeg::read_pcm_f32le(&chunk_pcm).expect("read pcm");
+        println!("\n[local] chunk pcm: {} samples = {:.1}s", pcm.len(), pcm.len() as f32 / SR as f32);
+        let rms_at = |center: usize| -> f32 {
+            let lo = center.saturating_sub(FRAME / 2);
+            let hi = (lo + FRAME).min(pcm.len());
+            if hi <= lo {
+                return 0.0;
+            }
+            (pcm[lo..hi].iter().map(|s| s * s).sum::<f32>() / (hi - lo) as f32).sqrt()
+        };
+        if pcm.len() > TARGET + SEARCH {
+            let hi = (TARGET + SEARCH).min(MAX_CONTENT).min(pcm.len());
+            let smart = silence_boundary(&pcm, TARGET - 2 * SEARCH, hi);
+            let old = quietest_boundary(&pcm, TARGET - SEARCH, hi);
+            println!(
+                "[local] first boundary: smart @ {:.2}s (RMS {:.4})  vs  old-quietest @ {:.2}s (RMS {:.4})",
+                smart as f32 / SR as f32,
+                rms_at(smart),
+                old as f32 / SR as f32,
+                rms_at(old)
+            );
+        }
+        let chunks = split_chunks(&pcm);
+        println!("[local] split into {} chunks; boundary RMS values (low = quiet cut):", chunks.len());
+        let mut acc = 0usize;
+        for (i, ch) in chunks.iter().enumerate() {
+            acc += ch.len();
+            if i + 1 < chunks.len() {
+                println!("    boundary {} @ {:.2}s  RMS {:.4}", i + 1, acc as f32 / SR as f32, rms_at(acc));
+            }
+        }
+
+        let _ = std::fs::remove_file(&chunk_mp3);
+        let _ = std::fs::remove_file(&chunk_pcm);
     }
 }

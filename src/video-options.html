@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+  <meta charset="UTF-8" />
+  <title>Timluli — כתוביות</title>
+  <link rel="stylesheet" href="./styles/video-options.css" />
+</head>
+<body data-working="false">
+  <div class="card">
+    <header class="head">
+      <div class="brand">
+        <svg class="film" viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M4 3h16a1 1 0 0 1 1 1v16a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1zm2 2v2h2V5H6zm10 0v2h2V5h-2zM6 11v2h2v-2H6zm10 0v2h2v-2h-2zM6 17v2h2v-2H6zm10 0v2h2v-2h-2zm-6-9h4v8h-4V8z"/>
+        </svg>
+        <span>כתוביות לסרטון</span>
+      </div>
+      <button id="close" class="x" aria-label="סגור">✕</button>
+    </header>
+
+    <div id="file" class="file" title=""></div>
+
+    <div class="options" id="options">
+      <label class="opt" data-mode="transcribe">
+        <input type="radio" name="mode" value="transcribe" />
+        <span class="tick" aria-hidden="true"></span>
+        <span class="opt-body">
+          <span class="opt-title">תמלול בלבד</span>
+          <span class="opt-sub">שומר על שפת המקור של הסרטון</span>
+        </span>
+      </label>
+
+      <label class="opt selected" data-mode="translate">
+        <input type="radio" name="mode" value="translate" checked />
+        <span class="tick" aria-hidden="true"></span>
+        <span class="opt-body">
+          <span class="opt-title">תמלול ותרגום</span>
+          <span class="opt-sub">מתמלל את המקור ומתרגם לשפה שתבחר</span>
+          <span class="lang-row">
+            <span class="lang-label">שפת יעד</span>
+            <select id="lang" aria-label="שפת יעד"></select>
+          </span>
+        </span>
+      </label>
+    </div>
+
+    <div id="status" class="status" role="status" aria-live="polite"></div>
+
+    <div class="actions">
+      <button id="cancel" class="btn ghost">ביטול</button>
+      <button id="start" class="btn primary">
+        <span class="spin" aria-hidden="true"></span>
+        <span class="label">התחל</span>
+      </button>
+    </div>
+  </div>
+  <script type="module" src="./scripts/video-options.js"></script>
+</body>
+</html>

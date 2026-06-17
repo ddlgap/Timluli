@@ -54,10 +54,10 @@ impl LocalEngineHandle {
     pub async fn transcribe_segments_words(
         &self,
         samples: Vec<f32>,
-        lang: &'static str,
+        lang: String,
     ) -> Result<(Vec<Segment>, Vec<inference::WordSpan>), EngineError> {
         let guard = Arc::clone(&self.engine).lock_owned().await;
-        tokio::task::spawn_blocking(move || guard.transcribe_segments_words(&samples, lang))
+        tokio::task::spawn_blocking(move || guard.transcribe_segments_words(&samples, &lang))
             .await
             .map_err(|e| EngineError::Transcribe(e.to_string()))?
     }

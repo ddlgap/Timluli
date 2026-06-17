@@ -125,6 +125,14 @@ pub struct Settings {
     /// `src/gender_f0.rs`.
     #[serde(default)]
     pub gender_aware_translation: bool,
+    /// Augment the F0 gender pass with the optional in-process ONNX gender
+    /// classifier (Wav2Vec2 Common-Voice, ~95 MB on-demand download). When on AND
+    /// the model is installed, confident model labels override the F0 guess for the
+    /// cases F0 misses (adult males that octave-double, the 155–175 Hz overlap);
+    /// silence/music cues fall back to F0. Only has effect alongside
+    /// `gender_aware_translation`. Opt-in, default off. See `src/gender_onnx.rs`.
+    #[serde(default)]
+    pub gender_classifier_enabled: bool,
 }
 
 impl Default for Settings {
@@ -161,6 +169,7 @@ impl Default for Settings {
             video_subtitles_enabled: true,
             burn_style: default_burn_style(),
             gender_aware_translation: false,
+            gender_classifier_enabled: false,
         }
     }
 }

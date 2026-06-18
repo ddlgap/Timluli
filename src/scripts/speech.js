@@ -248,7 +248,10 @@ async function startLocalEngine() {
   if (localRecording) return;
   log('local: starting audio capture');
   setUiState('listening');
-  invoke('report_state', { state: 'listening' }).catch(() => {});
+  // Do NOT report "listening" yet — Rust already emitted "connecting". We report
+  // "listening" only once the capture pipeline is actually live (after
+  // startLocalVad, below), so the mic's "wait" cue stays honest and the user
+  // doesn't start talking before getUserMedia/AudioWorklet are ready.
 
   try {
     localStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
@@ -303,6 +306,9 @@ async function startLocalEngine() {
 
     // VAD: check energy every 200ms; trigger silence timer after silenceTimeoutMs of quiet.
     startLocalVad();
+
+    // Capture pipeline is live now — flip the mic from "connecting" to "listening".
+    invoke('report_state', { state: 'listening' }).catch(() => {});
 
   } catch (err) {
     log(`local: capture failed: ${err?.message || err}`);

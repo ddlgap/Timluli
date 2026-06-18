@@ -205,20 +205,43 @@ fn classify(median_f0: Option<f32>, voiced_ratio: f32, dur_ms: f32) -> SegmentGe
     }
 }
 
-/// Classifies every cue window over the shared 16 kHz mono PCM. Pure CPU work —
-/// run it on a blocking thread for long inputs.
-pub fn classify_cues(samples: &[f32], windows: &[(i64, i64)]) -> Vec<CueGender> {
+/// Classifies every cue window over the shared 16 kHz mono PCM, returning each
+/// cue's classification paired with its voiced-frame ratio (the fraction of
+/// analysis frames YIN found pitched). Pure CPU work — run it on a blocking
+/// thread for long inputs.
+///
+/// The voiced ratio lets the ensemble gate the acoustic ONNX model: a cue with
+/// little voiced speech (music/silence dominated — e.g. a wall-to-wall-scored
+/// trailer where median voiced ratio sits well under 0.3) is out-of-distribution
+/// for a clean-speech classifier, so its confident label must not be trusted;
+/// F0's conservative `Unknown` stands instead ("do no harm").
+pub fn classify_cues_with_voiced(samples: &[f32], windows: &[(i64, i64)]) -> Vec<(CueGender, f32)> {
     windows
         .iter()
         .map(|&(t0_cs, t1_cs)| {
             let (median, voiced_ratio) = analyze_window(samples, t0_cs, t1_cs);
             let dur_ms = ((t1_cs - t0_cs).max(0) * 10) as f32;
-            CueGender {
-                t0_cs,
-                t1_cs,
-                gender: classify(median, voiced_ratio, dur_ms),
-            }
+            (
+                CueGender {
+                    t0_cs,
+                    t1_cs,
+                    gender: classify(median, voiced_ratio, dur_ms),
+                },
+                voiced_ratio,
+            )
         })
+        .collect()
+}
+
+/// Classifies every cue window over the shared 16 kHz mono PCM. Pure CPU work —
+/// run it on a blocking thread for long inputs. The pipeline uses
+/// [`classify_cues_with_voiced`] (it needs the voiced ratio to gate the ONNX
+/// model); this label-only wrapper is retained for tests and external callers.
+#[allow(dead_code)]
+pub fn classify_cues(samples: &[f32], windows: &[(i64, i64)]) -> Vec<CueGender> {
+    classify_cues_with_voiced(samples, windows)
+        .into_iter()
+        .map(|(c, _)| c)
         .collect()
 }
 

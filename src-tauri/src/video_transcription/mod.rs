@@ -64,6 +64,13 @@ const TARGET: usize = 27 * SR;
 const SEARCH: usize = 2 * SR;
 const FRAME: usize = 1_600; // 100 ms energy window
 
+/// True when the text contains at least one Hebrew letter (Unicode block
+/// U+0590–U+05FF). Gates the Hebrew-only punctuation pass so a non-Hebrew
+/// transcript is never run through the xlm-roberta Hebrew punctuation model.
+fn contains_hebrew(s: &str) -> bool {
+    s.chars().any(|c| ('\u{0590}'..='\u{05FF}').contains(&c))
+}
+
 /// Builds the `<stem>.srt` output path next to the source video — same name as the
 /// source, just the `.srt` extension, so players (e.g. VLC) auto-load it for the
 /// matching video file (`movie.mp4` → `movie.srt`).
@@ -88,6 +95,9 @@ pub async fn transcribe_video_to_srt(
     path: &str,
     lang: &str,
 ) -> Result<String, String> {
+    // Immediate feedback: flips the mic/panel status off "בחר פעולה" the moment the
+    // chooser hands off, independent of how long the early ffmpeg probes take.
+    emit_progress(app, 0, 0, "start");
     let input = PathBuf::from(path);
     if !input.exists() {
         return Err(format!("הקובץ לא נמצא: {path}"));
@@ -182,6 +192,9 @@ pub async fn transcribe_video_to_srt(
                 // inside a detected silence when one is near — so no word is split across
                 // a seam (the v1 hard-boundary caveat). One cheap ffmpeg `silencedetect`
                 // analysis pass; an empty result transparently falls back to fixed cuts.
+                // Silence analysis decodes the whole audio (can take a while on a long
+                // film) — announce it so the status bar isn't frozen during the pass.
+                emit_progress(app, 1, 1, "analyze");
                 let silences = ffmpeg::detect_silences(&ffmpeg, &input);
                 log::info!("cloud chunking: {} silence interval(s) detected", silences.len());
                 let cuts = plan_slice_cuts(duration, CLOUD_CHUNK_SECS, CLOUD_CUT_TOLERANCE, &silences);
@@ -304,9 +317,18 @@ pub async fn transcribe_video_to_srt(
 
     // Soft punctuation hook: applied per cue only if the engine is already loaded
     // (opt-in, default off) — never a hard dependency. No sentence-newlines in SRT.
+    // GATED ON HEBREW: the punctuation model is an xlm-roberta fine-tune used as a
+    // Hebrew transfer task; running it over a non-Hebrew transcript (e.g. an English
+    // film auto-detected by Whisper) injects spurious marks — observed as doubled
+    // commas before vocatives ("the thing,, Clark") that then degrade the
+    // translation. Only Hebrew-bearing cues are punctuated; others pass through
+    // verbatim, so the source SRT the translator sees stays clean.
     for seg in &mut segments {
-        let t = std::mem::take(&mut seg.text);
-        seg.text = crate::commands_punct::punctuate_if_ready(state.inner(), t, false, false).await;
+        if contains_hebrew(&seg.text) {
+            let t = std::mem::take(&mut seg.text);
+            seg.text =
+                crate::commands_punct::punctuate_if_ready(state.inner(), t, false, false).await;
+        }
     }
 
     let cues = srt::build_cues(&segments);
@@ -324,6 +346,9 @@ pub async fn transcribe_video_to_srt(
     // persisted as `<stem>.genders.json` for the subtitle translation path. Strictly
     // best-effort — any failure logs and moves on.
     if stg.gender_aware_translation {
+        // The gender pass (F0 + optional ONNX over every cue) is CPU work with no
+        // inner progress — announce it so the status bar isn't frozen during it.
+        emit_progress(app, 1, 1, "gender");
         match gender_pcm_or_extract(gender_pcm, &ffmpeg, &input, &tmp, uid, downmix).await {
             Ok(pcm) => {
                 let windows: Vec<(i64, i64)> = cues.iter().map(|(s, e, _)| (*s, *e)).collect();
@@ -335,12 +360,25 @@ pub async fn transcribe_video_to_srt(
                 // CPU work off the async runtime — seconds for F0 alone, a few
                 // minutes when the ONNX classifier also runs over a full movie.
                 let classified = tokio::task::spawn_blocking(move || {
-                    let mut cg = crate::gender_f0::classify_cues(&pcm, &windows);
+                    let cv = crate::gender_f0::classify_cues_with_voiced(&pcm, &windows);
+                    let mut cg: Vec<crate::gender_f0::CueGender> =
+                        cv.iter().map(|(c, _)| c.clone()).collect();
                     // When the model is loaded, its confident labels override the F0
                     // guess for the cases F0 misses (adult-male octave errors, the
                     // 155–175 Hz overlap). Quiet/short cues yield None → F0 stands.
+                    // GATE on the F0 voiced-ratio: only run/trust the classifier on
+                    // cues with real voiced speech — music/silence-dominated cues are
+                    // out-of-distribution (confident wrong labels) and are skipped,
+                    // which also cuts the gender pass's wall-clock on scored content.
                     if let Some(eng) = gender_engine {
-                        for (c, o) in cg.iter_mut().zip(eng.classify_windows(&pcm, &windows)) {
+                        let run: Vec<bool> = cv
+                            .iter()
+                            .map(|(_, vr)| *vr >= crate::gender_onnx::ONNX_MIN_VOICED_RATIO)
+                            .collect();
+                        for (c, o) in cg
+                            .iter_mut()
+                            .zip(eng.classify_windows_gated(&pcm, &windows, &run))
+                        {
                             if let Some((g, conf)) = o {
                                 if conf >= crate::gender_onnx::ACCEPT_CONFIDENCE {
                                     c.gender = g;

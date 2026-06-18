@@ -121,6 +121,20 @@ pub fn start_server(app: AppHandle, shared: Arc<SidecarShared>) {
                     inject_final(&app, &shared, &body);
                     let _ = req.respond(ok_resp());
                 }
+                (tiny_http::Method::Post, "/ready") => {
+                    // The recognizer has actually begun capturing audio
+                    // (webkitSpeechRecognition.onaudiostart) — flip the mic from the
+                    // "connecting" wait cue to "listening" so the user knows to speak.
+                    // Guard on `listening`: the user may have cancelled (toggled off)
+                    // while the Google connection was still opening, in which case the
+                    // mic is already idle and we must not revive it.
+                    if shared.listening.load(Ordering::SeqCst) {
+                        let _ = app.emit_to("mic", "speakly://state-changed", "listening");
+                        let _ = app.emit_to("panel", "speakly://state-changed", "listening");
+                        crate::commands::sync_side_panel_mic(&app, "listening");
+                    }
+                    let _ = req.respond(ok_resp());
+                }
                 (tiny_http::Method::Post, "/ended") => {
                     let body = read_body(&mut req);
                     on_ended(&app, &shared, &body);
@@ -498,6 +512,10 @@ function startRec() {
   userRequestedStop = false;
   running = true;
   runStartedAt = Date.now();
+  // Tell the host the instant audio is actually being captured, so the mic can
+  // switch from the "wait" cue to "speak now". Posted at most once per session.
+  let readyPosted = false;
+  const markReady = () => { if (!readyPosted) { readyPosted = true; post('/ready'); } };
   rec = new SR();
   rec.lang = lang;
   rec.continuous = true;
@@ -505,6 +523,7 @@ function startRec() {
   rec.maxAlternatives = 3;
 
   rec.onstart = () => { startInitial(); };
+  rec.onaudiostart = () => { markReady(); };
   rec.onspeechstart = () => {
     if (initialTimer) { clearTimeout(initialTimer); initialTimer = null; }
     if (quickStopTimer) { clearTimeout(quickStopTimer); quickStopTimer = null; }
@@ -533,7 +552,7 @@ function startRec() {
     }
     if (interim) post('/interim', interim);
   };
-  rec.onerror = (event) => { clearTimers(); running = false; post('/error', String(event.error || 'unknown')); };
+  rec.onerror = (event) => { readyPosted = true; clearTimers(); running = false; post('/error', String(event.error || 'unknown')); };
   rec.onend = () => {
     const ranFor = Date.now() - runStartedAt;
     clearTimers();
@@ -547,6 +566,9 @@ function startRec() {
   };
 
   try { rec.start(); } catch (err) { running = false; post('/error', String(err)); }
+  // Watchdog: if neither onaudiostart nor onerror fires within 4 s, unblock the UI
+  // anyway so the mic never sticks on "wait" (a real failure already posts /error).
+  setTimeout(() => { if (running && !readyPosted) markReady(); }, 4000);
 }
 
 async function poll() {

@@ -92,6 +92,11 @@ impl AppState {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    // Initialize logging (defaults to `info`; override with RUST_LOG). Without an
+    // initialized logger, every log::info/warn/error in the app is a silent no-op —
+    // which made the video pipeline impossible to diagnose from the console.
+    let _ = env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info"))
+        .try_init();
     tauri::Builder::default()
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_dialog::init())

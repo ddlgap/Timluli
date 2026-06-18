@@ -35,13 +35,25 @@ const RMS_FLOOR: f32 = 0.005;
 /// Cue audio shorter than this is too little to trust (0.5 s).
 const MIN_SAMPLES: usize = SR / 2;
 /// Cap the audio fed per cue (center-cropped): bounds CPU on long cues; a few seconds
-/// is ample for a gender decision and matches the model's training clip length.
-const MAX_SAMPLES: usize = 8 * SR;
+/// is ample for a gender decision and matches the model's training clip length (the
+/// validation POC swept 4 s windows). 4 s — down from 8 s — roughly halves the
+/// Wav2Vec2 inference cost per long cue with no measured accuracy loss, the dominant
+/// term in the gender pass's wall-clock.
+const MAX_SAMPLES: usize = 4 * SR;
 
 /// Minimum softmax confidence for the model's label to OVERRIDE the F0 guess. Below
 /// this, the conservative F0 label (which may be `Unknown`) stands. 0.85 cleared the
 /// validation clip's adult cases at ≥0.99 while leaving room above coin-flip noise.
 pub const ACCEPT_CONFIDENCE: f32 = 0.85;
+
+/// Minimum voiced-frame ratio (from the F0 pass) for a cue to be classified by the
+/// acoustic model at all. Below this the cue is music/silence dominated — the score
+/// or ambience drowns the voice, so the clean-speech-trained classifier produces a
+/// confident-but-meaningless label (measured on a wall-to-wall-scored trailer: the
+/// female lead's lines came back Male @0.99). Gating here both prevents those wrong
+/// tags ("do no harm") and skips the expensive inference for cues that would be
+/// rejected anyway. Matches `gender_f0::MIN_VOICED_RATIO`.
+pub const ONNX_MIN_VOICED_RATIO: f32 = 0.30;
 
 // The optimum ONNX export of `Wav2Vec2ForSequenceClassification` has one float input
 // `input_values` [batch, samples] and one output `logits` [batch, 2] = (female, male).
@@ -135,10 +147,29 @@ impl GenderEngineHandle {
         samples: &[f32],
         windows: &[(i64, i64)],
     ) -> Vec<Option<(SegmentGender, f32)>> {
+        self.classify_windows_gated(samples, windows, &vec![true; windows.len()])
+    }
+
+    /// Like [`Self::classify_windows`] but only runs inference where `run[i]` is
+    /// true; the rest return `None`. The caller gates on the F0 voiced-ratio (see
+    /// [`ONNX_MIN_VOICED_RATIO`]) so the model is never invoked on music/silence-
+    /// dominated cues — both correctness (no confident out-of-distribution label)
+    /// and speed (the expensive Wav2Vec2 pass is skipped for cues that would be
+    /// rejected anyway). Blocking — call inside `spawn_blocking`.
+    pub fn classify_windows_gated(
+        &self,
+        samples: &[f32],
+        windows: &[(i64, i64)],
+        run: &[bool],
+    ) -> Vec<Option<(SegmentGender, f32)>> {
         let mut eng = self.engine.lock();
         windows
             .iter()
-            .map(|&(t0_cs, t1_cs)| {
+            .enumerate()
+            .map(|(i, &(t0_cs, t1_cs))| {
+                if !run.get(i).copied().unwrap_or(false) {
+                    return None;
+                }
                 let start = ((t0_cs.max(0) as usize) * SR / 100).min(samples.len());
                 let end = ((t1_cs.max(0) as usize) * SR / 100).min(samples.len());
                 if end <= start {

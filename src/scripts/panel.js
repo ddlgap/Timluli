@@ -206,8 +206,16 @@ await listen('speakly://translate-progress', (e) => {
 });
 await listen('speakly://transcribe-progress', (e) => {
   const { chunk, total, phase } = e.payload || {};
-  if (phase === 'extract') {
-    showStatus('מחלץ אודיו מהסרטון…', { busy: true });
+  // Phases that carry no chunk count get a fixed label, so the status never freezes
+  // on a long silent stage (whole-file silence analysis, the gender pass, …).
+  const FIXED = {
+    start: 'מעבד וידאו…',
+    analyze: 'מנתח אודיו…',
+    extract: 'מחלץ אודיו מהסרטון…',
+    gender: 'מזהה מגדר דוברים…',
+  };
+  if (phase && FIXED[phase]) {
+    showStatus(FIXED[phase], { busy: true });
     return;
   }
   // Video subtitles emit phase="transcribe"; plain audio→txt has no phase.

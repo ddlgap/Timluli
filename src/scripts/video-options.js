@@ -109,6 +109,12 @@ window.addEventListener('keydown', (e) => {
 });
 
 startBtn.addEventListener('click', async () => {
+  // This window is reused across drops and re-pulls paths on focus; if that event
+  // was missed, paths may be empty. Re-pull once before giving up — otherwise we'd
+  // close without invoking anything, leaving the mic frozen on "בחר פעולה".
+  if (!paths.length) {
+    await loadPending();
+  }
   if (!paths.length) {
     close();
     return;
@@ -141,13 +147,19 @@ startBtn.addEventListener('click', async () => {
     }
   }
 
-  if (fail === 0) {
+  // Only a real, completed op is "saved" — never report success when nothing ran
+  // (ok===0 && fail===0), which would otherwise show "✓ נשמר" with no output files.
+  if (ok > 0 && fail === 0) {
     statusEl.className = 'status ok';
-    statusEl.textContent = paths.length > 1 ? `✓ נשמרו ${ok} קבצים` : '✓ נשמר';
+    statusEl.textContent = ok > 1 ? `✓ נשמרו ${ok} קבצים` : '✓ נשמר';
     setTimeout(close, 1200);
   } else {
     document.body.dataset.working = 'false';
     startBtn.disabled = false;
     cancelBtn.disabled = false;
+    if (ok === 0 && fail === 0) {
+      statusEl.className = 'status error';
+      statusEl.textContent = 'לא נמצא קובץ לעיבוד — גרור את הסרטון שוב';
+    }
   }
 });

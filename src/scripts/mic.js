@@ -100,9 +100,21 @@ mic.addEventListener('contextmenu', async (event) => {
 });
 
 await listen('speakly://state-changed', (e) => {
-  setState(e.payload || 'idle');
-  if (e.payload !== 'listening') bubble.classList.remove('show');
-  updateMicRegion();
+  const state = e.payload || 'idle';
+  setState(state);
+  if (state === 'connecting') {
+    // Recognition is still opening (Google handshake / local pipeline warm-up).
+    // Sticky "wait" cue so the user doesn't start talking into the gap and lose
+    // their first words. Replaced by "speak now" the moment capture is live.
+    showProgress('המתן…');
+  } else if (state === 'listening') {
+    // Now actually capturing — brief cue, replaced by live interim text as soon
+    // as the user speaks.
+    showBubble('דבר עכשיו');
+  } else {
+    bubble.classList.remove('show');
+    updateMicRegion();
+  }
 });
 
 await listen('speakly://interim', (e) => {
@@ -155,8 +167,16 @@ await listen('speakly://translate-progress', (e) => {
 
 await listen('speakly://transcribe-progress', (e) => {
   const { chunk, total, phase } = e.payload || {};
-  if (phase === 'extract') {
-    showProgress('מחלץ אודיו מהסרטון…');
+  // Phases that carry no chunk count get a fixed label, so the status never freezes
+  // on a long silent stage (whole-file silence analysis, the gender pass, …).
+  const FIXED = {
+    start: 'מעבד וידאו…',
+    analyze: 'מנתח אודיו…',
+    extract: 'מחלץ אודיו מהסרטון…',
+    gender: 'מזהה מגדר דוברים…',
+  };
+  if (phase && FIXED[phase]) {
+    showProgress(FIXED[phase]);
     return;
   }
   // Video subtitles emit phase="transcribe"; plain audio→txt has no phase.

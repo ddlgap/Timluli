@@ -48,7 +48,10 @@ pub(crate) fn sync_side_panel_mic(app: &AppHandle, state: &str) {
         };
         match state {
             // Recording just started: position the mic, then reveal it.
-            "listening" => {
+            // "connecting" is the pre-capture wait state (web-speech handshake /
+            // local pipeline warm-up) — treat it like "listening" so the docked mic
+            // appears immediately with its wait cue instead of staying hidden.
+            "connecting" | "listening" => {
                 // The positioning happens once, on the transition into recording.
                 // Both the command and (for the local engine) the renderer report
                 // "listening"; if the mic is already shown, don't re-position it
@@ -155,11 +158,17 @@ pub async fn start_listening(app: AppHandle, state: State<'_, AppState>) -> Resu
             let _ = app.emit_to("settings", "speakly://error", &e);
             return Err(e);
         }
-        emit_state(&app, "listening");
+        // "connecting" — not "listening": the Chrome recognizer hasn't opened its
+        // Google streaming connection yet (~1 s). The mic shows a "wait" cue until
+        // the recognizer POSTs /ready (its onaudiostart), at which point we flip to
+        // "listening". This stops the user talking into the gap and losing words.
+        emit_state(&app, "connecting");
     } else {
         app.emit_to("speech", "speakly://start-listening", ())
             .map_err(|e| e.to_string())?;
-        emit_state(&app, "listening");
+        // Local engine: the renderer reports "listening" once its capture pipeline
+        // is actually live (getUserMedia + AudioWorklet). Until then, "connecting".
+        emit_state(&app, "connecting");
     }
     Ok(())
 }
